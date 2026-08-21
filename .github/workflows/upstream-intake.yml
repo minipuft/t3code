@@ -163,14 +163,18 @@ jobs:
           REPORT_PATH: ${{ steps.merge.outputs.report_path }}
         run: |
           issue_number="$(
-            gh issue list --state open --json number,title \
-              --jq '.[] | select(.title == "Upstream intake blocked by merge conflicts") | .number' \
+            gh api --paginate "repos/$GITHUB_REPOSITORY/issues?state=open&per_page=100" \
+              | jq -r --arg title "$CONFLICT_ISSUE_TITLE" \
+                '.[] | select((.pull_request | not) and .title == $title) | .number' \
               | head -n 1
           )"
+          report="$(cat "$REPORT_PATH")"
           if [[ -n "$issue_number" ]]; then
-            gh issue edit "$issue_number" --body-file "$REPORT_PATH"
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/$issue_number" \
+              -f body="$report" >/dev/null
           else
-            gh issue create --title "$CONFLICT_ISSUE_TITLE" --body-file "$REPORT_PATH"
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues" \
+              -f title="$CONFLICT_ISSUE_TITLE" -f body="$report" >/dev/null
           fi
 
       - name: Setup Vite+
@@ -231,14 +235,18 @@ jobs:
           } > "$report_path"
 
           issue_number="$(
-            gh issue list --state open --json number,title \
-              --jq '.[] | select(.title == "Upstream intake blocked by validation failure") | .number' \
+            gh api --paginate "repos/$GITHUB_REPOSITORY/issues?state=open&per_page=100" \
+              | jq -r --arg title "$VALIDATION_ISSUE_TITLE" \
+                '.[] | select((.pull_request | not) and .title == $title) | .number' \
               | head -n 1
           )"
+          report="$(cat "$report_path")"
           if [[ -n "$issue_number" ]]; then
-            gh issue edit "$issue_number" --body-file "$report_path"
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/$issue_number" \
+              -f body="$report" >/dev/null
           else
-            gh issue create --title "$VALIDATION_ISSUE_TITLE" --body-file "$report_path"
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues" \
+              -f title="$VALIDATION_ISSUE_TITLE" -f body="$report" >/dev/null
           fi
 
       - id: publish
@@ -296,13 +304,17 @@ jobs:
         run: |
           for title in "$CONFLICT_ISSUE_TITLE" "$VALIDATION_ISSUE_TITLE"; do
             issue_number="$(
-              gh issue list --state open --json number,title \
-                --jq ".[] | select(.title == \"$title\") | .number" \
+              gh api --paginate "repos/$GITHUB_REPOSITORY/issues?state=open&per_page=100" \
+                | jq -r --arg title "$title" \
+                  '.[] | select((.pull_request | not) and .title == $title) | .number' \
                 | head -n 1
             )"
             if [[ -n "$issue_number" ]]; then
-              gh issue close "$issue_number" \
-                --comment "A validated candidate is available at ${{ steps.publish.outputs.pr_url }}."
+              comment="A validated candidate is available at ${{ steps.publish.outputs.pr_url }}."
+              gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$issue_number/comments" \
+                -f body="$comment" >/dev/null
+              gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/$issue_number" \
+                -f state=closed >/dev/null
             fi
           done
 

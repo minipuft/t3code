@@ -5,6 +5,7 @@ import * as HttpApi from "effect/unstable/httpapi/HttpApi";
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
+import * as OpenApi from "effect/unstable/httpapi/OpenApi";
 import * as HttpServerRespondable from "effect/unstable/http/HttpServerRespondable";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -48,6 +49,11 @@ import {
   RelayEnvironmentMintResponse,
   RelayLinkProofRequest,
 } from "./relay.ts";
+import {
+  WorkflowCatalogItem,
+  WorkflowCatalogItemId,
+  WorkflowCatalogList,
+} from "./workflowCatalog.ts";
 
 const OptionalBearerHeaders = Schema.Struct({
   authorization: Schema.optionalKey(Schema.String),
@@ -184,7 +190,10 @@ export class EnvironmentInternalError extends Schema.TaggedErrorClass<Environmen
   }
 }
 
-export const EnvironmentResourceNotFoundReason = Schema.Literals(["thread_not_found"]);
+export const EnvironmentResourceNotFoundReason = Schema.Literals([
+  "thread_not_found",
+  "workflow_catalog_item_not_found",
+]);
 export type EnvironmentResourceNotFoundReason = typeof EnvironmentResourceNotFoundReason.Type;
 
 export class EnvironmentResourceNotFoundError extends Schema.TaggedErrorClass<EnvironmentResourceNotFoundError>()(
@@ -546,6 +555,39 @@ export class EnvironmentPullRequestsHttpApi extends HttpApiGroup.make("pullReque
   }).middleware(EnvironmentAuthenticatedAuth),
 ) {}
 
+const EnvironmentWorkflowCatalogDetailParams = Schema.Struct({
+  itemId: WorkflowCatalogItemId,
+});
+
+export class EnvironmentWorkflowCatalogHttpApi extends HttpApiGroup.make("workflowCatalog")
+  .add(
+    HttpApiEndpoint.get("list", "/api/workflows", {
+      headers: OptionalBearerHeaders,
+      success: WorkflowCatalogList,
+      error: EnvironmentOrchestrationSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "List workflow prompts and provider skills")
+      .annotate(
+        OpenApi.Description,
+        "Returns metadata from the environment-configured prompt catalog plus current provider skills. Requires orchestration:read. An unavailable source is represented by the response capability rather than an HTTP failure.",
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("detail", "/api/workflows/:itemId", {
+      headers: OptionalBearerHeaders,
+      params: EnvironmentWorkflowCatalogDetailParams,
+      success: WorkflowCatalogItem,
+      error: EnvironmentOrchestrationThreadSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Read workflow metadata")
+      .annotate(
+        OpenApi.Description,
+        "Returns one prompt or skill metadata item by catalog id. Requires orchestration:read and returns workflow_catalog_item_not_found when the id is absent.",
+      ),
+  ) {}
+
 export class EnvironmentConnectHttpApi extends HttpApiGroup.make("connect")
   .add(
     HttpApiEndpoint.post("linkProof", "/api/connect/link-proof", {
@@ -612,4 +654,5 @@ export class EnvironmentHttpApi extends HttpApi.make("environment")
   .add(EnvironmentAuthHttpApi)
   .add(EnvironmentOrchestrationHttpApi)
   .add(EnvironmentPullRequestsHttpApi)
+  .add(EnvironmentWorkflowCatalogHttpApi)
   .add(EnvironmentConnectHttpApi) {}

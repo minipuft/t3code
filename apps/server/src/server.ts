@@ -115,6 +115,8 @@ import {
   persistServerRuntimeState,
 } from "./serverRuntimeState.ts";
 import { orchestrationHttpApiLayer } from "./orchestration/http.ts";
+import * as WorkflowCatalog from "./workflowCatalog/WorkflowCatalog.ts";
+import { workflowCatalogHttpApiLayer } from "./workflowCatalog/http.ts";
 import * as NetService from "@t3tools/shared/Net";
 import * as RelayClient from "@t3tools/shared/relayClient";
 import { disableTailscaleServe, ensureTailscaleServe } from "@t3tools/tailscale";
@@ -451,6 +453,7 @@ export const makeRoutesLayer = Layer.mergeAll(
       Layer.provide(connectHttpApiLayer),
       Layer.provide(orchestrationHttpApiLayer),
       Layer.provide(pullRequestHttpApiLayer),
+      Layer.provide(workflowCatalogHttpApiLayer),
       Layer.provide(serverEnvironmentHttpApiLayer),
       Layer.provide(environmentAuthenticatedAuthLayer),
     ),
@@ -469,6 +472,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   Layer.provide(commandReadinessLayer),
   Layer.provide(browserApiCorsLayer),
   Layer.provide(httpCompressionLayer),
+  Layer.provide(WorkflowCatalog.layer),
 );
 
 export const makeServerLayer = Layer.unwrap(

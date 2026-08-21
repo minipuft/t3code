@@ -21,4 +21,13 @@ signing only when platform credentials are present. macOS passkey builds additio
 `APPLE_TEAM_ID` and the `MACOS_PROVISIONING_PROFILE` secret; Windows uses Azure Trusted Signing.
 Without the core signing credentials, it still releases unsigned artifacts.
 
+Forks may override the CI runner labels with the repository variables `CI_LINUX_RUNNER` and
+`CI_MACOS_RUNNER`; the official Blacksmith labels remain the defaults. `CI_TIMEOUT_MINUTES` may
+raise the job timeout on smaller hosted runners.
+
+The maintained `minipuft/t3code` fork also runs
+[Upstream Intake](../operations/upstream-intake.md). It validates a complete upstream merge before
+publishing a candidate PR and creates blocker evidence instead of publishing conflicted or failing
+intakes.
+
 See [Release Checklist](../operations/release.md) for the full release/signing setup checklist.

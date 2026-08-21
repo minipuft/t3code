@@ -1,0 +1,316 @@
+name: Upstream Intake
+
+on:
+  schedule:
+    - cron: "17 15 * * 1"
+  workflow_dispatch:
+    inputs:
+      auto_land:
+        description: Merge the validated candidate into custom/main after opening its PR
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-intake
+  cancel-in-progress: false
+
+env:
+  BASE_BRANCH: custom/main
+  INTEGRATION_BRANCH: automation/upstream-main
+  UPSTREAM_URL: https://github.com/pingdotgg/t3code.git
+  UPSTREAM_REF: upstream/main
+  CONFLICT_ISSUE_TITLE: Upstream intake blocked by merge conflicts
+  VALIDATION_ISSUE_TITLE: Upstream intake blocked by validation failure
+
+jobs:
+  intake:
+    name: Merge, validate, and publish candidate
+    if: github.repository == 'minipuft/t3code'
+    runs-on: ${{ vars.CI_LINUX_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: ${{ fromJSON(vars.CI_TIMEOUT_MINUTES || '30') }}
+    steps:
+      - name: Checkout maintained line
+        uses: actions/checkout@v6
+        with:
+          ref: custom/main
+          fetch-depth: 0
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Configure intake remotes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream "$UPSTREAM_URL"
+          git fetch origin "refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
+          git switch -C "$BASE_BRANCH" "refs/remotes/origin/$BASE_BRANCH"
+          git fetch --no-tags upstream "refs/heads/main:refs/remotes/upstream/main"
+          git fetch origin "refs/heads/$INTEGRATION_BRANCH:refs/remotes/origin/$INTEGRATION_BRANCH" || true
+
+      - id: merge
+        name: Attempt atomic upstream merge
+        run: |
+          report_dir="$RUNNER_TEMP/upstream-intake"
+          mkdir -p "$report_dir"
+
+          custom_sha="$(git rev-parse "$BASE_BRANCH")"
+          upstream_sha="$(git rev-parse "$UPSTREAM_REF")"
+          read -r custom_only upstream_only < <(
+            git rev-list --left-right --count "$BASE_BRANCH...$UPSTREAM_REF"
+          )
+
+          {
+            echo "custom_sha=$custom_sha"
+            echo "upstream_sha=$upstream_sha"
+            echo "custom_only=$custom_only"
+            echo "upstream_only=$upstream_only"
+          } >> "$GITHUB_OUTPUT"
+
+          if [[ "$upstream_only" == "0" ]]; then
+            echo "state=noop" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Upstream intake"
+              echo
+              echo "\`custom/main\` already contains \`upstream/main\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          git switch -C "$INTEGRATION_BRANCH" "$BASE_BRANCH"
+
+          set +e
+          git merge --no-commit --no-ff "$UPSTREAM_REF"
+          merge_exit=$?
+          set -e
+
+          if [[ "$merge_exit" != "0" ]]; then
+            conflicts_path="$report_dir/conflicts.txt"
+            status_path="$report_dir/status.txt"
+            diff_path="$report_dir/conflict.diff"
+            report_path="$report_dir/conflict-report.md"
+
+            git diff --name-only --diff-filter=U > "$conflicts_path"
+            git status --short > "$status_path"
+            git diff --cc > "$diff_path"
+
+            {
+              echo "## Upstream intake is held"
+              echo
+              echo "The atomic merge of \`$UPSTREAM_REF\` into \`$BASE_BRANCH\` has conflicts."
+              echo "No candidate branch or maintained-line commit was published."
+              echo
+              echo "- Custom SHA: \`$custom_sha\`"
+              echo "- Upstream SHA: \`$upstream_sha\`"
+              echo "- Custom-only commits: $custom_only"
+              echo "- Upstream-only commits: $upstream_only"
+              echo "- Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+              echo
+              echo "### Conflicting paths"
+              echo
+              sed 's/^/- `/' "$conflicts_path" | sed 's/$/`/'
+            } > "$report_path"
+
+            cat "$report_path" >> "$GITHUB_STEP_SUMMARY"
+            git merge --abort
+
+            {
+              echo "state=conflict"
+              echo "report_path=$report_path"
+              echo "artifact_path=$report_dir"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git commit -m "chore(upstream): merge upstream/main into custom/main"
+          candidate_sha="$(git rev-parse HEAD)"
+          {
+            echo "state=candidate"
+            echo "candidate_sha=$candidate_sha"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Upstream intake candidate"
+            echo
+            echo "The merge is textually clean and is now entering validation."
+            echo
+            echo "- Candidate SHA: \`$candidate_sha\`"
+            echo "- Upstream-only commits: $upstream_only"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload conflict evidence
+        if: always() && steps.merge.outputs.state == 'conflict'
+        uses: actions/upload-artifact@v7
+        with:
+          name: upstream-intake-conflicts
+          path: ${{ steps.merge.outputs.artifact_path }}
+          retention-days: 30
+
+      - name: Create or update conflict blocker
+        if: always() && steps.merge.outputs.state == 'conflict'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT_PATH: ${{ steps.merge.outputs.report_path }}
+        run: |
+          issue_number="$(
+            gh issue list --state open --json number,title \
+              --jq '.[] | select(.title == "Upstream intake blocked by merge conflicts") | .number' \
+              | head -n 1
+          )"
+          if [[ -n "$issue_number" ]]; then
+            gh issue edit "$issue_number" --body-file "$REPORT_PATH"
+          else
+            gh issue create --title "$CONFLICT_ISSUE_TITLE" --body-file "$REPORT_PATH"
+          fi
+
+      - name: Setup Vite+
+        if: steps.merge.outputs.state == 'candidate'
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Ensure Electron runtime is installed
+        if: steps.merge.outputs.state == 'candidate'
+        run: vp run --filter @t3tools/desktop ensure:electron
+
+      - name: Check formatting and lint
+        if: steps.merge.outputs.state == 'candidate'
+        run: vp check
+
+      - name: Typecheck workspace
+        if: steps.merge.outputs.state == 'candidate'
+        run: vpr typecheck
+
+      - name: Test Agent Workbench integration
+        if: steps.merge.outputs.state == 'candidate'
+        run: |
+          vp test run \
+            apps/server/src/workflowCatalog/WorkflowCatalog.test.ts \
+            apps/server/src/workflowCatalog/http.test.ts \
+            apps/server/src/serverSettings.test.ts \
+            apps/server/src/server.test.ts \
+            apps/web/src/components/chat/ComposerWorkflowActionsControl.test.tsx \
+            apps/web/src/components/chat/ComposerWorkflowPicker.test.tsx \
+            apps/web/src/workflowInvocation.test.ts \
+            apps/web/src/workflowRecentsStore.test.ts \
+            packages/client-runtime/src/state/workflowCatalogHttp.test.ts \
+            packages/contracts/src/workflowCatalog.test.ts \
+            packages/contracts/src/settings.test.ts
+
+      - name: Build desktop pipeline
+        if: steps.merge.outputs.state == 'candidate'
+        run: vp run build:desktop
+
+      - name: Create or update validation blocker
+        if: failure() && steps.merge.outputs.state == 'candidate'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          report_path="$RUNNER_TEMP/upstream-intake-validation.md"
+          {
+            echo "## Upstream intake is held"
+            echo
+            echo "The merge was textually clean, but validation failed before publication."
+            echo "No candidate branch or maintained-line commit was published."
+            echo
+            echo "- Candidate SHA: \`${{ steps.merge.outputs.candidate_sha }}\`"
+            echo "- Upstream SHA: \`${{ steps.merge.outputs.upstream_sha }}\`"
+            echo "- Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > "$report_path"
+
+          issue_number="$(
+            gh issue list --state open --json number,title \
+              --jq '.[] | select(.title == "Upstream intake blocked by validation failure") | .number' \
+              | head -n 1
+          )"
+          if [[ -n "$issue_number" ]]; then
+            gh issue edit "$issue_number" --body-file "$report_path"
+          else
+            gh issue create --title "$VALIDATION_ISSUE_TITLE" --body-file "$report_path"
+          fi
+
+      - id: publish
+        name: Publish validated candidate PR
+        if: steps.merge.outputs.state == 'candidate'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git push --force-with-lease origin "HEAD:refs/heads/$INTEGRATION_BRANCH"
+
+          body_path="$RUNNER_TEMP/upstream-intake-pr.md"
+          {
+            echo "Automated atomic intake of \`upstream/main\` into \`custom/main\`."
+            echo
+            echo "Validation completed before this branch was published:"
+            echo
+            echo "- \`vp check\`"
+            echo "- \`vpr typecheck\`"
+            echo "- focused Agent Workbench tests"
+            echo "- \`vp run build:desktop\`"
+            echo
+            echo "Upstream SHA: \`${{ steps.merge.outputs.upstream_sha }}\`  "
+            echo "Candidate SHA: \`${{ steps.merge.outputs.candidate_sha }}\`  "
+            echo "Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > "$body_path"
+
+          pr_number="$(
+            gh pr list --state open --base "$BASE_BRANCH" --head "$INTEGRATION_BRANCH" \
+              --json number --jq '.[0].number // empty'
+          )"
+          if [[ -n "$pr_number" ]]; then
+            gh pr edit "$pr_number" \
+              --title "chore(upstream): merge upstream/main into custom/main" \
+              --body-file "$body_path"
+          else
+            pr_url="$(
+              gh pr create --base "$BASE_BRANCH" --head "$INTEGRATION_BRANCH" \
+                --title "chore(upstream): merge upstream/main into custom/main" \
+                --body-file "$body_path"
+            )"
+            pr_number="$(gh pr view "$pr_url" --json number --jq .number)"
+          fi
+
+          pr_url="$(gh pr view "$pr_number" --json url --jq .url)"
+          {
+            echo "pr_number=$pr_number"
+            echo "pr_url=$pr_url"
+          } >> "$GITHUB_OUTPUT"
+          echo "Candidate PR: $pr_url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Close stale blocker issues
+        if: steps.publish.outputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for title in "$CONFLICT_ISSUE_TITLE" "$VALIDATION_ISSUE_TITLE"; do
+            issue_number="$(
+              gh issue list --state open --json number,title \
+                --jq ".[] | select(.title == \"$title\") | .number" \
+                | head -n 1
+            )"
+            if [[ -n "$issue_number" ]]; then
+              gh issue close "$issue_number" \
+                --comment "A validated candidate is available at ${{ steps.publish.outputs.pr_url }}."
+            fi
+          done
+
+      - name: Land explicitly authorized candidate
+        if: steps.publish.outputs.pr_number != '' && github.event_name == 'workflow_dispatch' && inputs.auto_land
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.publish.outputs.pr_number }}
+        run: gh pr merge "$PR_NUMBER" --merge --delete-branch
+
+      - name: Mark conflicted intake as held
+        if: always() && steps.merge.outputs.state == 'conflict'
+        run: exit 1

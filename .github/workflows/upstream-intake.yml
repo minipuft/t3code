@@ -40,10 +40,6 @@ jobs:
         with:
           ref: custom/main
           fetch-depth: 0
-          sparse-checkout: |
-            /*
-            !/.repos/
-          sparse-checkout-cone-mode: false
 
       - name: Configure intake remotes
         run: |
@@ -93,6 +89,12 @@ jobs:
           set -e
 
           if [[ "$merge_exit" != "0" ]]; then
+            if ! git rev-parse --verify --quiet MERGE_HEAD >/dev/null &&
+              [[ -z "$(git ls-files --unmerged)" ]]; then
+              echo "The merge command failed without producing conflict state." >&2
+              exit "$merge_exit"
+            fi
+
             conflicts_path="$report_dir/conflicts.txt"
             status_path="$report_dir/status.txt"
             diff_path="$report_dir/conflict.diff"

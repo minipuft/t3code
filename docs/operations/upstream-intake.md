@@ -8,6 +8,9 @@ the official source is `pingdotgg/t3code:main`.
 The **Upstream Intake** workflow runs weekly and can be dispatched manually. It attempts one atomic
 merge of the complete official `main` history into `custom/main`.
 
+The intake checkout fetches complete Git objects rather than using the repository's normal sparse
+CI checkout. Cross-remote merges cannot rely on a partial clone's origin as the only promisor.
+
 | Outcome                       | Automation behavior                                                                   | Maintained-line behavior                               |
 | ----------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | No upstream changes           | Writes a run summary                                                                  | No change                                              |

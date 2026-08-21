@@ -7,6 +7,7 @@ import type {
   ProviderInteractionMode,
   ResolvedKeybindingsConfig,
   RuntimeMode,
+  ScopedProjectRef,
   ScopedThreadRef,
   ServerProvider,
   ThreadId,
@@ -533,6 +534,7 @@ export interface ChatComposerHandle {
 export interface ChatComposerProps {
   composerDraftTarget: ScopedThreadRef | DraftId;
   environmentId: EnvironmentId;
+  projectRef: ScopedProjectRef | null;
   routeKind: "server" | "draft";
   routeThreadRef: ScopedThreadRef;
   draftId: DraftId | null;
@@ -647,6 +649,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const {
     composerDraftTarget,
     environmentId,
+    projectRef,
     routeKind,
     routeThreadRef,
     draftId,
@@ -1005,6 +1008,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     isMobileViewport && !forceExpandedOnMobile && !isComposerFocused;
   const workflowPicker = useComposerWorkflowPicker({
     environmentId,
+    projectRef,
+    threadRef: routeThreadRef,
     prompt,
     trigger: composerTrigger,
     setTrigger: setComposerTrigger,
@@ -1842,10 +1847,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         { expectedText: insertion.expectedText },
       );
       if (!applied) return;
+      workflowPicker.recordRecent(input.item.id);
       workflowPicker.closeAfterInsert();
       setComposerHighlightedItemId(null);
     },
-    [applyPromptReplacement, resolveActiveComposerTrigger, workflowPicker.closeAfterInsert],
+    [
+      applyPromptReplacement,
+      resolveActiveComposerTrigger,
+      workflowPicker.closeAfterInsert,
+      workflowPicker.recordRecent,
+    ],
   );
 
   const onComposerMenuItemHighlighted = useCallback(
@@ -3088,6 +3099,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 <ComposerCommandMenuLayer anchor={composerMenuAnchor}>
                   <ComposerWorkflowPicker
                     catalog={workflowPicker.catalog.data}
+                    library={workflowPicker.library}
+                    canMutatePreferences={workflowPicker.canMutatePreferences}
                     error={workflowPicker.catalog.error}
                     isPending={workflowPicker.catalog.isPending}
                     initialQuery={
@@ -3096,6 +3109,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     draftText={workflowPicker.draftText}
                     onRefresh={workflowPicker.catalog.refresh}
                     onClose={workflowPicker.close}
+                    onTogglePin={workflowPicker.togglePin}
+                    onSavePreset={workflowPicker.savePreset}
+                    onRemovePreset={workflowPicker.removePreset}
                     onInsert={insertWorkflowInvocation}
                   />
                 </ComposerCommandMenuLayer>

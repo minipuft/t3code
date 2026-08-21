@@ -3,6 +3,7 @@ import {
   type ServerConfig,
   type ServerConfigStreamEvent,
   type ServerLifecycleWelcomePayload,
+  WorkflowCatalogItemId,
   WS_METHODS,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
@@ -11,6 +12,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
@@ -18,6 +20,7 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as TestClock from "effect/testing/TestClock";
 import { RpcClientError } from "effect/unstable/rpc";
+import { AsyncResult, Atom, AtomRegistry } from "effect/unstable/reactivity";
 import * as Socket from "effect/unstable/socket/Socket";
 
 import {
@@ -25,12 +28,14 @@ import {
   PrimaryConnectionTarget,
   type PreparedConnection,
 } from "../connection/model.ts";
+import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as Persistence from "../platform/persistence.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
 import {
   applyServerConfigProjection,
+  createServerEnvironmentAtoms,
   makeEnvironmentServerConfigState,
   isLegacyUpdateHandoffLoss,
   matchesServerUpdateReadyEvent,
@@ -446,5 +451,60 @@ describe("server state projection", () => {
 
       expect(yield* Queue.poll(savedConfigs)).toEqual(Option.none());
     }),
+  );
+});
+
+describe("server environment commands", () => {
+  it.effect("routes workflow preference mutations through the selected environment", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const mutation = {
+          type: "workflow.pin" as const,
+          itemId: WorkflowCatalogItemId.make("strategicImplement"),
+        };
+        const expected = { pinnedItemIds: [mutation.itemId], presets: [] };
+        const received = yield* Ref.make<unknown>(null);
+        const client = {
+          [WS_METHODS.workflowPreferencesMutate]: (input: unknown) =>
+            Ref.set(received, input).pipe(Effect.as(expected)),
+        } as unknown as WsRpcProtocolClient;
+        const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+          target: TARGET,
+          state: yield* SubscriptionRef.make(AVAILABLE_CONNECTION_STATE),
+          session: yield* SubscriptionRef.make(Option.some(session(client))),
+          prepared: yield* SubscriptionRef.make(Option.none<PreparedConnection>()),
+          connect: Effect.void,
+          disconnect: Effect.void,
+          retryNow: Effect.void,
+        } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+        const run: EnvironmentRegistry.EnvironmentRegistry["Service"]["run"] = (
+          _environmentId,
+          effect,
+        ) => Effect.provideService(effect, EnvironmentSupervisor.EnvironmentSupervisor, supervisor);
+        const environmentRegistry = EnvironmentRegistry.EnvironmentRegistry.of({
+          run,
+        } as unknown as EnvironmentRegistry.EnvironmentRegistry["Service"]);
+        const runtime = Atom.runtime(
+          Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
+        ) as unknown as Parameters<typeof createServerEnvironmentAtoms>[0];
+        const atoms = createServerEnvironmentAtoms(runtime, {
+          initialConfigValueAtom: () => Atom.make(CONFIG),
+        });
+        const registry = yield* Effect.acquireRelease(Effect.sync(AtomRegistry.make), (value) =>
+          Effect.sync(() => value.dispose()),
+        );
+
+        const result = yield* Effect.promise(() =>
+          atoms.mutateWorkflowPreferences.run(registry, {
+            environmentId: TARGET.environmentId,
+            input: { mutation },
+          }),
+        );
+
+        expect(AsyncResult.isSuccess(result)).toBe(true);
+        if (AsyncResult.isSuccess(result)) expect(result.value).toEqual(expected);
+        expect(yield* Ref.get(received)).toEqual({ mutation });
+      }),
+    ),
   );
 });

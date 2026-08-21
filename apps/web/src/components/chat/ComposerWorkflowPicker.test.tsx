@@ -1,5 +1,6 @@
 import {
   WorkflowCatalogItemId,
+  WorkflowPresetId,
   WorkflowRevision,
   type WorkflowCatalogList,
 } from "@t3tools/contracts";
@@ -8,6 +9,7 @@ import type { ComponentProps } from "react";
 import { describe, expect, it } from "vite-plus/test";
 
 import { ComposerWorkflowPicker } from "./ComposerWorkflowPicker";
+import { projectWorkflowLibrary } from "../../workflowInvocation";
 
 const catalog: WorkflowCatalogList = {
   capability: { status: "available", sourceKind: "http", reason: null },
@@ -43,15 +45,26 @@ const catalog: WorkflowCatalogList = {
   ],
 };
 
+const library = projectWorkflowLibrary({
+  items: catalog.items,
+  preferences: { pinnedItemIds: [], presets: [] },
+  recentItemIds: [],
+});
+
 const renderPicker = (overrides: Partial<ComponentProps<typeof ComposerWorkflowPicker>> = {}) =>
   renderToStaticMarkup(
     <ComposerWorkflowPicker
       catalog={catalog}
+      library={library}
+      canMutatePreferences
       error={null}
       isPending={false}
       draftText="Implement the library"
       onRefresh={() => {}}
       onClose={() => {}}
+      onTogglePin={() => {}}
+      onSavePreset={() => null}
+      onRemovePreset={() => {}}
       onInsert={() => {}}
       {...overrides}
     />,
@@ -65,6 +78,7 @@ describe("ComposerWorkflowPicker", () => {
     expect(markup).toContain("review-follow-up");
     expect(markup).toContain(">prompt<");
     expect(markup).toContain(">skill<");
+    expect(markup).toContain("All");
   });
 
   it("renders progressive prompt arguments and a non-submit Insert button", () => {
@@ -72,8 +86,45 @@ describe("ComposerWorkflowPicker", () => {
     expect(markup).toContain("Arguments");
     expect(markup).toContain("task · required");
     expect(markup).toContain("Uses the current draft when blank");
+    expect(markup).toContain("Named preset");
+    expect(markup).toContain("Save preset");
     expect(markup).toContain('<button type="button"');
     expect(markup).toContain(">Insert</button>");
+  });
+
+  it("renders pinned, preset, recent, and stale-reference semantics", () => {
+    const preset = {
+      id: WorkflowPresetId.make("preset-1"),
+      label: "Careful rollout",
+      itemId: catalog.items[0]!.id,
+      itemRevision: WorkflowRevision.make(`sha256:${"a".repeat(64)}`),
+      values: { task: "Roll out carefully" },
+    };
+    const markup = renderPicker({
+      library: {
+        pinned: [catalog.items[0]!],
+        presets: [{ preset, item: catalog.items[0]! }],
+        recent: [catalog.items[1]!],
+        all: [],
+        staleReferenceCount: 2,
+      },
+    });
+    expect(markup).toContain("Pinned");
+    expect(markup).toContain("Presets");
+    expect(markup).toContain("Recent");
+    expect(markup).toContain("Careful rollout");
+    expect(markup).toContain("2 saved actions are currently unavailable");
+    expect(markup).toContain('aria-label="Unpin Strategic implementation"');
+  });
+
+  it("hides preference controls against an older server capability", () => {
+    const markup = renderPicker({ canMutatePreferences: false });
+    expect(markup).not.toContain('aria-label="Pin Strategic implementation"');
+    const detail = renderPicker({
+      canMutatePreferences: false,
+      initialSelectedItemId: "strategicImplement",
+    });
+    expect(detail).not.toContain("Named preset");
   });
 
   it("explains a misconfigured environment without hiding retry", () => {

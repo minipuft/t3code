@@ -57,6 +57,23 @@ describe("ServerSettings workflow catalog source", () => {
   });
 });
 
+describe("ServerSettings workflow library preferences", () => {
+  it("defaults absent preferences and accepts whole-field replacement", () => {
+    expect(decodeServerSettings({}).workflowLibraryPreferences).toEqual({
+      pinnedItemIds: [],
+      presets: [],
+    });
+    const replacement = {
+      pinnedItemIds: ["strategicImplement"],
+      presets: [],
+    };
+    expect(
+      decodeServerSettingsPatch({ workflowLibraryPreferences: replacement })
+        .workflowLibraryPreferences,
+    ).toEqual(replacement);
+  });
+});
+
 describe("ClientSettings glass opacity", () => {
   it("defaults to a readable translucent surface", () => {
     expect(decodeClientSettings({}).glassOpacity).toBe(80);

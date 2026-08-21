@@ -106,6 +106,16 @@ export function mergeProviderSkills(
     .toSorted((left, right) => left.name.localeCompare(right.name));
 }
 
+function dedupePromptsByInvocationId(
+  prompts: ReadonlyArray<WorkflowPromptSummary>,
+): ReadonlyArray<WorkflowPromptSummary> {
+  const promptsById = new Map<WorkflowCatalogItemId, WorkflowPromptSummary>();
+  for (const prompt of prompts) {
+    if (!promptsById.has(prompt.id)) promptsById.set(prompt.id, prompt);
+  }
+  return [...promptsById.values()];
+}
+
 const sourceFailureReason = (error: WorkflowCatalogSourceError): string => {
   switch (error.reason) {
     case "invalid_url":
@@ -158,7 +168,7 @@ export function makeWorkflowCatalog(
 
     return {
       capability: { status: "available" as const, sourceKind: source.kind, reason: null },
-      items: [...promptsResult.prompts, ...skills],
+      items: [...dedupePromptsByInvocationId(promptsResult.prompts), ...skills],
     } satisfies WorkflowCatalogList;
   }).pipe(
     Effect.catchCause((cause) =>

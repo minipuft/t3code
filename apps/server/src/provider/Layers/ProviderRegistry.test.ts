@@ -29,7 +29,10 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { deepMerge } from "@t3tools/shared/Struct";
 import { createModelCapabilities } from "@t3tools/shared/model";
-import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
+import {
+  applyServerSettingsPatch,
+  applyWorkflowLibraryPreferenceMutation,
+} from "@t3tools/shared/serverSettings";
 
 import { checkCodexProviderStatus, type CodexAppServerProviderSnapshot } from "./CodexProvider.ts";
 import { checkClaudeProviderStatus } from "./ClaudeProvider.ts";
@@ -323,6 +326,18 @@ function makeMutableServerSettingsService(
           yield* Ref.set(settingsRef, next);
           yield* PubSub.publish(changes, next);
           return next;
+        }),
+      mutateWorkflowLibraryPreferences: (mutation) =>
+        Effect.gen(function* () {
+          const current = yield* Ref.get(settingsRef);
+          const workflowLibraryPreferences = applyWorkflowLibraryPreferenceMutation(
+            current.workflowLibraryPreferences,
+            mutation,
+          );
+          const next = { ...current, workflowLibraryPreferences };
+          yield* Ref.set(settingsRef, next);
+          yield* PubSub.publish(changes, next);
+          return workflowLibraryPreferences;
         }),
       get streamChanges() {
         return Stream.fromPubSub(changes);
@@ -1528,6 +1543,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
 
           yield* Effect.gen(function* () {
             const registry = yield* ProviderRegistry.ProviderRegistry;
+            const instanceRegistry = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
             // Boot-time probe: the default codex instance is enabled with
             // `firstMissing`, so the real spawner yields ENOENT and the
             // snapshot should be `status: "error"`.
@@ -1551,18 +1567,19 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
             assert.deepStrictEqual(spawnedCommands, [firstMissing]);
 
             // Drive a settings change. The Hydration layer's
-            // `SettingsWatcherLive` consumes this via `streamChanges`,
+            // `SettingsWatcherLive` consumes this via its eager subscription,
             // calls `reconcile`, which rebuilds the codex instance (the
             // envelope changed because `binaryPath` differs → `entryEqual`
-            // is false). The registry's `Stream.runForEach(
-            // instanceRegistry.streamChanges, () => syncLiveSources)`
-            // fires `syncLiveSources`, which subscribes and launches a fresh
-            // background refresh on the rebuilt instance.
+            // is false). The registry's eager instance-change subscription
+            // then runs `syncLiveSources`, which subscribes and launches a
+            // fresh background refresh on the rebuilt instance.
+            const instanceChanges = yield* instanceRegistry.subscribeChanges;
             yield* serverSettings.updateSettings({
               providers: {
                 codex: { enabled: true, binaryPath: secondMissing },
               },
             });
+            yield* PubSub.take(instanceChanges);
 
             // Poll until the injected process boundary observes the new
             // executable. This verifies the public settings-to-probe behavior

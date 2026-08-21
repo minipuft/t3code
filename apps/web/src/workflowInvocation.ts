@@ -2,7 +2,9 @@ import type {
   WorkflowArgument,
   WorkflowCatalogItem,
   WorkflowCatalogList,
+  WorkflowLibraryPreferences,
   WorkflowPromptSummary,
+  WorkflowPreset,
 } from "@t3tools/contracts";
 
 export interface WorkflowInvocationResult {
@@ -16,6 +18,19 @@ export interface WorkflowInsertionPlan {
   readonly rangeEnd: number;
   readonly replacement: string;
   readonly expectedText: string;
+}
+
+export interface WorkflowPresetAction {
+  readonly preset: WorkflowPreset;
+  readonly item: WorkflowCatalogItem;
+}
+
+export interface WorkflowLibraryProjection {
+  readonly pinned: ReadonlyArray<WorkflowCatalogItem>;
+  readonly presets: ReadonlyArray<WorkflowPresetAction>;
+  readonly recent: ReadonlyArray<WorkflowCatalogItem>;
+  readonly all: ReadonlyArray<WorkflowCatalogItem>;
+  readonly staleReferenceCount: number;
 }
 
 const normalizedSearchText = (item: WorkflowCatalogItem): string =>
@@ -46,6 +61,50 @@ export function searchWorkflowCatalog(
     const searchText = normalizedSearchText(item);
     return terms.every((term) => searchText.includes(term));
   });
+}
+
+/** Project persisted references onto the current catalog without mutating stale preference state. */
+export function projectWorkflowLibrary(input: {
+  readonly items: ReadonlyArray<WorkflowCatalogItem>;
+  readonly preferences: WorkflowLibraryPreferences;
+  readonly recentItemIds: ReadonlyArray<WorkflowCatalogItem["id"]>;
+}): WorkflowLibraryProjection {
+  const byId = new Map(input.items.map((item) => [item.id, item]));
+  let staleReferenceCount = 0;
+  const resolveItems = (itemIds: ReadonlyArray<WorkflowCatalogItem["id"]>) => {
+    const seen = new Set<WorkflowCatalogItem["id"]>();
+    return itemIds.flatMap<WorkflowCatalogItem>((itemId) => {
+      if (seen.has(itemId)) return [];
+      seen.add(itemId);
+      const item = byId.get(itemId);
+      if (!item) {
+        staleReferenceCount += 1;
+        return [];
+      }
+      return [item];
+    });
+  };
+
+  const pinned = resolveItems(input.preferences.pinnedItemIds);
+  const pinnedIds = new Set(pinned.map((item) => item.id));
+  const recent = resolveItems(input.recentItemIds).filter((item) => !pinnedIds.has(item.id));
+  const surfacedItemIds = new Set([...pinned, ...recent].map((item) => item.id));
+  const presets = input.preferences.presets.flatMap<WorkflowPresetAction>((preset) => {
+    const item = byId.get(preset.itemId);
+    if (!item) {
+      staleReferenceCount += 1;
+      return [];
+    }
+    return [{ preset, item }];
+  });
+
+  return {
+    pinned,
+    presets,
+    recent,
+    all: input.items.filter((item) => !surfacedItemIds.has(item.id)),
+    staleReferenceCount,
+  };
 }
 
 function quoteWorkflowString(value: string): string {

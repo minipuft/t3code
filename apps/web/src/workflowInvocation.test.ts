@@ -1,6 +1,7 @@
 import {
   ProviderDriverKind,
   WorkflowCatalogItemId,
+  WorkflowPresetId,
   WorkflowRevision,
   type WorkflowPromptSummary,
 } from "@t3tools/contracts";
@@ -9,6 +10,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   buildWorkflowInvocation,
   planWorkflowInsertion,
+  projectWorkflowLibrary,
   searchWorkflowCatalog,
   shouldShowWorkflowActions,
 } from "./workflowInvocation";
@@ -61,6 +63,63 @@ describe("shouldShowWorkflowActions", () => {
         items: [skill],
       }),
     ).toBe(true);
+  });
+});
+
+describe("projectWorkflowLibrary", () => {
+  it("projects live sections without duplicating item rows and preserves named preset actions", () => {
+    const projection = projectWorkflowLibrary({
+      items: [prompt, skill],
+      preferences: {
+        pinnedItemIds: [prompt.id],
+        presets: [
+          {
+            id: WorkflowPresetId.make("preset-1"),
+            label: "Ship carefully",
+            itemId: prompt.id,
+            itemRevision: prompt.revision,
+            values: { attempts: "3" },
+          },
+        ],
+      },
+      recentItemIds: [prompt.id, skill.id],
+    });
+
+    expect(projection.pinned).toEqual([prompt]);
+    expect(projection.presets).toEqual([
+      { item: prompt, preset: expect.objectContaining({ label: "Ship carefully" }) },
+    ]);
+    expect(projection.recent).toEqual([skill]);
+    expect(projection.all).toEqual([]);
+    expect(projection.staleReferenceCount).toBe(0);
+  });
+
+  it("omits stale references from actions while reporting them without changing storage", () => {
+    const staleId = WorkflowCatalogItemId.make("missing");
+    const preferences = {
+      pinnedItemIds: [staleId],
+      presets: [
+        {
+          id: WorkflowPresetId.make("stale-preset"),
+          label: "Missing preset",
+          itemId: staleId,
+          itemRevision: prompt.revision,
+          values: {},
+        },
+      ],
+    };
+    const projection = projectWorkflowLibrary({
+      items: [prompt],
+      preferences,
+      recentItemIds: [staleId],
+    });
+
+    expect(projection.pinned).toEqual([]);
+    expect(projection.presets).toEqual([]);
+    expect(projection.recent).toEqual([]);
+    expect(projection.all).toEqual([prompt]);
+    expect(projection.staleReferenceCount).toBe(3);
+    expect(preferences.pinnedItemIds).toEqual([staleId]);
   });
 });
 

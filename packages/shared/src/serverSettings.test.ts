@@ -2,6 +2,11 @@ import {
   DEFAULT_SERVER_SETTINGS,
   ProviderDriverKind,
   ProviderInstanceId,
+  WORKFLOW_LIBRARY_MAX_PINS,
+  WORKFLOW_LIBRARY_MAX_PRESETS,
+  WorkflowCatalogItemId,
+  WorkflowPresetId,
+  WorkflowRevision,
   type ServerProvider,
 } from "@t3tools/contracts";
 import * as Duration from "effect/Duration";
@@ -10,12 +15,22 @@ import { resolveServerBackgroundActivitySettings } from "./backgroundActivitySet
 import { createModelSelection } from "./model.ts";
 import {
   applyServerSettingsPatch,
+  applyWorkflowLibraryPreferenceMutation,
   extractPersistedServerObservabilitySettings,
   isModelSelectionProviderEnabled,
   normalizePersistedServerSettingString,
   parsePersistedServerObservabilitySettings,
   resolveSourceControlWriterModelSelection,
 } from "./serverSettings.ts";
+
+const workflowItemId = (value: string) => WorkflowCatalogItemId.make(value);
+const workflowPreset = (id: string, label = id) => ({
+  id: WorkflowPresetId.make(id),
+  label,
+  itemId: workflowItemId("strategicImplement"),
+  itemRevision: WorkflowRevision.make(`sha256:${"a".repeat(64)}`),
+  values: { task: label },
+});
 
 describe("serverSettings helpers", () => {
   it("normalizes optional persisted strings", () => {
@@ -511,5 +526,92 @@ describe("serverSettings helpers", () => {
     });
 
     expect(resolved.pauseWhenOnBattery).toBe(false);
+  });
+});
+
+describe("workflow library preference mutations", () => {
+  it("pins idempotently at the front and unpins without disturbing presets", () => {
+    const preset = workflowPreset("preset-1");
+    const pinned = applyWorkflowLibraryPreferenceMutation(
+      { pinnedItemIds: [workflowItemId("review")], presets: [preset] },
+      { type: "workflow.pin", itemId: workflowItemId("strategicImplement") },
+    );
+    expect(pinned).toEqual({
+      pinnedItemIds: [workflowItemId("strategicImplement"), workflowItemId("review")],
+      presets: [preset],
+    });
+    expect(
+      applyWorkflowLibraryPreferenceMutation(pinned, {
+        type: "workflow.pin",
+        itemId: workflowItemId("strategicImplement"),
+      }),
+    ).toEqual(pinned);
+    expect(
+      applyWorkflowLibraryPreferenceMutation(pinned, {
+        type: "workflow.unpin",
+        itemId: workflowItemId("review"),
+      }).pinnedItemIds,
+    ).toEqual([workflowItemId("strategicImplement")]);
+  });
+
+  it("upserts presets by identity and removes them", () => {
+    const first = workflowPreset("preset-1", "First");
+    const second = workflowPreset("preset-2", "Second");
+    const updated = workflowPreset("preset-1", "Updated");
+    const current = { pinnedItemIds: [], presets: [first, second] };
+    const next = applyWorkflowLibraryPreferenceMutation(current, {
+      type: "workflow.preset.upsert",
+      preset: updated,
+    });
+    expect(next.presets.map((preset) => preset.label)).toEqual(["Updated", "Second"]);
+    expect(
+      applyWorkflowLibraryPreferenceMutation(next, {
+        type: "workflow.preset.remove",
+        presetId: WorkflowPresetId.make("preset-1"),
+      }).presets,
+    ).toEqual([second]);
+  });
+
+  it("deduplicates externally edited state without evicting a pin at the limit", () => {
+    const itemIds = Array.from({ length: WORKFLOW_LIBRARY_MAX_PINS + 3 }, (_, index) =>
+      workflowItemId(`workflow-${index}`),
+    );
+    const next = applyWorkflowLibraryPreferenceMutation(
+      { pinnedItemIds: [...itemIds, itemIds[0]!], presets: [] },
+      { type: "workflow.pin", itemId: workflowItemId("new-workflow") },
+    );
+    expect(next.pinnedItemIds).toHaveLength(WORKFLOW_LIBRARY_MAX_PINS);
+    expect(next.pinnedItemIds).not.toContain("new-workflow");
+    expect(new Set(next.pinnedItemIds).size).toBe(next.pinnedItemIds.length);
+  });
+
+  it("updates existing presets but does not evict one when the limit is reached", () => {
+    const presets = Array.from({ length: WORKFLOW_LIBRARY_MAX_PRESETS }, (_, index) =>
+      workflowPreset(`preset-${index}`),
+    );
+    const rejected = applyWorkflowLibraryPreferenceMutation(
+      { pinnedItemIds: [], presets },
+      { type: "workflow.preset.upsert", preset: workflowPreset("new-preset") },
+    );
+    expect(rejected.presets).toEqual(presets);
+
+    const updated = applyWorkflowLibraryPreferenceMutation(rejected, {
+      type: "workflow.preset.upsert",
+      preset: workflowPreset("preset-3", "Updated"),
+    });
+    expect(updated.presets).toHaveLength(WORKFLOW_LIBRARY_MAX_PRESETS);
+    expect(updated.presets[0]?.label).toBe("Updated");
+  });
+
+  it("replaces workflow preferences as one settings field", () => {
+    const replacement = {
+      pinnedItemIds: [workflowItemId("strategicImplement")],
+      presets: [workflowPreset("preset-1")],
+    };
+    expect(
+      applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+        workflowLibraryPreferences: replacement,
+      }).workflowLibraryPreferences,
+    ).toEqual(replacement);
   });
 });

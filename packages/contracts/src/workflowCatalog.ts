@@ -33,6 +33,72 @@ export const WorkflowRevision = TrimmedNonEmptyString.check(
 ).pipe(Schema.brand("WorkflowRevision"));
 export type WorkflowRevision = typeof WorkflowRevision.Type;
 
+export const WORKFLOW_LIBRARY_MAX_PINS = 64;
+export const WORKFLOW_LIBRARY_MAX_PRESETS = 64;
+export const WORKFLOW_PRESET_MAX_ARGUMENTS = 32;
+export const WORKFLOW_PRESET_MAX_LABEL_LENGTH = 128;
+export const WORKFLOW_PRESET_MAX_VALUE_LENGTH = 16_384;
+
+export const WorkflowPresetId = TrimmedNonEmptyString.check(Schema.isMaxLength(128)).pipe(
+  Schema.brand("WorkflowPresetId"),
+);
+export type WorkflowPresetId = typeof WorkflowPresetId.Type;
+
+const WorkflowPresetValues = Schema.Record(
+  TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
+  Schema.String.check(Schema.isMaxLength(WORKFLOW_PRESET_MAX_VALUE_LENGTH)),
+).check(
+  Schema.makeFilter(
+    (values) =>
+      Object.keys(values).length <= WORKFLOW_PRESET_MAX_ARGUMENTS ||
+      `Workflow presets support at most ${WORKFLOW_PRESET_MAX_ARGUMENTS} arguments.`,
+  ),
+);
+
+export const WorkflowPreset = Schema.Struct({
+  id: WorkflowPresetId,
+  label: TrimmedNonEmptyString.check(Schema.isMaxLength(WORKFLOW_PRESET_MAX_LABEL_LENGTH)),
+  itemId: WorkflowCatalogItemId,
+  itemRevision: WorkflowRevision,
+  values: WorkflowPresetValues,
+});
+export type WorkflowPreset = typeof WorkflowPreset.Type;
+
+export const WorkflowLibraryPreferences = Schema.Struct({
+  pinnedItemIds: Schema.Array(WorkflowCatalogItemId)
+    .check(Schema.isMaxLength(WORKFLOW_LIBRARY_MAX_PINS))
+    .pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  presets: Schema.Array(WorkflowPreset)
+    .check(Schema.isMaxLength(WORKFLOW_LIBRARY_MAX_PRESETS))
+    .pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+});
+export type WorkflowLibraryPreferences = typeof WorkflowLibraryPreferences.Type;
+
+export const EMPTY_WORKFLOW_LIBRARY_PREFERENCES: WorkflowLibraryPreferences = {
+  pinnedItemIds: [],
+  presets: [],
+};
+
+export const WorkflowLibraryPreferenceMutation = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("workflow.pin"),
+    itemId: WorkflowCatalogItemId,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("workflow.unpin"),
+    itemId: WorkflowCatalogItemId,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("workflow.preset.upsert"),
+    preset: WorkflowPreset,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("workflow.preset.remove"),
+    presetId: WorkflowPresetId,
+  }),
+]);
+export type WorkflowLibraryPreferenceMutation = typeof WorkflowLibraryPreferenceMutation.Type;
+
 export const WorkflowCatalogHttpBaseUrl = TrimmedNonEmptyString.check(
   Schema.isMaxLength(2_048),
   Schema.isPattern(/^https?:\/\//i),

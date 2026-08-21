@@ -2,12 +2,17 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
 import {
+  WORKFLOW_LIBRARY_MAX_PINS,
+  WORKFLOW_PRESET_MAX_ARGUMENTS,
+  WORKFLOW_PRESET_MAX_VALUE_LENGTH,
   WorkflowCatalogCapability,
   WorkflowCatalogList,
   WorkflowCatalogSource,
   WorkflowCatalogError,
   WorkflowPromptDetail,
   WorkflowPromptSummary,
+  WorkflowLibraryPreferenceMutation,
+  WorkflowLibraryPreferences,
 } from "./workflowCatalog.ts";
 
 const summary = {
@@ -34,6 +39,10 @@ const decodeWorkflowCatalogCapability = Schema.decodeUnknownSync(WorkflowCatalog
 const decodeWorkflowCatalogList = Schema.decodeUnknownSync(WorkflowCatalogList);
 const decodeWorkflowCatalogSource = Schema.decodeUnknownSync(WorkflowCatalogSource);
 const decodeWorkflowCatalogError = Schema.decodeUnknownSync(WorkflowCatalogError);
+const decodeWorkflowLibraryPreferences = Schema.decodeUnknownSync(WorkflowLibraryPreferences);
+const decodeWorkflowLibraryPreferenceMutation = Schema.decodeUnknownSync(
+  WorkflowLibraryPreferenceMutation,
+);
 
 describe("workflow catalog contracts", () => {
   it("decodes a prompt summary and defaults provider availability", () => {
@@ -129,5 +138,72 @@ describe("workflow catalog contracts", () => {
         message: "Prompt not found",
       }).code,
     ).toBe("item_not_found");
+  });
+
+  it("decodes bounded pins and explicit prompt preset values", () => {
+    const preset = {
+      id: "preset-1",
+      label: "Implement this plan",
+      itemId: "strategicImplement",
+      itemRevision: summary.revision,
+      values: { task: "Implement the approved plan" },
+    };
+    expect(
+      decodeWorkflowLibraryPreferences({
+        pinnedItemIds: ["strategicImplement"],
+        presets: [preset],
+      }),
+    ).toEqual({ pinnedItemIds: ["strategicImplement"], presets: [preset] });
+    expect(
+      decodeWorkflowLibraryPreferenceMutation({
+        type: "workflow.preset.upsert",
+        preset,
+      }).type,
+    ).toBe("workflow.preset.upsert");
+  });
+
+  it("rejects oversized workflow preference collections and preset content", () => {
+    expect(() =>
+      decodeWorkflowLibraryPreferences({
+        pinnedItemIds: Array.from(
+          { length: WORKFLOW_LIBRARY_MAX_PINS + 1 },
+          (_, index) => `workflow-${index}`,
+        ),
+        presets: [],
+      }),
+    ).toThrow();
+    expect(() =>
+      decodeWorkflowLibraryPreferences({
+        pinnedItemIds: [],
+        presets: [
+          {
+            id: "preset-1",
+            label: "Too many values",
+            itemId: "strategicImplement",
+            itemRevision: summary.revision,
+            values: Object.fromEntries(
+              Array.from({ length: WORKFLOW_PRESET_MAX_ARGUMENTS + 1 }, (_, index) => [
+                `argument-${index}`,
+                "value",
+              ]),
+            ),
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      decodeWorkflowLibraryPreferences({
+        pinnedItemIds: [],
+        presets: [
+          {
+            id: "preset-1",
+            label: "Oversized value",
+            itemId: "strategicImplement",
+            itemRevision: summary.revision,
+            values: { task: "x".repeat(WORKFLOW_PRESET_MAX_VALUE_LENGTH + 1) },
+          },
+        ],
+      }),
+    ).toThrow();
   });
 });

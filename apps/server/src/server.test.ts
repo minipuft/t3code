@@ -30,6 +30,7 @@ import {
   ResolvedKeybindingRule,
   ThreadId,
   WS_METHODS,
+  WorkflowCatalogItemId,
   WsRpcGroup,
   EditorId,
 } from "@t3tools/contracts";
@@ -4440,6 +4441,36 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       assert.deepEqual(response.issues, []);
       assert.deepEqual(response.keybindings, [resolved]);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("routes websocket rpc workflow.preferences.mutate", () =>
+    Effect.gen(function* () {
+      const itemId = WorkflowCatalogItemId.make("strategicImplement");
+      const mutations: Array<{ readonly type: string; readonly itemId?: string }> = [];
+      yield* buildAppUnderTest({
+        layers: {
+          serverSettings: {
+            mutateWorkflowLibraryPreferences: (mutation) =>
+              Effect.sync(() => {
+                mutations.push(mutation);
+                return { pinnedItemIds: [itemId], presets: [] };
+              }),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const response = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.workflowPreferencesMutate]({
+            mutation: { type: "workflow.pin", itemId },
+          }),
+        ),
+      );
+
+      assert.deepEqual(mutations, [{ type: "workflow.pin", itemId }]);
+      assert.deepEqual(response, { pinnedItemIds: [itemId], presets: [] });
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

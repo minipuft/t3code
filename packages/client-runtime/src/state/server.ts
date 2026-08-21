@@ -756,6 +756,12 @@ export function createServerEnvironmentAtoms<R, E>(
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
+    mutateWorkflowPreferences: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:mutate-workflow-preferences",
+      tag: WS_METHODS.workflowPreferencesMutate,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
     signalProcess: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:signal-process",
       tag: WS_METHODS.serverSignalProcess,

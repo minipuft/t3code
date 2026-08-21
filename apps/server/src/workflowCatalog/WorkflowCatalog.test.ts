@@ -111,6 +111,18 @@ describe("WorkflowCatalog", () => {
     }),
   );
 
+  it.effect("retains the first prompt when a source repeats an invocation id", () =>
+    Effect.gen(function* () {
+      const duplicate = { ...prompt, name: "Duplicate action" };
+
+      const result = yield* catalog({
+        loadPrompts: () => Effect.succeed([prompt, duplicate]),
+      }).list;
+
+      assert.deepEqual(result.items, [prompt]);
+    }),
+  );
+
   it.effect("turns malformed upstream data into a non-sensitive unavailable capability", () =>
     Effect.gen(function* () {
       const result = yield* catalog({

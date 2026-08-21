@@ -1531,6 +1531,12 @@ const makeWsRpcLayer = (
               "rpc.aggregate": "server",
             },
           ),
+        [WS_METHODS.workflowPreferencesMutate]: ({ mutation }) =>
+          observeRpcEffect(
+            WS_METHODS.workflowPreferencesMutate,
+            serverSettings.mutateWorkflowLibraryPreferences(mutation),
+            { "rpc.aggregate": "server" },
+          ),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) =>
           observeRpcEffect(
             WS_METHODS.serverDiscoverSourceControl,

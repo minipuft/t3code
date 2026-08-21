@@ -5,6 +5,7 @@ import {
   ProviderInstanceId,
   ServerSettings,
   ServerSettingsPatch,
+  WorkflowCatalogItemId,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { assert, it } from "@effect/vitest";
@@ -223,6 +224,59 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         assert.equal(
           Option.getOrUndefined(firstChange)?.providers.codex.binaryPath,
           "/usr/local/bin/codex-next",
+        );
+      }),
+    ).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
+  it.effect("serializes concurrent workflow preference mutations and broadcasts each result", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
+        const serverConfig = yield* ServerConfig.ServerConfig;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const changes = yield* serverSettings.subscribeChanges;
+        const firstId = WorkflowCatalogItemId.make("strategicImplement");
+        const secondId = WorkflowCatalogItemId.make("review");
+
+        yield* Effect.all(
+          [
+            serverSettings.mutateWorkflowLibraryPreferences({
+              type: "workflow.pin",
+              itemId: firstId,
+            }),
+            serverSettings.mutateWorkflowLibraryPreferences({
+              type: "workflow.pin",
+              itemId: secondId,
+            }),
+          ],
+          { concurrency: "unbounded" },
+        );
+
+        const emitted = yield* changes.pipe(
+          Stream.take(2),
+          Stream.runCollect,
+          Effect.timeout("1 second"),
+        );
+        const current = yield* serverSettings.getSettings;
+        assert.deepEqual(
+          new Set(current.workflowLibraryPreferences.pinnedItemIds),
+          new Set([firstId, secondId]),
+        );
+        assert.equal(emitted.length, 2);
+        assert.deepEqual(
+          new Set(emitted[1]!.workflowLibraryPreferences.pinnedItemIds),
+          new Set([firstId, secondId]),
+        );
+
+        const raw = yield* fileSystem.readFileString(serverConfig.settingsPath);
+        // @effect-diagnostics-next-line preferSchemaOverJson:off
+        const persisted = JSON.parse(raw) as {
+          workflowLibraryPreferences?: { pinnedItemIds?: ReadonlyArray<string> };
+        };
+        assert.deepEqual(
+          new Set(persisted.workflowLibraryPreferences?.pinnedItemIds),
+          new Set([firstId, secondId]),
         );
       }),
     ).pipe(Effect.provide(makeServerSettingsLayer())),

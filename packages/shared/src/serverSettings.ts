@@ -7,6 +7,10 @@ import {
   type ServerProvider,
   ServerSettings,
   type ServerSettingsPatch,
+  WORKFLOW_LIBRARY_MAX_PINS,
+  WORKFLOW_LIBRARY_MAX_PRESETS,
+  type WorkflowLibraryPreferenceMutation,
+  type WorkflowLibraryPreferences,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -122,6 +126,73 @@ function mergeModelSelectionOptionsById(input: {
   return [...merged.entries()].map(([id, value]) => ({ id, value }));
 }
 
+const dedupePinnedItemIds = (
+  itemIds: WorkflowLibraryPreferences["pinnedItemIds"],
+): WorkflowLibraryPreferences["pinnedItemIds"] =>
+  [...new Set(itemIds)].slice(0, WORKFLOW_LIBRARY_MAX_PINS);
+
+const dedupePresets = (
+  presets: WorkflowLibraryPreferences["presets"],
+): WorkflowLibraryPreferences["presets"] => {
+  const seen = new Set<string>();
+  return presets
+    .filter((preset) => {
+      if (seen.has(preset.id)) return false;
+      seen.add(preset.id);
+      return true;
+    })
+    .slice(0, WORKFLOW_LIBRARY_MAX_PRESETS);
+};
+
+/** Apply one user intent while preserving deterministic bounds and idempotence. */
+export function applyWorkflowLibraryPreferenceMutation(
+  current: WorkflowLibraryPreferences,
+  mutation: WorkflowLibraryPreferenceMutation,
+): WorkflowLibraryPreferences {
+  const pinnedItemIds = dedupePinnedItemIds(current.pinnedItemIds);
+  const presets = dedupePresets(current.presets);
+  switch (mutation.type) {
+    case "workflow.pin":
+      if (
+        !pinnedItemIds.includes(mutation.itemId) &&
+        pinnedItemIds.length >= WORKFLOW_LIBRARY_MAX_PINS
+      ) {
+        return { pinnedItemIds, presets };
+      }
+      return {
+        pinnedItemIds: dedupePinnedItemIds([
+          mutation.itemId,
+          ...pinnedItemIds.filter((itemId) => itemId !== mutation.itemId),
+        ]),
+        presets,
+      };
+    case "workflow.unpin":
+      return {
+        pinnedItemIds: pinnedItemIds.filter((itemId) => itemId !== mutation.itemId),
+        presets,
+      };
+    case "workflow.preset.upsert":
+      if (
+        !presets.some((preset) => preset.id === mutation.preset.id) &&
+        presets.length >= WORKFLOW_LIBRARY_MAX_PRESETS
+      ) {
+        return { pinnedItemIds, presets };
+      }
+      return {
+        pinnedItemIds,
+        presets: dedupePresets([
+          mutation.preset,
+          ...presets.filter((preset) => preset.id !== mutation.preset.id),
+        ]),
+      };
+    case "workflow.preset.remove":
+      return {
+        pinnedItemIds,
+        presets: presets.filter((preset) => preset.id !== mutation.presetId),
+      };
+  }
+}
+
 export function applyServerSettingsPatch(
   current: ServerSettings,
   patch: ServerSettingsPatch,
@@ -190,6 +261,9 @@ export function applyServerSettingsPatch(
       : {}),
     ...(patch.sourceControlWriterModelSelection !== undefined
       ? { sourceControlWriterModelSelection: patch.sourceControlWriterModelSelection }
+      : {}),
+    ...(patch.workflowLibraryPreferences !== undefined
+      ? { workflowLibraryPreferences: patch.workflowLibraryPreferences }
       : {}),
     ...(automaticGitFetchInterval !== undefined ? { automaticGitFetchInterval } : {}),
     ...(providerHealthRefreshInterval !== undefined ? { providerHealthRefreshInterval } : {}),

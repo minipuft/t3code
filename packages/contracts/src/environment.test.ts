@@ -26,4 +26,14 @@ describe("ExecutionEnvironmentDescriptor", () => {
       }).capabilities.pullRequests,
     ).toBe(true);
   });
+
+  it("treats workflow preferences as an optional version-skew capability", () => {
+    expect(decodeDescriptor(descriptor).capabilities.workflowPreferences).toBeUndefined();
+    expect(
+      decodeDescriptor({
+        ...descriptor,
+        capabilities: { ...descriptor.capabilities, workflowPreferences: true },
+      }).capabilities.workflowPreferences,
+    ).toBe(true);
+  });
 });

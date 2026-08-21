@@ -11,6 +11,7 @@ import type {
   ServerProvider,
   ThreadId,
   TurnId,
+  WorkflowCatalogItem,
 } from "@t3tools/contracts";
 import {
   isProviderSendTurnSupportedImageMimeType,
@@ -95,6 +96,8 @@ import {
 import { type ComposerPromptEditorHandle, ComposerPromptEditor } from "../ComposerPromptEditor";
 import { ProviderModelPicker } from "./ProviderModelPicker";
 import { type ComposerCommandItem, ComposerCommandMenu } from "./ComposerCommandMenu";
+import { ComposerWorkflowPicker } from "./ComposerWorkflowPicker";
+import { ComposerWorkflowActionsControl } from "./ComposerWorkflowActionsControl";
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
@@ -122,6 +125,8 @@ import {
   submitComposerDraft,
 } from "./composerSubmission";
 import { ComposerPromptLengthValidation } from "./ComposerPromptLengthValidation";
+import { planWorkflowInsertion } from "../../workflowInvocation";
+import { useComposerWorkflowPicker } from "./useComposerWorkflowPicker";
 
 type ComposerCommandMenuPosition = {
   bottom: number;
@@ -998,6 +1003,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const isMobileViewport = useMediaQuery("max-sm");
   const isComposerCollapsedMobile =
     isMobileViewport && !forceExpandedOnMobile && !isComposerFocused;
+  const workflowPicker = useComposerWorkflowPicker({
+    environmentId,
+    prompt,
+    trigger: composerTrigger,
+    setTrigger: setComposerTrigger,
+    scheduleComposerFocus,
+  });
 
   // ------------------------------------------------------------------
   // Refs
@@ -1147,7 +1159,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     workspaceEntries.entries,
   ]);
 
-  const composerMenuOpen = Boolean(composerTrigger);
+  const isWorkflowTrigger = composerTriggerKind === "workflow";
+  const composerMenuOpen = Boolean(composerTrigger && !isWorkflowTrigger);
+  const workflowPickerOpen = workflowPicker.isOpen && !composerMenuOpen;
   const composerMenuSearchKey = composerTrigger
     ? `${composerTrigger.kind}:${composerTrigger.query.trim().toLowerCase()}`
     : null;
@@ -1597,7 +1611,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       if (activePendingProgress?.activeQuestion && pendingUserInputs.length > 0) {
         setComposerCursor(nextCursor);
         setComposerTrigger(
-          cursorAdjacentToMention ? null : detectComposerTrigger(nextPrompt, expandedCursor),
+          workflowPicker.filterTrigger(
+            cursorAdjacentToMention ? null : detectComposerTrigger(nextPrompt, expandedCursor),
+          ),
         );
         onChangeActivePendingUserInputCustomAnswer(
           activePendingProgress.activeQuestion.id,
@@ -1618,7 +1634,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       }
       setComposerCursor(nextCursor);
       setComposerTrigger(
-        cursorAdjacentToMention ? null : detectComposerTrigger(nextPrompt, expandedCursor),
+        workflowPicker.filterTrigger(
+          cursorAdjacentToMention ? null : detectComposerTrigger(nextPrompt, expandedCursor),
+        ),
       );
     },
     [
@@ -1630,6 +1648,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       composerDraftTarget,
       composerTerminalContexts,
       setComposerDraftTerminalContexts,
+      workflowPicker.filterTrigger,
     ],
   );
 
@@ -1801,6 +1820,32 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       }
     },
     [applyPromptReplacement, handleInteractionModeChange, resolveActiveComposerTrigger],
+  );
+
+  const insertWorkflowInvocation = useCallback(
+    (input: { readonly item: WorkflowCatalogItem; readonly text: string }) => {
+      const { snapshot, trigger } = resolveActiveComposerTrigger();
+      const workflowTrigger = trigger?.kind === "workflow" ? trigger : null;
+      const insertion = planWorkflowInsertion({
+        item: input.item,
+        invocation: input.text,
+        draftText: snapshot.value,
+        cursor: snapshot.expandedCursor,
+        triggerRange: workflowTrigger
+          ? { start: workflowTrigger.rangeStart, end: workflowTrigger.rangeEnd }
+          : null,
+      });
+      const applied = applyPromptReplacement(
+        insertion.rangeStart,
+        insertion.rangeEnd,
+        insertion.replacement,
+        { expectedText: insertion.expectedText },
+      );
+      if (!applied) return;
+      workflowPicker.closeAfterInsert();
+      setComposerHighlightedItemId(null);
+    },
+    [applyPromptReplacement, resolveActiveComposerTrigger, workflowPicker.closeAfterInsert],
   );
 
   const onComposerMenuItemHighlighted = useCallback(
@@ -3039,18 +3084,38 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 isComposerCollapsedMobile && "hidden",
               )}
             >
-              {isStashMenuOpen && !composerMenuOpen && !isComposerApprovalState && (
+              {workflowPickerOpen && !isComposerApprovalState ? (
                 <ComposerCommandMenuLayer anchor={composerMenuAnchor}>
-                  <ComposerStashMenu
-                    entries={stashQueue}
-                    onRestore={restoreStashEntry}
-                    onDelete={deleteStashEntry}
-                    onClose={() => setIsStashMenuOpen(false)}
+                  <ComposerWorkflowPicker
+                    catalog={workflowPicker.catalog.data}
+                    error={workflowPicker.catalog.error}
+                    isPending={workflowPicker.catalog.isPending}
+                    initialQuery={
+                      workflowPicker.openedFromTrigger ? (composerTrigger?.query ?? "") : ""
+                    }
+                    draftText={workflowPicker.draftText}
+                    onRefresh={workflowPicker.catalog.refresh}
+                    onClose={workflowPicker.close}
+                    onInsert={insertWorkflowInvocation}
                   />
                 </ComposerCommandMenuLayer>
-              )}
+              ) : null}
 
-              {composerMenuOpen && !isComposerApprovalState && (
+              {isStashMenuOpen &&
+                !composerMenuOpen &&
+                !workflowPickerOpen &&
+                !isComposerApprovalState && (
+                  <ComposerCommandMenuLayer anchor={composerMenuAnchor}>
+                    <ComposerStashMenu
+                      entries={stashQueue}
+                      onRestore={restoreStashEntry}
+                      onDelete={deleteStashEntry}
+                      onClose={() => setIsStashMenuOpen(false)}
+                    />
+                  </ComposerCommandMenuLayer>
+                )}
+
+              {composerMenuOpen && !workflowPickerOpen && !isComposerApprovalState && (
                 <ComposerCommandMenuLayer anchor={composerMenuAnchor}>
                   <ComposerCommandMenu
                     items={composerMenuItems}
@@ -3223,7 +3288,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                               ? "Enable a provider in Settings to send a message"
                               : phase === "disconnected"
                                 ? DISCONNECTED_COMPOSER_PLACEHOLDER
-                                : "Ask anything, @tag files/folders, $use skills, or / for commands"
+                                : "Ask anything, >browse actions, @tag files, $use skills, or / for commands"
                   }
                   disabled={isConnecting || isComposerApprovalState || projectSelectionRequired}
                 />
@@ -3315,6 +3380,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       onInstanceModelChange={onProviderModelSelect}
                     />
                   )}
+
+                  {workflowPicker.actionsVisible ? (
+                    <ComposerWorkflowActionsControl
+                      compact={isComposerFooterCompact}
+                      open={workflowPickerOpen}
+                      onToggle={() => {
+                        setIsStashMenuOpen(false);
+                        workflowPicker.toggleFromAction();
+                      }}
+                    />
+                  ) : null}
 
                   {isComposerFooterCompact ? (
                     <CompactComposerControlsMenu

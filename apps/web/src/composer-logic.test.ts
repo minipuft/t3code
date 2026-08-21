@@ -5,6 +5,7 @@ import {
   collapseExpandedComposerCursor,
   detectComposerTrigger,
   expandCollapsedComposerCursor,
+  filterDismissedWorkflowTrigger,
   isCollapsedCursorAdjacentToInlineToken,
   parseStandaloneComposerSlashCommand,
   replaceTextRange,
@@ -106,6 +107,30 @@ describe("detectComposerTrigger", () => {
     });
   });
 
+  it("detects a workflow trigger only for the current token", () => {
+    const text = "Use >strategic";
+    expect(detectComposerTrigger(text, text.length)).toEqual({
+      kind: "workflow",
+      query: "strategic",
+      rangeStart: "Use ".length,
+      rangeEnd: text.length,
+    });
+    expect(detectComposerTrigger("compare a>b", "compare a>b".length)).toBeNull();
+    expect(detectComposerTrigger("\\>literal", "\\>literal".length)).toBeNull();
+    expect(detectComposerTrigger(">>strategicImplement", ">>strategicImplement".length)).toBeNull();
+  });
+
+  it("releases a line-start workflow trigger after Markdown quote whitespace", () => {
+    expect(detectComposerTrigger(">", 1)?.kind).toBe("workflow");
+    expect(detectComposerTrigger("> quoted text", 2)).toBeNull();
+  });
+
+  it("retains slash, skill, and path trigger precedence", () => {
+    expect(detectComposerTrigger("/plan", 5)?.kind).toBe("slash-command");
+    expect(detectComposerTrigger("$review", 7)?.kind).toBe("skill");
+    expect(detectComposerTrigger("@README", 7)?.kind).toBe("path");
+  });
+
   it("detects @path trigger in the middle of existing text", () => {
     // User typed @ between "inspect " and "in this sentence"
     const text = "Please inspect @in this sentence";
@@ -144,6 +169,23 @@ describe("detectComposerTrigger", () => {
     expect(trigger).not.toBeNull();
     expect(trigger?.kind).toBe("path");
     expect(trigger?.query).toBe("");
+  });
+});
+
+describe("filterDismissedWorkflowTrigger", () => {
+  it("keeps a dismissed workflow token literal while its query is edited", () => {
+    const trigger = detectComposerTrigger(">literal", 8);
+    expect(filterDismissedWorkflowTrigger(trigger, 0)).toEqual({
+      trigger: null,
+      dismissedRangeStart: 0,
+    });
+  });
+
+  it("releases suppression after leaving the dismissed token", () => {
+    expect(filterDismissedWorkflowTrigger(null, 0)).toEqual({
+      trigger: null,
+      dismissedRangeStart: null,
+    });
   });
 });
 

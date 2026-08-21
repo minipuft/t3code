@@ -1,7 +1,7 @@
 import { splitPromptIntoComposerSegments } from "./composer-editor-mentions";
 import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "./lib/terminalContext";
 
-export type ComposerTriggerKind = "path" | "slash-command" | "skill";
+export type ComposerTriggerKind = "path" | "slash-command" | "skill" | "workflow";
 export type ComposerSlashCommand = "model" | "plan" | "default";
 
 export interface ComposerTrigger {
@@ -9,6 +9,20 @@ export interface ComposerTrigger {
   query: string;
   rangeStart: number;
   rangeEnd: number;
+}
+
+export function filterDismissedWorkflowTrigger(
+  trigger: ComposerTrigger | null,
+  dismissedRangeStart: number | null,
+): { readonly trigger: ComposerTrigger | null; readonly dismissedRangeStart: number | null } {
+  if (
+    trigger?.kind === "workflow" &&
+    dismissedRangeStart !== null &&
+    trigger.rangeStart === dismissedRangeStart
+  ) {
+    return { trigger: null, dismissedRangeStart };
+  }
+  return { trigger, dismissedRangeStart: null };
 }
 
 export function shouldSubmitComposerOnEnter(input: {
@@ -245,6 +259,14 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
   if (token.startsWith("$")) {
     return {
       kind: "skill",
+      query: token.slice(1),
+      rangeStart: tokenStart,
+      rangeEnd: cursor,
+    };
+  }
+  if (token.startsWith(">") && !token.startsWith(">>")) {
+    return {
+      kind: "workflow",
       query: token.slice(1),
       rangeStart: tokenStart,
       rangeEnd: cursor,

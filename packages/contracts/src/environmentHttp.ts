@@ -54,6 +54,17 @@ import {
   WorkflowCatalogItemId,
   WorkflowCatalogList,
 } from "./workflowCatalog.ts";
+import {
+  WorkbenchPlanAnnotationMutationInput,
+  WorkbenchPlanAnnotations,
+  WorkbenchPlanList,
+  WorkbenchPlanMutationInput,
+  WorkbenchPlanMutationResult,
+  WorkbenchPlanPath,
+  WorkbenchPlanSaveInput,
+  WorkbenchPlanSaveResult,
+  WorkbenchPlanSourceDocument,
+} from "./workbenchPlans.ts";
 
 const OptionalBearerHeaders = Schema.Struct({
   authorization: Schema.optionalKey(Schema.String),
@@ -193,6 +204,7 @@ export class EnvironmentInternalError extends Schema.TaggedErrorClass<Environmen
 export const EnvironmentResourceNotFoundReason = Schema.Literals([
   "thread_not_found",
   "workflow_catalog_item_not_found",
+  "workbench_plan_not_found",
 ]);
 export type EnvironmentResourceNotFoundReason = typeof EnvironmentResourceNotFoundReason.Type;
 
@@ -588,6 +600,100 @@ export class EnvironmentWorkflowCatalogHttpApi extends HttpApiGroup.make("workfl
       ),
   ) {}
 
+const EnvironmentWorkbenchPlanParams = { path: WorkbenchPlanPath };
+const EnvironmentWorkbenchPlanMutationErrors = [
+  EnvironmentRequestInvalidError,
+  EnvironmentScopeRequiredError,
+  EnvironmentResourceNotFoundError,
+  EnvironmentHttpConflictError,
+  EnvironmentInternalError,
+] as const;
+
+export class EnvironmentWorkbenchPlansHttpApi extends HttpApiGroup.make("workbenchPlans")
+  .add(
+    HttpApiEndpoint.get("list", "/api/workbench/plans", {
+      headers: OptionalBearerHeaders,
+      success: WorkbenchPlanList,
+      error: EnvironmentOrchestrationSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "List external Workbench plans")
+      .annotate(
+        OpenApi.Description,
+        'GET. Returns bounded plan metadata and active bindings from the configured environment adapter. Requires orchestration:read. Example response: {"capability":{"status":"available","reason":null},"items":[{"path":"t3code/phase.md","name":"phase.md","directory":"t3code","project":"t3code","status":"active","date":"2026-08-23","tags":[],"mtimeMs":1787520000000,"binding":null}]}. Missing or unavailable configuration is represented by the capability object; authentication/scope failures return 401/403. No endpoint-specific rate limit is applied.',
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("source", "/api/workbench/plans/source", {
+      headers: OptionalBearerHeaders,
+      payload: EnvironmentWorkbenchPlanParams,
+      success: WorkbenchPlanSourceDocument,
+      error: EnvironmentOrchestrationThreadSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Read an external Workbench plan")
+      .annotate(
+        OpenApi.Description,
+        'GET. Reads the Markdown source for the required path query parameter, for example ?path=t3code%2Fphase.md. Requires orchestration:read. The path is a POSIX workspace-relative .md, .markdown, or .mdx value; absolute, backslash, and parent-traversal paths are rejected. Example response: {"path":"t3code/phase.md","text":"# Phase","mtimeMs":1787520000000,"size":7}. Missing plans return 404; authentication/scope failures return 401/403; adapter failures return 500. No endpoint-specific rate limit is applied.',
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("save", "/api/workbench/plans/save", {
+      headers: OptionalBearerHeaders,
+      payload: WorkbenchPlanSaveInput,
+      success: WorkbenchPlanSaveResult,
+      error: EnvironmentWorkbenchPlanMutationErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Save an external Workbench plan")
+      .annotate(
+        OpenApi.Description,
+        'POST. Replaces one plan\'s Markdown text when baseMtimeMs still matches the source. Requires orchestration:operate. Example request: {"path":"t3code/phase.md","text":"# Phase","baseMtimeMs":1787520000000}. Example response: {"path":"t3code/phase.md","mtimeMs":1787520001000,"size":7}. Missing plans return 404; a concurrent edit returns 409; invalid input returns 400; authentication/scope failures return 401/403; adapter failures return 500. No endpoint-specific rate limit is applied.',
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("mutate", "/api/workbench/plans/mutate", {
+      headers: OptionalBearerHeaders,
+      payload: WorkbenchPlanMutationInput,
+      success: WorkbenchPlanMutationResult,
+      error: EnvironmentWorkbenchPlanMutationErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Change an external Workbench plan lifecycle")
+      .annotate(
+        OpenApi.Description,
+        'POST. Creates, renames, or moves one plan through the external plan authority. Requires orchestration:operate. Example move request: {"op":"move","path":"t3code/phase.md","to":"archive"}. Example response: {"path":"t3code/archive/phase.md"}. Missing plans return 404; existing destinations return 409; invalid operations return 400; authentication/scope failures return 401/403; adapter failures return 500. No endpoint-specific rate limit is applied.',
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("annotations", "/api/workbench/plans/annotations", {
+      headers: OptionalBearerHeaders,
+      payload: EnvironmentWorkbenchPlanParams,
+      success: WorkbenchPlanAnnotations,
+      error: EnvironmentOrchestrationThreadSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "List external Workbench plan annotations")
+      .annotate(
+        OpenApi.Description,
+        'GET. Lists unresolved annotations and their Markdown projection for the required workspace-relative plan path, for example ?path=t3code%2Fphase.md. Requires orchestration:read. Example response: {"path":"t3code/phase.md","items":[],"markdown":""}. Missing plans return 404; authentication/scope failures return 401/403; adapter failures return 500. No endpoint-specific rate limit is applied.',
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("annotate", "/api/workbench/plans/annotations", {
+      headers: OptionalBearerHeaders,
+      payload: WorkbenchPlanAnnotationMutationInput,
+      success: WorkbenchPlanAnnotations,
+      error: EnvironmentWorkbenchPlanMutationErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Change external Workbench plan annotations")
+      .annotate(
+        OpenApi.Description,
+        'POST. Adds a comment/removal note or resolves an annotation for one plan. Requires orchestration:operate. Example add request: {"op":"add","path":"t3code/phase.md","kind":"comment","body":"Clarify this","quote":"selected text","heading":"Boundary"}. The response is the same annotation list shape as GET. Missing plans return 404; invalid annotations return 400; authentication/scope failures return 401/403; adapter failures return 500. No endpoint-specific rate limit is applied.',
+      ),
+  ) {}
+
 export class EnvironmentConnectHttpApi extends HttpApiGroup.make("connect")
   .add(
     HttpApiEndpoint.post("linkProof", "/api/connect/link-proof", {
@@ -655,4 +761,5 @@ export class EnvironmentHttpApi extends HttpApi.make("environment")
   .add(EnvironmentOrchestrationHttpApi)
   .add(EnvironmentPullRequestsHttpApi)
   .add(EnvironmentWorkflowCatalogHttpApi)
+  .add(EnvironmentWorkbenchPlansHttpApi)
   .add(EnvironmentConnectHttpApi) {}

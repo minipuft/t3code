@@ -142,6 +142,11 @@ export function mapRemoteEnvironmentError(
         detail: "The environment endpoint could not be found.",
         traceId: error.traceId,
       });
+    case "EnvironmentHttpConflictError":
+      return new ConnectionBlockedError({
+        reason: "configuration",
+        detail: error.message,
+      });
     case "RemoteEnvironmentAuthTimeoutError":
       return new ConnectionTransientError({
         reason: "timeout",

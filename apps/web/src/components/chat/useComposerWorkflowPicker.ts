@@ -126,13 +126,17 @@ export function useComposerWorkflowPicker(input: {
     dismissedTriggerStartRef.current = null;
     input.setTrigger(null);
     setOpenedFromAction((open) => !open);
-  }, [input.setTrigger]);
-
-  const closeAfterInsert = useCallback(() => {
-    dismissedTriggerStartRef.current = null;
-    setOpenedFromAction(false);
     input.scheduleComposerFocus();
-  }, [input.scheduleComposerFocus]);
+  }, [input.scheduleComposerFocus, input.setTrigger]);
+
+  const closeAfterInsert = useCallback(
+    (focusComposer = true) => {
+      dismissedTriggerStartRef.current = null;
+      setOpenedFromAction(false);
+      if (focusComposer) input.scheduleComposerFocus();
+    },
+    [input.scheduleComposerFocus],
+  );
 
   return {
     catalog,

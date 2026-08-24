@@ -3,6 +3,7 @@ import { shellSnapshotLoaderLayer } from "@t3tools/client-runtime/state/shell";
 import { threadSnapshotLoaderLayer } from "@t3tools/client-runtime/state/threads";
 import { pullRequestDiffLoaderLayer } from "@t3tools/client-runtime/state/pull-requests";
 import { workflowCatalogLoaderLayer } from "@t3tools/client-runtime/state/workflow-catalog";
+import { workbenchPlansLoaderLayer } from "@t3tools/client-runtime/state/workbench-plans";
 import * as Layer from "effect/Layer";
 import { Atom } from "effect/unstable/reactivity";
 
@@ -22,6 +23,7 @@ const snapshotLoaderLayer = Layer.mergeAll(
   shellSnapshotLoaderLayer,
   pullRequestDiffLoaderLayer,
   workflowCatalogLoaderLayer,
+  workbenchPlansLoaderLayer,
 );
 
 type ConnectionLayerSource =

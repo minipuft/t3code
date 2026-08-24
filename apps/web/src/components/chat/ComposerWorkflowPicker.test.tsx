@@ -9,6 +9,7 @@ import type { ComponentProps } from "react";
 import { describe, expect, it } from "vite-plus/test";
 
 import { ComposerWorkflowPicker } from "./ComposerWorkflowPicker";
+import { projectWorkflowKind, resolveWorkflowListKey } from "./ComposerWorkflowList";
 import { projectWorkflowLibrary } from "../../workflowInvocation";
 
 const catalog: WorkflowCatalogList = {
@@ -66,19 +67,30 @@ const renderPicker = (overrides: Partial<ComponentProps<typeof ComposerWorkflowP
       onSavePreset={() => null}
       onRemovePreset={() => {}}
       onInsert={() => {}}
+      onSubmit={() => {}}
       {...overrides}
     />,
   );
 
 describe("ComposerWorkflowPicker", () => {
-  it("renders one attached library with prompt and skill kinds", () => {
+  it("renders one attached library with prompt and skill pills", () => {
     const markup = renderPicker();
     expect(markup).toContain('data-composer-workflow-picker="true"');
     expect(markup).toContain("Strategic implementation");
-    expect(markup).toContain("review-follow-up");
+    expect(markup).not.toContain("review-follow-up");
     expect(markup).toContain(">prompt<");
-    expect(markup).toContain(">skill<");
+    expect(markup).toContain(">Prompts<");
+    expect(markup).toContain(">Skills<");
+    expect(markup).toContain("Enter details");
+    expect(markup).not.toContain("autofocus");
     expect(markup).toContain("All");
+    expect(markup).toContain('aria-label="Open Agent Workbench"');
+    expect(markup).toContain('href="/workbench?module=prompts"');
+
+    const skillsMarkup = renderPicker({ initialKind: "skill" });
+    expect(skillsMarkup).toContain("review-follow-up");
+    expect(skillsMarkup).toContain(">skill<");
+    expect(skillsMarkup).not.toContain("Strategic implementation");
   });
 
   it("renders progressive prompt arguments and a non-submit Insert button", () => {
@@ -111,10 +123,23 @@ describe("ComposerWorkflowPicker", () => {
     });
     expect(markup).toContain("Pinned");
     expect(markup).toContain("Presets");
-    expect(markup).toContain("Recent");
     expect(markup).toContain("Careful rollout");
     expect(markup).toContain("2 saved actions are currently unavailable");
     expect(markup).toContain('aria-label="Unpin Strategic implementation"');
+
+    const skillsMarkup = renderPicker({
+      initialKind: "skill",
+      library: {
+        pinned: [catalog.items[0]!],
+        presets: [{ preset, item: catalog.items[0]! }],
+        recent: [catalog.items[1]!],
+        all: [],
+        staleReferenceCount: 2,
+      },
+    });
+    expect(skillsMarkup).toContain("Recent");
+    expect(skillsMarkup).toContain("review-follow-up");
+    expect(skillsMarkup).not.toContain("Careful rollout");
   });
 
   it("hides preference controls against an older server capability", () => {
@@ -144,6 +169,7 @@ describe("ComposerWorkflowPicker", () => {
 
   it("keeps provider skills usable when the prompt source is unavailable", () => {
     const markup = renderPicker({
+      initialKind: "skill",
       catalog: {
         capability: {
           status: "unavailable",
@@ -155,5 +181,49 @@ describe("ComposerWorkflowPicker", () => {
     });
     expect(markup).toContain("The configured prompt catalog is unavailable.");
     expect(markup).toContain("review-follow-up");
+  });
+
+  it("maps arrows, Enter, and Shift+Enter without conflating detail with submit", () => {
+    const promptId = catalog.items[0]!.id;
+    const skillId = catalog.items[1]!.id;
+    const itemIds = [promptId, skillId];
+    expect(
+      resolveWorkflowListKey({
+        key: "ArrowDown",
+        shiftKey: false,
+        itemIds,
+        highlightedItemId: promptId,
+      }),
+    ).toEqual({ type: "highlight", itemId: skillId });
+    expect(
+      resolveWorkflowListKey({
+        key: "Enter",
+        shiftKey: false,
+        itemIds,
+        highlightedItemId: promptId,
+      }),
+    ).toEqual({ type: "open", itemId: promptId });
+    expect(
+      resolveWorkflowListKey({
+        key: "Enter",
+        shiftKey: true,
+        itemIds,
+        highlightedItemId: promptId,
+      }),
+    ).toEqual({ type: "submit", itemId: promptId });
+    expect(
+      resolveWorkflowListKey({
+        key: "Enter",
+        shiftKey: false,
+        itemIds: [],
+        highlightedItemId: null,
+      }),
+    ).toEqual({ type: "consume" });
+  });
+
+  it("projects prompts and skills into separate library tabs", () => {
+    expect(projectWorkflowKind(library, "prompt").all.map((item) => item.kind)).toEqual(["prompt"]);
+    expect(projectWorkflowKind(library, "skill").all.map((item) => item.kind)).toEqual(["skill"]);
+    expect(projectWorkflowKind(library, "skill").presets).toEqual([]);
   });
 });

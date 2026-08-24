@@ -1842,7 +1842,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   );
 
   const insertWorkflowInvocation = useCallback(
-    (input: { readonly item: WorkflowCatalogItem; readonly text: string }) => {
+    (
+      input: { readonly item: WorkflowCatalogItem; readonly text: string },
+      focusComposerAfterInsert = true,
+    ) => {
       const { snapshot, trigger } = resolveActiveComposerTrigger();
       const workflowTrigger = trigger?.kind === "workflow" ? trigger : null;
       const insertion = planWorkflowInsertion({
@@ -1860,10 +1863,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         insertion.replacement,
         { expectedText: insertion.expectedText },
       );
-      if (!applied) return;
+      if (!applied) return false;
       workflowPicker.recordRecent(input.item.id);
-      workflowPicker.closeAfterInsert();
+      workflowPicker.closeAfterInsert(focusComposerAfterInsert);
       setComposerHighlightedItemId(null);
+      return true;
     },
     [
       applyPromptReplacement,
@@ -1988,6 +1992,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       promptRef,
       shouldBlurMobileComposerOnSubmit,
     ],
+  );
+  const submitWorkflowInvocation = useCallback(
+    (input: { readonly item: WorkflowCatalogItem; readonly text: string }) => {
+      if (!insertWorkflowInvocation(input, false)) return;
+      submitComposer();
+    },
+    [insertWorkflowInvocation, submitComposer],
   );
   const expandMobileComposer = useCallback(() => {
     if (composerBlurFrameRef.current !== null) {
@@ -3130,6 +3141,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     onSavePreset={workflowPicker.savePreset}
                     onRemovePreset={workflowPicker.removePreset}
                     onInsert={insertWorkflowInvocation}
+                    onSubmit={submitWorkflowInvocation}
                   />
                 </ComposerCommandMenuLayer>
               ) : null}

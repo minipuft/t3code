@@ -43,6 +43,7 @@ import {
   LinkIcon,
   MessageSquareIcon,
   PaletteIcon,
+  PanelsTopLeftIcon,
   ServerIcon,
   SettingsIcon,
   SquarePenIcon,
@@ -1613,6 +1614,17 @@ function OpenCommandPaletteDialog(props: {
         themeHalves,
         initialAppearance: resolvedTheme,
       });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
+    value: "action:agent-workbench",
+    searchTerms: ["agent", "workbench", "plans", "prompts", "skills", "vitals", "workflows"],
+    title: "Open Agent Workbench",
+    icon: <PanelsTopLeftIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/workbench", search: { module: "plans" } });
     },
   });
 

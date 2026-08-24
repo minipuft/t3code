@@ -28,6 +28,7 @@ import {
   WorkflowCatalogSource,
   WorkflowLibraryPreferences,
 } from "./workflowCatalog.ts";
+import { WorkbenchPlansSource } from "./workbenchPlans.ts";
 
 // ── Client Settings (local-only) ───────────────────────────────
 
@@ -656,6 +657,9 @@ export const ServerSettings = Schema.Struct({
   workflowCatalogSource: Schema.NullOr(WorkflowCatalogSource).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
+  workbenchPlansSource: Schema.NullOr(WorkbenchPlansSource).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   workflowLibraryPreferences: WorkflowLibraryPreferences.pipe(
     Schema.withDecodingDefault(Effect.succeed(EMPTY_WORKFLOW_LIBRARY_PREFERENCES)),
   ),
@@ -848,6 +852,7 @@ export const ServerSettingsPatch = Schema.Struct({
   ),
   sourceControlWriterModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   workflowCatalogSource: Schema.optionalKey(Schema.NullOr(WorkflowCatalogSource)),
+  workbenchPlansSource: Schema.optionalKey(Schema.NullOr(WorkbenchPlansSource)),
   workflowLibraryPreferences: Schema.optionalKey(WorkflowLibraryPreferences),
   observability: Schema.optionalKey(
     Schema.Struct({

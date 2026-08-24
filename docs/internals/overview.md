@@ -112,6 +112,16 @@ scoped adapter; `ProviderInstanceRegistry` owns live instances and `ProviderAdap
 an instance to its adapter, so `ProviderService` routes session and turn operations without knowing
 which agent is behind them. See [providers.md](./providers.md).
 
+## Workflow catalog
+
+An environment merges metadata from its configured HTTP prompt source with skills reported by the
+provider registry. Catalog lists remain metadata-only. When an authenticated client selects a
+prompt, `GET /api/workflows/:itemId` asks the source's protected detail endpoint for executable
+template content. The source credential stays in the server process as
+`T3_WORKFLOW_CATALOG_READ_TOKEN`; it is not projected through environment settings or client
+contracts. Skill detail remains provider metadata because skills execute through provider-native
+invocation.
+
 ## Checkpointing
 
 Each turn is bracketed by workspace checkpoints so diffs and reverts are exact. `CheckpointStore`

@@ -50,7 +50,7 @@ import {
   RelayLinkProofRequest,
 } from "./relay.ts";
 import {
-  WorkflowCatalogItem,
+  WorkflowCatalogDetail,
   WorkflowCatalogItemId,
   WorkflowCatalogList,
 } from "./workflowCatalog.ts";
@@ -64,6 +64,7 @@ import {
   WorkbenchPlanSaveInput,
   WorkbenchPlanSaveResult,
   WorkbenchPlanSourceDocument,
+  WorkbenchVitalsSnapshot,
 } from "./workbenchPlans.ts";
 
 const OptionalBearerHeaders = Schema.Struct({
@@ -589,14 +590,14 @@ export class EnvironmentWorkflowCatalogHttpApi extends HttpApiGroup.make("workfl
     HttpApiEndpoint.get("detail", "/api/workflows/:itemId", {
       headers: OptionalBearerHeaders,
       params: EnvironmentWorkflowCatalogDetailParams,
-      success: WorkflowCatalogItem,
+      success: WorkflowCatalogDetail,
       error: EnvironmentOrchestrationThreadSnapshotErrors,
     })
       .middleware(EnvironmentAuthenticatedAuth)
-      .annotate(OpenApi.Summary, "Read workflow metadata")
+      .annotate(OpenApi.Summary, "Read workflow detail")
       .annotate(
         OpenApi.Description,
-        "Returns one prompt or skill metadata item by catalog id. Requires orchestration:read and returns workflow_catalog_item_not_found when the id is absent.",
+        "Returns executable template content for a prompt or metadata for a skill. Requires orchestration:read and returns workflow_catalog_item_not_found when the id is absent.",
       ),
   ) {}
 
@@ -610,6 +611,19 @@ const EnvironmentWorkbenchPlanMutationErrors = [
 ] as const;
 
 export class EnvironmentWorkbenchPlansHttpApi extends HttpApiGroup.make("workbenchPlans")
+  .add(
+    HttpApiEndpoint.get("vitals", "/api/workbench/vitals", {
+      headers: OptionalBearerHeaders,
+      success: WorkbenchVitalsSnapshot,
+      error: EnvironmentOrchestrationSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Read provider-owned Workbench quota windows")
+      .annotate(
+        OpenApi.Description,
+        "Returns provider-reported subscription quota windows through the configured Workbench adapter. Requires orchestration:read. Missing windows are returned as an empty array and are never estimated from token usage.",
+      ),
+  )
   .add(
     HttpApiEndpoint.get("list", "/api/workbench/plans", {
       headers: OptionalBearerHeaders,

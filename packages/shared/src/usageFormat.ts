@@ -230,3 +230,15 @@ export function makeWindow(
     resolution,
   };
 }
+
+/** Monday-to-today usage window in the viewer's local calendar. */
+export function makeCurrentWeekWindow(now = new Date()): UsageSummaryInput {
+  const today = makeWindow(1, now);
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: today.timeZone,
+    weekday: "short",
+  }).format(now);
+  const weekdayIndex = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(weekday);
+  const daysSinceMonday = weekdayIndex < 0 ? 0 : (weekdayIndex + 6) % 7;
+  return makeWindow(daysSinceMonday + 1, now);
+}

@@ -9,6 +9,7 @@ import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 
 import {
   annotateEnvironmentRequest,
+  failEnvironmentInternal,
   failEnvironmentNotFound,
   requireEnvironmentScope,
 } from "../auth/http.ts";
@@ -26,7 +27,9 @@ const findFromCatalog = Effect.fn("workflowCatalog.http.find")(function* (
   itemId: WorkflowCatalogItemId,
 ) {
   yield* requireEnvironmentScope(AuthOrchestrationReadScope);
-  const item = yield* catalog.find(itemId);
+  const item = yield* catalog
+    .findDetail(itemId)
+    .pipe(Effect.catch((error) => failEnvironmentInternal("internal_error", error)));
   if (Option.isNone(item)) {
     return yield* failEnvironmentNotFound("workflow_catalog_item_not_found");
   }

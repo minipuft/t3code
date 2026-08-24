@@ -2,10 +2,11 @@ import * as NodeCrypto from "node:crypto";
 
 import {
   WorkflowCatalogItemId,
+  WorkflowPromptDetail,
   WorkflowPromptSummary,
   type ServerProvider,
   type ServerSettings,
-  type WorkflowCatalogItem,
+  type WorkflowCatalogDetail,
   type WorkflowCatalogList,
   type WorkflowCatalogSource,
   type WorkflowSkillSummary,
@@ -15,7 +16,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
@@ -49,13 +50,17 @@ export interface WorkflowCatalogDependencies {
   readonly loadPrompts: (
     source: WorkflowCatalogSource,
   ) => Effect.Effect<ReadonlyArray<WorkflowPromptSummary>, WorkflowCatalogSourceError>;
+  readonly loadPromptDetail: (
+    source: WorkflowCatalogSource,
+    itemId: WorkflowCatalogItemId,
+  ) => Effect.Effect<WorkflowPromptDetail, WorkflowCatalogSourceError>;
 }
 
 export interface WorkflowCatalogShape {
   readonly list: Effect.Effect<WorkflowCatalogList>;
-  readonly find: (
+  readonly findDetail: (
     itemId: WorkflowCatalogItemId,
-  ) => Effect.Effect<Option.Option<WorkflowCatalogItem>>;
+  ) => Effect.Effect<Option.Option<WorkflowCatalogDetail>, WorkflowCatalogSourceError>;
 }
 
 export class WorkflowCatalog extends Context.Service<WorkflowCatalog, WorkflowCatalogShape>()(
@@ -187,12 +192,23 @@ export function makeWorkflowCatalog(
 
   return {
     list,
-    find: (itemId) =>
-      list.pipe(
-        Effect.map((catalog) =>
-          Option.fromUndefinedOr(catalog.items.find((item) => item.id === itemId)),
-        ),
-      ),
+    findDetail: (itemId) =>
+      Effect.gen(function* () {
+        const catalog = yield* list;
+        const item = catalog.items.find((candidate) => candidate.id === itemId);
+        if (item === undefined) return Option.none();
+        if (item.kind === "skill") return Option.some(item);
+
+        const settings = yield* dependencies.getSettings.pipe(
+          Effect.mapError(() => new WorkflowCatalogSourceError({ reason: "request_failed" })),
+        );
+        if (settings.workflowCatalogSource === null) return Option.none();
+        const detail = yield* dependencies.loadPromptDetail(settings.workflowCatalogSource, itemId);
+        if (detail.summary.id !== itemId) {
+          return yield* new WorkflowCatalogSourceError({ reason: "invalid_response" });
+        }
+        return Option.some(detail);
+      }),
   };
 }
 
@@ -223,6 +239,35 @@ const make = Effect.gen(function* () {
     );
   });
 
+  const loadPromptDetail: WorkflowCatalogDependencies["loadPromptDetail"] = Effect.fn(
+    "WorkflowCatalog.loadPromptDetail",
+  )(function* (source, itemId) {
+    const readToken = process.env["T3_WORKFLOW_CATALOG_READ_TOKEN"]?.trim();
+    if (!readToken) return yield* new WorkflowCatalogSourceError({ reason: "request_failed" });
+
+    const detailUrl = yield* Effect.try({
+      try: () =>
+        new URL(
+          `api/v1/catalog/prompts/${encodeURIComponent(itemId)}`,
+          source.baseUrl.endsWith("/") ? source.baseUrl : `${source.baseUrl}/`,
+        ),
+      catch: () => new WorkflowCatalogSourceError({ reason: "invalid_url" }),
+    });
+
+    return yield* HttpClientRequest.get(detailUrl).pipe(
+      HttpClientRequest.bearerToken(readToken),
+      httpClient.execute,
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+      Effect.flatMap(HttpClientResponse.schemaBodyJson(WorkflowPromptDetail)),
+      Effect.timeout(CATALOG_REQUEST_TIMEOUT),
+      Effect.mapError((error) =>
+        Schema.isSchemaError(error)
+          ? new WorkflowCatalogSourceError({ reason: "invalid_response" })
+          : new WorkflowCatalogSourceError({ reason: "request_failed" }),
+      ),
+    );
+  });
+
   return WorkflowCatalog.of(
     makeWorkflowCatalog({
       getSettings: settings.getSettings.pipe(
@@ -230,6 +275,7 @@ const make = Effect.gen(function* () {
       ),
       getProviders: providers.getProviders,
       loadPrompts,
+      loadPromptDetail,
     }),
   );
 });

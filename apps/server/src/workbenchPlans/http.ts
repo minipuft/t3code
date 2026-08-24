@@ -54,6 +54,12 @@ export const workbenchPlansHttpApiLayer = HttpApiBuilder.group(
   Effect.fnUntraced(function* (handlers) {
     const plans = yield* WorkbenchPlans;
     return handlers
+      .handle("vitals", ({ endpoint }) =>
+        annotateEnvironmentRequest(endpoint.name).pipe(
+          Effect.andThen(requireEnvironmentScope(AuthOrchestrationReadScope)),
+          Effect.andThen(plans.vitals),
+        ),
+      )
       .handle("list", ({ endpoint }) =>
         annotateEnvironmentRequest(endpoint.name).pipe(
           Effect.andThen(requireEnvironmentScope(AuthOrchestrationReadScope)),

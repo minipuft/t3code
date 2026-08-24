@@ -6,6 +6,7 @@ import {
   formatDateTimeShort,
   formatHourShort,
   formatRelativeHourShort,
+  makeCurrentWeekWindow,
   makeWindow,
 } from "./usageFormat.ts";
 
@@ -66,6 +67,28 @@ describe("hourly usage formatting", () => {
 
       expect(makeWindow(1, now, "hour").timeZone).toBe("UTC");
       expect(makeWindow(30, now).timeZone).toBe("UTC");
+    } finally {
+      resolvedOptions.mockRestore();
+    }
+  });
+
+  it("builds a Monday-to-today weekly window", () => {
+    const resolved = new Intl.DateTimeFormat().resolvedOptions();
+    const resolvedOptions = vi
+      .spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions")
+      .mockReturnValue({ ...resolved, timeZone: "UTC" });
+
+    try {
+      expect(makeCurrentWeekWindow(new Date("2026-08-23T12:00:00.000Z"))).toMatchObject({
+        sinceDay: "2026-08-17",
+        untilDay: "2026-08-23",
+        timeZone: "UTC",
+      });
+      expect(makeCurrentWeekWindow(new Date("2026-08-24T12:00:00.000Z"))).toMatchObject({
+        sinceDay: "2026-08-24",
+        untilDay: "2026-08-24",
+        timeZone: "UTC",
+      });
     } finally {
       resolvedOptions.mockRestore();
     }

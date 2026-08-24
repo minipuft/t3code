@@ -1,4 +1,8 @@
-import type { WorkflowCatalogList } from "@t3tools/contracts";
+import type {
+  WorkflowCatalogDetail,
+  WorkflowCatalogItemId,
+  WorkflowCatalogList,
+} from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -44,12 +48,44 @@ export const fetchEnvironmentWorkflowCatalog = Effect.fn(
   );
 });
 
+/** Load authenticated detail for one workflow catalog item. */
+export const fetchEnvironmentWorkflowCatalogDetail = Effect.fn(
+  "clientRuntime.state.fetchEnvironmentWorkflowCatalogDetail",
+)(function* (input: {
+  readonly prepared: PreparedConnection;
+  readonly signer: Option.Option<ManagedRelayDpopSigner["Service"]>;
+  readonly itemId: WorkflowCatalogItemId;
+  readonly timeoutMs?: number;
+}) {
+  const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
+  const requestUrl = urlBuilder.workflowCatalog.detail({ params: { itemId: input.itemId } });
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const headers = yield* buildEnvironmentAuthHeaders(
+    input.prepared.httpAuthorization,
+    "GET",
+    requestUrl,
+    input.signer,
+  );
+  return yield* executeEnvironmentHttpRequest(
+    requestUrl,
+    input.timeoutMs ?? DEFAULT_WORKFLOW_CATALOG_TIMEOUT_MS,
+    withEnvironmentCredentials(
+      input.prepared.httpAuthorization,
+      client.workflowCatalog.detail({ params: { itemId: input.itemId }, headers }),
+    ),
+  );
+});
+
 export class WorkflowCatalogLoader extends Context.Service<
   WorkflowCatalogLoader,
   {
     readonly load: (
       prepared: PreparedConnection,
     ) => Effect.Effect<WorkflowCatalogList, RemoteEnvironmentRequestError>;
+    readonly detail: (
+      prepared: PreparedConnection,
+      itemId: WorkflowCatalogItemId,
+    ) => Effect.Effect<WorkflowCatalogDetail, RemoteEnvironmentRequestError>;
   }
 >()("@t3tools/client-runtime/state/workflowCatalogHttp/WorkflowCatalogLoader") {}
 
@@ -65,6 +101,10 @@ export const workflowCatalogLoaderLayer: Layer.Layer<
     return WorkflowCatalogLoader.of({
       load: (prepared) =>
         fetchEnvironmentWorkflowCatalog({ prepared, signer }).pipe(
+          Effect.provideService(HttpClient.HttpClient, httpClient),
+        ),
+      detail: (prepared, itemId) =>
+        fetchEnvironmentWorkflowCatalogDetail({ prepared, signer, itemId }).pipe(
           Effect.provideService(HttpClient.HttpClient, httpClient),
         ),
     });

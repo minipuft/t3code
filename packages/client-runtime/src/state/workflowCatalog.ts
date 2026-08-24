@@ -5,6 +5,7 @@ import * as Option from "effect/Option";
 import { Atom } from "effect/unstable/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
+import type { WorkflowCatalogItemId } from "@t3tools/contracts";
 import { EnvironmentSupervisor } from "../connection/supervisor.ts";
 import { createEnvironmentQueryAtomFamily } from "./runtime.ts";
 import { WorkflowCatalogLoader } from "./workflowCatalogHttp.ts";
@@ -33,6 +34,22 @@ export function createWorkflowCatalogEnvironmentAtoms<R, E>(
             });
           }
           return yield* loader.load(prepared.value);
+        }),
+    }),
+    detail: createEnvironmentQueryAtomFamily(runtime, {
+      label: "environment-data:workflow-catalog:detail",
+      staleTimeMs: 30_000,
+      execute: (itemId: WorkflowCatalogItemId) =>
+        Effect.gen(function* () {
+          const supervisor = yield* EnvironmentSupervisor;
+          const loader = yield* WorkflowCatalogLoader;
+          const prepared = yield* SubscriptionRef.get(supervisor.prepared);
+          if (Option.isNone(prepared)) {
+            return yield* new WorkflowCatalogConnectionNotReadyError({
+              message: "The environment HTTP connection is not ready.",
+            });
+          }
+          return yield* loader.detail(prepared.value, itemId);
         }),
     }),
   };

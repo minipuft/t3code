@@ -6,6 +6,7 @@ import {
   WorkflowCatalogItemId,
   WorkflowRevision,
   type ServerProvider,
+  type WorkflowPromptDetail,
   type WorkflowPromptSummary,
 } from "@t3tools/contracts";
 import { assert, describe, it } from "@effect/vitest";
@@ -61,6 +62,7 @@ function catalog(overrides?: {
     ReadonlyArray<WorkflowPromptSummary>,
     WorkflowCatalogSourceError
   >;
+  readonly loadPromptDetail?: () => Effect.Effect<WorkflowPromptDetail, WorkflowCatalogSourceError>;
 }) {
   return makeWorkflowCatalog({
     getSettings: Effect.succeed({
@@ -69,6 +71,14 @@ function catalog(overrides?: {
     }),
     getProviders: Effect.succeed(overrides?.providers ?? []),
     loadPrompts: overrides?.loadPrompts ?? (() => Effect.succeed([prompt])),
+    loadPromptDetail:
+      overrides?.loadPromptDetail ??
+      (() =>
+        Effect.succeed({
+          summary: prompt,
+          userMessageTemplate: "Implement {{ task }}",
+          systemMessage: null,
+        })),
   });
 }
 
@@ -103,11 +113,14 @@ describe("WorkflowCatalog", () => {
     Effect.gen(function* () {
       const service = catalog();
       const result = yield* service.list;
-      const found = yield* service.find(prompt.id);
+      const found = yield* service.findDetail(prompt.id);
 
       assert.strictEqual(result.items[0]?.kind, "prompt");
       assert.isTrue(found._tag === "Some");
-      assert.strictEqual(found._tag === "Some" ? found.value.id : "", prompt.id);
+      assert.strictEqual(
+        found._tag === "Some" && "summary" in found.value ? found.value.summary.id : "",
+        prompt.id,
+      );
     }),
   );
 
@@ -120,6 +133,23 @@ describe("WorkflowCatalog", () => {
       }).list;
 
       assert.deepEqual(result.items, [prompt]);
+    }),
+  );
+
+  it.effect("rejects prompt detail whose identity does not match the selected catalog item", () =>
+    Effect.gen(function* () {
+      const service = catalog({
+        loadPromptDetail: () =>
+          Effect.succeed({
+            summary: { ...prompt, id: WorkflowCatalogItemId.make("different") },
+            userMessageTemplate: "Implement {{ task }}",
+            systemMessage: null,
+          }),
+      });
+
+      const error = yield* Effect.flip(service.findDetail(prompt.id));
+
+      assert.strictEqual(error.reason, "invalid_response");
     }),
   );
 
@@ -145,6 +175,12 @@ describe("WorkflowCatalog", () => {
         getSettings: Effect.fail(new WorkflowCatalogDependencyError({ dependency: "settings" })),
         getProviders: Effect.succeed([]),
         loadPrompts: () => Effect.succeed([]),
+        loadPromptDetail: () =>
+          Effect.succeed({
+            summary: prompt,
+            userMessageTemplate: "Implement {{ task }}",
+            systemMessage: null,
+          }),
       });
 
       const result = yield* service.list;

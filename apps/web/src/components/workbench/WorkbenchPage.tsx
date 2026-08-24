@@ -120,7 +120,16 @@ export function WorkbenchPage(props: {
                 />
               )
             ) : null}
-            {props.activeModule === "vitals" ? <WorkbenchVitalsPanel /> : null}
+            {props.activeModule === "vitals" ? (
+              effectiveEnvironmentId === null ? (
+                <WorkbenchEmptyState
+                  title="No environment is connected"
+                  description="Connect an environment before reading usage and quota."
+                />
+              ) : (
+                <WorkbenchVitalsPanel environmentId={effectiveEnvironmentId} />
+              )
+            ) : null}
           </WorkspacePageContainer>
         </ScrollArea>
       </div>

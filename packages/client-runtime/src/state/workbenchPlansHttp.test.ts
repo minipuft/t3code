@@ -10,6 +10,7 @@ import {
   fetchEnvironmentWorkbenchPlanAnnotations,
   fetchEnvironmentWorkbenchPlanSource,
   fetchEnvironmentWorkbenchPlans,
+  fetchEnvironmentWorkbenchVitals,
   mutateEnvironmentWorkbenchPlan,
   saveEnvironmentWorkbenchPlan,
 } from "./workbenchPlansHttp.ts";
@@ -61,6 +62,31 @@ describe("Workbench plan environment HTTP", () => {
       expect(result.items).toEqual([]);
       expect(String(calls[0]?.[0])).toBe("https://environment.example.test/api/workbench/plans");
       expect(calls[0]?.[1].method).toBe("GET");
+      expect(calls[0]?.[1].credentials).toBe("include");
+    }),
+  );
+
+  it.effect("reads quota through the authenticated environment instead of the browser source", () =>
+    Effect.gen(function* () {
+      const calls: Array<readonly [RequestInfo | URL, RequestInit]> = [];
+      const fetchFn = ((request, init) => {
+        calls.push([request, init ?? {}]);
+        return Promise.resolve(
+          Response.json({
+            capability: { status: "available", reason: null },
+            binding: null,
+            windows: [],
+          }),
+        );
+      }) satisfies typeof fetch;
+
+      const result = yield* fetchEnvironmentWorkbenchVitals({
+        prepared: PREPARED,
+        signer: Option.none(),
+      }).pipe(Effect.provide(remoteHttpClientLayer(fetchFn)));
+
+      expect(result.windows).toEqual([]);
+      expect(String(calls[0]?.[0])).toBe("https://environment.example.test/api/workbench/vitals");
       expect(calls[0]?.[1].credentials).toBe("include");
     }),
   );

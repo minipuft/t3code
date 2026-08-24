@@ -8,6 +8,7 @@ import type {
   WorkbenchPlanSaveInput,
   WorkbenchPlanSaveResult,
   WorkbenchPlanSourceDocument,
+  WorkbenchVitalsSnapshot,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -84,6 +85,20 @@ export const fetchEnvironmentWorkbenchPlans = Effect.fn(
     method: "GET",
     requestUrl,
     request: (headers) => client.workbenchPlans.list({ headers }),
+  });
+});
+
+export const fetchEnvironmentWorkbenchVitals = Effect.fn(
+  "clientRuntime.state.fetchEnvironmentWorkbenchVitals",
+)(function* (input: WorkbenchPlansRequestContext) {
+  const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
+  const requestUrl = urlBuilder.workbenchPlans.vitals();
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  return yield* executeRequest({
+    ...input,
+    method: "GET",
+    requestUrl,
+    request: (headers) => client.workbenchPlans.vitals({ headers }),
   });
 });
 
@@ -185,6 +200,9 @@ export class WorkbenchPlansLoader extends Context.Service<
     readonly list: (
       prepared: PreparedConnection,
     ) => Effect.Effect<WorkbenchPlanList, RemoteEnvironmentRequestError>;
+    readonly vitals: (
+      prepared: PreparedConnection,
+    ) => Effect.Effect<WorkbenchVitalsSnapshot, RemoteEnvironmentRequestError>;
     readonly read: (
       prepared: PreparedConnection,
       path: WorkbenchPlanPath,
@@ -221,6 +239,7 @@ export const workbenchPlansLoaderLayer: Layer.Layer<
       effect.pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
     return WorkbenchPlansLoader.of({
       list: (prepared) => provideHttp(fetchEnvironmentWorkbenchPlans({ prepared, signer })),
+      vitals: (prepared) => provideHttp(fetchEnvironmentWorkbenchVitals({ prepared, signer })),
       read: (prepared, path) =>
         provideHttp(fetchEnvironmentWorkbenchPlanSource({ prepared, path, signer })),
       save: (prepared, value) =>

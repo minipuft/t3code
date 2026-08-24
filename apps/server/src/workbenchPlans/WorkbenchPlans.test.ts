@@ -94,6 +94,63 @@ describe("WorkbenchPlans", () => {
     }),
   );
 
+  it.effect("projects provider quota without estimating missing windows", () =>
+    Effect.gen(function* () {
+      const plans = makeWorkbenchPlans(
+        Effect.succeed({ ...DEFAULT_SERVER_SETTINGS, workbenchPlansSource: source }),
+        (_source, path) =>
+          path.includes("vitals")
+            ? Effect.succeed({
+                ok: true,
+                binding: {
+                  provider: "claude",
+                  providerLabel: "Claude",
+                  label: "5-hour",
+                  remainingPct: 62,
+                  usedPct: 38,
+                  secondsToReset: 3_600,
+                  exhaustsBeforeReset: false,
+                  secondsToExhaustion: null,
+                },
+                windows: [
+                  {
+                    provider: "claude",
+                    providerLabel: "Claude",
+                    label: "5-hour",
+                    usedPct: 38,
+                    expectedPct: 50,
+                    secondsToReset: 3_600,
+                    exhaustsBeforeReset: false,
+                    secondsToExhaustion: null,
+                  },
+                ],
+              })
+            : Effect.succeed({ groups: [] }),
+      );
+
+      const result = yield* plans.vitals;
+      expect(result.capability).toEqual({ status: "available", reason: null });
+      expect(result.binding?.remainingPct).toBe(62);
+      expect(result.windows[0]).toMatchObject({ provider: "claude", label: "5-hour" });
+    }),
+  );
+
+  it.effect("keeps unavailable quota explicit", () =>
+    Effect.gen(function* () {
+      const plans = makeWorkbenchPlans(
+        Effect.succeed({ ...DEFAULT_SERVER_SETTINGS, workbenchPlansSource: source }),
+        () => Effect.succeed({ ok: false, reason: "no captured sessions" }),
+      );
+
+      const result = yield* plans.vitals;
+      expect(result.capability).toEqual({
+        status: "available",
+        reason: "no captured sessions",
+      });
+      expect(result.windows).toEqual([]);
+    }),
+  );
+
   it.effect("maps read, optimistic save, and move calls", () =>
     Effect.gen(function* () {
       const calls: Array<{ path: string; body: unknown }> = [];

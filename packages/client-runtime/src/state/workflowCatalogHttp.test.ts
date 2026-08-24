@@ -6,7 +6,10 @@ import * as Option from "effect/Option";
 import { PrimaryConnectionTarget, type PreparedConnection } from "../connection/model.ts";
 import { ManagedRelayDpopSigner } from "../relay/managedRelay.ts";
 import { remoteHttpClientLayer } from "../rpc/http.ts";
-import { fetchEnvironmentWorkflowCatalog } from "./workflowCatalogHttp.ts";
+import {
+  fetchEnvironmentWorkflowCatalog,
+  fetchEnvironmentWorkflowCatalogDetail,
+} from "./workflowCatalogHttp.ts";
 
 const TARGET = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
@@ -90,6 +93,50 @@ describe("fetchEnvironmentWorkflowCatalog", () => {
       const [, init] = calls[0]!;
       expect(new Headers(init.headers).get("authorization")).toBe("Bearer test-environment-token");
       expect(init.credentials).toBeUndefined();
+    }),
+  );
+
+  it.effect("loads protected prompt detail through the authenticated environment endpoint", () =>
+    Effect.gen(function* () {
+      const calls: Array<readonly [RequestInfo | URL, RequestInit]> = [];
+      const itemId = WorkflowCatalogItemId.make("strategicImplement");
+      const fetchFn = ((request, init) => {
+        calls.push([request, init ?? {}]);
+        return Promise.resolve(
+          Response.json({
+            summary: {
+              kind: "prompt",
+              id: itemId,
+              name: "Strategic implementation",
+              category: "development",
+              description: "Implement an approved plan",
+              arguments: [],
+              composerInputArgument: null,
+              executionType: "single",
+              providers: [],
+              revision: WorkflowRevision.make(`sha256:${"a".repeat(64)}`),
+            },
+            userMessageTemplate: "Implement {{ task }}",
+            systemMessage: null,
+          }),
+        );
+      }) satisfies typeof fetch;
+
+      const detail = yield* fetchEnvironmentWorkflowCatalogDetail({
+        prepared: {
+          ...PREPARED,
+          httpAuthorization: { _tag: "Bearer", token: "test-environment-token" },
+        },
+        signer: Option.none(),
+        itemId,
+      }).pipe(Effect.provide(remoteHttpClientLayer(fetchFn)));
+
+      expect("summary" in detail ? detail.userMessageTemplate : null).toBe("Implement {{ task }}");
+      const [request, init] = calls[0]!;
+      expect(String(request)).toBe(
+        "https://environment.example.test/api/workflows/strategicImplement",
+      );
+      expect(new Headers(init.headers).get("authorization")).toBe("Bearer test-environment-token");
     }),
   );
 

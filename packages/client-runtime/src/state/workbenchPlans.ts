@@ -56,6 +56,13 @@ export function createWorkbenchPlansEnvironmentAtoms<R, E>(
       execute: (_input: null) =>
         withPreparedConnection((loader, prepared) => loader.list(prepared)),
     }),
+    vitals: createEnvironmentQueryAtomFamily(runtime, {
+      label: "environment-data:workbench-vitals",
+      staleTimeMs: 15_000,
+      refreshIntervalMs: 60_000,
+      execute: (_input: null) =>
+        withPreparedConnection((loader, prepared) => loader.vitals(prepared)),
+    }),
     source: createEnvironmentQueryAtomFamily(runtime, {
       label: "environment-data:workbench-plans:source",
       staleTimeMs: 3_000,

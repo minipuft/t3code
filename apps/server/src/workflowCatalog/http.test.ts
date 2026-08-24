@@ -33,7 +33,16 @@ const list: WorkflowCatalogList = {
 
 const catalog = WorkflowCatalog.of({
   list: Effect.succeed(list),
-  find: (itemId) => Effect.succeed(itemId === prompt.id ? Option.some(prompt) : Option.none()),
+  findDetail: (itemId) =>
+    Effect.succeed(
+      itemId === prompt.id
+        ? Option.some({
+            summary: prompt,
+            userMessageTemplate: "Implement {{ task }}",
+            systemMessage: null,
+          })
+        : Option.none(),
+    ),
 });
 
 const principal = (scopes: ReadonlySet<typeof AuthOrchestrationReadScope>) =>
@@ -64,7 +73,8 @@ describe("workflow catalog HTTP handlers", () => {
   it.effect("returns one item by id", () =>
     Effect.gen(function* () {
       const result = yield* provideCatalogRequest(findWorkflowCatalogItem(prompt.id));
-      assert.strictEqual(result.id, prompt.id);
+      assert.isTrue("summary" in result);
+      if ("summary" in result) assert.strictEqual(result.summary.id, prompt.id);
     }),
   );
 

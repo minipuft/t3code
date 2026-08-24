@@ -2,6 +2,7 @@ import type {
   EnvironmentId,
   WorkflowCatalogItem,
   WorkflowCatalogList,
+  WorkflowCatalogItemId,
   WorkflowPromptSummary,
   WorkflowSkillSummary,
 } from "@t3tools/contracts";
@@ -9,7 +10,7 @@ import { CheckIcon, CopyIcon, RefreshCwIcon, BlocksIcon, BracesIcon } from "luci
 import { useMemo, useState } from "react";
 
 import { cn } from "../../lib/utils";
-import { useWorkflowCatalog } from "../../state/workflowCatalog";
+import { useWorkflowCatalog, useWorkflowCatalogDetail } from "../../state/workflowCatalog";
 import { projectWorkbenchCatalog, retainWorkbenchSelection } from "../../workbenchCatalog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -27,6 +28,7 @@ export function WorkbenchCatalogPanel(props: {
       isPending={catalog.isPending}
       module={props.module}
       onRefresh={catalog.refresh}
+      environmentId={props.environmentId}
     />
   );
 }
@@ -34,6 +36,7 @@ export function WorkbenchCatalogPanel(props: {
 export function WorkbenchCatalogView(props: {
   readonly data: WorkflowCatalogList | null;
   readonly error: string | null;
+  readonly environmentId?: EnvironmentId;
   readonly initialSelectedItemId?: string;
   readonly isPending: boolean;
   readonly module: "prompts" | "skills";
@@ -123,7 +126,12 @@ export function WorkbenchCatalogView(props: {
           </div>
           <div className="min-h-64">
             {selectedItem ? (
-              <CatalogDetail item={selectedItem} />
+              <CatalogDetail
+                item={selectedItem}
+                {...(props.environmentId === undefined
+                  ? {}
+                  : { environmentId: props.environmentId })}
+              />
             ) : (
               <WorkbenchEmptyState
                 title={`Select a ${props.module === "prompts" ? "prompt" : "skill"}`}
@@ -169,7 +177,11 @@ function CatalogRow(props: {
   );
 }
 
-function CatalogDetail({ item }: { readonly item: WorkflowCatalogItem }) {
+function CatalogDetail(props: {
+  readonly item: WorkflowCatalogItem;
+  readonly environmentId?: EnvironmentId;
+}) {
+  const { item } = props;
   const invocation = item.kind === "prompt" ? `>>${item.id}` : `$${item.name}`;
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const copyInvocation = async () => {
@@ -202,7 +214,20 @@ function CatalogDetail({ item }: { readonly item: WorkflowCatalogItem }) {
         </Button>
       </div>
 
-      {item.kind === "prompt" ? <PromptMetadata prompt={item} /> : <SkillMetadata skill={item} />}
+      {item.kind === "prompt" ? (
+        <div className="grid gap-4">
+          <PromptMetadata prompt={item} />
+          {props.environmentId === undefined ? (
+            <p className="rounded-lg bg-muted/32 px-3 py-2 text-muted-foreground text-xs">
+              Connect this view to an environment to load protected prompt template content.
+            </p>
+          ) : (
+            <PromptTemplateDetail environmentId={props.environmentId} itemId={item.id} />
+          )}
+        </div>
+      ) : (
+        <SkillMetadata skill={item} />
+      )}
     </article>
   );
 }
@@ -241,11 +266,75 @@ function PromptMetadata({ prompt }: { readonly prompt: WorkflowPromptSummary }) 
           </div>
         )}
       </section>
-      <p className="rounded-lg bg-muted/32 px-3 py-2 text-muted-foreground text-xs">
-        Prompt template and system-message content are not exposed by the current authenticated read
-        contract.
-      </p>
     </div>
+  );
+}
+
+function PromptTemplateDetail(props: {
+  readonly environmentId: EnvironmentId;
+  readonly itemId: WorkflowCatalogItemId;
+}) {
+  const detail = useWorkflowCatalogDetail(props.environmentId, props.itemId);
+
+  if (detail.isPending && detail.data === null) {
+    return (
+      <p className="rounded-lg bg-muted/32 px-3 py-2 text-muted-foreground text-xs">
+        Loading protected prompt content…
+      </p>
+    );
+  }
+  if (detail.error !== null) {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/32 px-3 py-2 text-muted-foreground text-xs">
+        <span>{detail.error}</span>
+        <Button size="xs" variant="ghost" onClick={detail.refresh}>
+          <RefreshCwIcon />
+          Retry
+        </Button>
+      </div>
+    );
+  }
+  if (detail.data === null || !("summary" in detail.data)) return null;
+
+  return (
+    <div className="grid gap-4">
+      <PromptContentSection
+        label="User message template"
+        content={detail.data.userMessageTemplate}
+      />
+      <PromptContentSection
+        label="System message"
+        content={detail.data.systemMessage ?? "No system message."}
+      />
+    </div>
+  );
+}
+
+function PromptContentSection(props: { readonly label: string; readonly content: string }) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(props.content);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+    window.setTimeout(() => setCopyState("idle"), 1_500);
+  };
+
+  return (
+    <section className="grid gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="font-medium text-xs">{props.label}</h4>
+        <Button size="xs" variant="ghost" onClick={() => void copy()}>
+          {copyState === "copied" ? <CheckIcon /> : <CopyIcon />}
+          {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
+        </Button>
+      </div>
+      <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-border/50 bg-muted/24 p-3 font-mono text-xs leading-5">
+        {props.content}
+      </pre>
+    </section>
   );
 }
 

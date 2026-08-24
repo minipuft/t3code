@@ -12,6 +12,9 @@ import {
   type WorkbenchPlanSourceDocument,
   type WorkbenchPlanSummary,
   type WorkbenchPlansSource,
+  type WorkbenchQuotaBinding,
+  type WorkbenchQuotaWindow,
+  type WorkbenchVitalsSnapshot,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -82,6 +85,103 @@ const configuredSource = (settings: ServerSettings) =>
     ? Effect.fail(new WorkbenchPlansAdapterError({ reason: "invalid_url" }))
     : Effect.succeed(settings.workbenchPlansSource);
 
+const finiteNumber = (value: unknown): number | null =>
+  typeof value === "number" && Number.isFinite(value) ? value : null;
+
+const quotaProvider = (value: unknown): "claude" | "codex" | null =>
+  value === "claude" || value === "codex" ? value : null;
+
+function parseQuotaWindow(value: unknown): WorkbenchQuotaWindow | null {
+  const window = value as Record<string, unknown>;
+  const provider = quotaProvider(window.provider);
+  const usedPct = finiteNumber(window.usedPct);
+  const expectedPct = finiteNumber(window.expectedPct);
+  const secondsToReset = finiteNumber(window.secondsToReset);
+  const secondsToExhaustion = finiteNumber(window.secondsToExhaustion);
+  if (
+    provider === null ||
+    typeof window.providerLabel !== "string" ||
+    typeof window.label !== "string" ||
+    usedPct === null ||
+    expectedPct === null ||
+    secondsToReset === null ||
+    typeof window.exhaustsBeforeReset !== "boolean"
+  )
+    return null;
+  return {
+    provider,
+    providerLabel: window.providerLabel,
+    label: window.label,
+    usedPct,
+    expectedPct,
+    secondsToReset,
+    exhaustsBeforeReset: window.exhaustsBeforeReset,
+    secondsToExhaustion,
+  };
+}
+
+function parseQuotaBinding(value: unknown): WorkbenchQuotaBinding | null {
+  if (value === null || typeof value !== "object") return null;
+  const binding = value as Record<string, unknown>;
+  const provider = quotaProvider(binding.provider);
+  const usedPct = finiteNumber(binding.usedPct);
+  const remainingPct = finiteNumber(binding.remainingPct);
+  const secondsToReset = finiteNumber(binding.secondsToReset);
+  const secondsToExhaustion = finiteNumber(binding.secondsToExhaustion);
+  if (
+    provider === null ||
+    typeof binding.providerLabel !== "string" ||
+    typeof binding.label !== "string" ||
+    usedPct === null ||
+    remainingPct === null ||
+    secondsToReset === null ||
+    typeof binding.exhaustsBeforeReset !== "boolean"
+  )
+    return null;
+  return {
+    provider,
+    providerLabel: binding.providerLabel,
+    label: binding.label,
+    remainingPct,
+    usedPct,
+    secondsToReset,
+    exhaustsBeforeReset: binding.exhaustsBeforeReset,
+    secondsToExhaustion,
+  };
+}
+
+export function parseWorkbenchVitals(body: unknown): WorkbenchVitalsSnapshot | null {
+  const value = body as { ok?: unknown; reason?: unknown; windows?: unknown; binding?: unknown };
+  if (value.ok === false) {
+    return {
+      capability: {
+        status: "available",
+        reason:
+          typeof value.reason === "string"
+            ? value.reason
+            : "No provider quota is currently reported.",
+      },
+      binding: null,
+      windows: [],
+    };
+  }
+  if (value.ok !== true || !Array.isArray(value.windows)) {
+    return null;
+  }
+  const windows = value.windows.flatMap((window) => {
+    const parsed = parseQuotaWindow(window);
+    return parsed === null ? [] : [parsed];
+  });
+  return {
+    capability: {
+      status: "available",
+      reason: windows.length === 0 ? "No provider quota is currently reported." : null,
+    },
+    binding: parseQuotaBinding(value.binding),
+    windows,
+  };
+}
+
 function optionalPlanPath(value: unknown): WorkbenchPlanPath | null {
   if (typeof value !== "string") return null;
   try {
@@ -124,6 +224,7 @@ function parseAnnotations(
 
 export interface WorkbenchPlansShape {
   readonly list: Effect.Effect<WorkbenchPlanList>;
+  readonly vitals: Effect.Effect<WorkbenchVitalsSnapshot>;
   readonly read: (
     path: WorkbenchPlanPath,
   ) => Effect.Effect<WorkbenchPlanSourceDocument, WorkbenchPlansAdapterError>;
@@ -154,6 +255,44 @@ export function makeWorkbenchPlans<E>(
     Effect.flatMap(configuredSource),
   );
   return {
+    vitals: getSettings.pipe(
+      Effect.flatMap((settings): Effect.Effect<WorkbenchVitalsSnapshot> => {
+        if (settings.workbenchPlansSource === null) {
+          return Effect.succeed({
+            capability: {
+              status: "misconfigured",
+              reason: "Configure a Workbench source in this environment.",
+            },
+            binding: null,
+            windows: [],
+          });
+        }
+        return loadJson(settings.workbenchPlansSource, "__t3md/api/vitals.json").pipe(
+          Effect.flatMap((body) => {
+            const snapshot = parseWorkbenchVitals(body);
+            return snapshot === null
+              ? Effect.fail(new WorkbenchPlansAdapterError({ reason: "invalid_response" }))
+              : Effect.succeed(snapshot);
+          }),
+          Effect.orElseSucceed(() => ({
+            capability: {
+              status: "unavailable" as const,
+              reason: "The configured Workbench vitals source is unavailable.",
+            },
+            binding: null,
+            windows: [],
+          })),
+        );
+      }),
+      Effect.orElseSucceed(() => ({
+        capability: {
+          status: "unavailable" as const,
+          reason: "The environment could not read its Workbench configuration.",
+        },
+        binding: null,
+        windows: [],
+      })),
+    ),
     list: getSettings.pipe(
       Effect.flatMap((settings): Effect.Effect<WorkbenchPlanList> => {
         if (settings.workbenchPlansSource === null) {

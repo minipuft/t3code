@@ -148,6 +148,9 @@ export const WorkflowPromptDetail = Schema.Struct({
 });
 export type WorkflowPromptDetail = typeof WorkflowPromptDetail.Type;
 
+export const WorkflowCatalogDetail = Schema.Union([WorkflowPromptDetail, WorkflowSkillSummary]);
+export type WorkflowCatalogDetail = typeof WorkflowCatalogDetail.Type;
+
 export const WorkflowCatalogCapability = Schema.Struct({
   status: Schema.Literals(["available", "misconfigured", "unavailable"]),
   sourceKind: Schema.NullOr(Schema.Literals(["http", "executable"])),

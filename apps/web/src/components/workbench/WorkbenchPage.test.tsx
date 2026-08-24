@@ -107,12 +107,12 @@ describe("WorkbenchCatalogView", () => {
     expect(failed).toContain("Retry");
   });
 
-  it("renders complete prompt metadata without claiming template access", () => {
+  it("renders complete prompt metadata and reserves protected detail for an environment", () => {
     const markup = renderCatalog({ initialSelectedItemId: "strategicImplement" });
     expect(markup).toContain("task");
     expect(markup).toContain("string · required");
     expect(markup).toContain("Composer mapping");
-    expect(markup).toContain("not exposed by the current authenticated read contract");
+    expect(markup).toContain("Connect this view to an environment");
   });
 
   it("renders null-safe skill metadata and multi-provider aggregation", () => {

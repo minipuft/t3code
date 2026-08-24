@@ -9,6 +9,7 @@ import type {
   WorkbenchPlanPath,
   WorkbenchPlanSaveInput,
   WorkbenchPlanSourceDocument,
+  WorkbenchVitalsSnapshot,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { AsyncResult } from "effect/unstable/reactivity";
@@ -33,6 +34,23 @@ export function useWorkbenchPlans(environmentId: EnvironmentId): {
   readonly refresh: () => void;
 } {
   const atom = workbenchPlansEnvironment.list({ environmentId, input: null });
+  const result = useAtomValue(atom);
+  const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
+  return {
+    data: queryValue(result),
+    error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
+    isPending: result.waiting,
+    refresh,
+  };
+}
+
+export function useWorkbenchVitals(environmentId: EnvironmentId): {
+  readonly data: WorkbenchVitalsSnapshot | null;
+  readonly error: string | null;
+  readonly isPending: boolean;
+  readonly refresh: () => void;
+} {
+  const atom = workbenchPlansEnvironment.vitals({ environmentId, input: null });
   const result = useAtomValue(atom);
   const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
   return {

@@ -142,3 +142,40 @@ export const WorkbenchPlanAnnotationMutationInput = Schema.Union([
   }),
 ]);
 export type WorkbenchPlanAnnotationMutationInput = typeof WorkbenchPlanAnnotationMutationInput.Type;
+
+export const WorkbenchVitalsCapability = Schema.Struct({
+  status: Schema.Literals(["available", "misconfigured", "unavailable"]),
+  reason: Schema.NullOr(Schema.String),
+});
+
+export const WorkbenchQuotaWindow = Schema.Struct({
+  provider: Schema.Literals(["claude", "codex"]),
+  providerLabel: TrimmedNonEmptyString,
+  label: TrimmedNonEmptyString,
+  usedPct: Schema.Number,
+  expectedPct: Schema.Number,
+  secondsToReset: Schema.Number,
+  exhaustsBeforeReset: Schema.Boolean,
+  secondsToExhaustion: Schema.NullOr(Schema.Number),
+});
+export type WorkbenchQuotaWindow = typeof WorkbenchQuotaWindow.Type;
+
+export const WorkbenchQuotaBinding = Schema.Struct({
+  provider: Schema.Literals(["claude", "codex"]),
+  providerLabel: TrimmedNonEmptyString,
+  label: TrimmedNonEmptyString,
+  remainingPct: Schema.Number,
+  usedPct: Schema.Number,
+  secondsToReset: Schema.Number,
+  exhaustsBeforeReset: Schema.Boolean,
+  secondsToExhaustion: Schema.NullOr(Schema.Number),
+});
+export type WorkbenchQuotaBinding = typeof WorkbenchQuotaBinding.Type;
+
+/** Account quota is provider-owned; absent windows stay absent rather than being estimated. */
+export const WorkbenchVitalsSnapshot = Schema.Struct({
+  capability: WorkbenchVitalsCapability,
+  binding: Schema.NullOr(WorkbenchQuotaBinding),
+  windows: Schema.Array(WorkbenchQuotaWindow),
+});
+export type WorkbenchVitalsSnapshot = typeof WorkbenchVitalsSnapshot.Type;

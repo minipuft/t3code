@@ -50,6 +50,14 @@ import {
   RelayLinkProofRequest,
 } from "./relay.ts";
 import {
+  AgentWorkbenchPromptApplyInput,
+  AgentWorkbenchPromptHistory,
+  AgentWorkbenchPromptMutationResult,
+  AgentWorkbenchPromptReview,
+  AgentWorkbenchPromptReviewInput,
+  AgentWorkbenchPromptRollbackInput,
+} from "./agentWorkbench.ts";
+import {
   WorkflowCatalogDetail,
   WorkflowCatalogItemId,
   WorkflowCatalogList,
@@ -572,6 +580,15 @@ const EnvironmentWorkflowCatalogDetailParams = Schema.Struct({
   itemId: WorkflowCatalogItemId,
 });
 
+const EnvironmentWorkflowPromptHistoryQuery = {
+  limit: Schema.optionalKey(Schema.NumberFromString),
+};
+
+const EnvironmentWorkflowPromptCompareQuery = {
+  from: Schema.NumberFromString,
+  to: Schema.NumberFromString,
+};
+
 export class EnvironmentWorkflowCatalogHttpApi extends HttpApiGroup.make("workflowCatalog")
   .add(
     HttpApiEndpoint.get("list", "/api/workflows", {
@@ -598,6 +615,81 @@ export class EnvironmentWorkflowCatalogHttpApi extends HttpApiGroup.make("workfl
       .annotate(
         OpenApi.Description,
         "Returns executable template content for a prompt or metadata for a skill. Requires orchestration:read and returns workflow_catalog_item_not_found when the id is absent.",
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("history", "/api/workflows/:itemId/history", {
+      headers: OptionalBearerHeaders,
+      params: EnvironmentWorkflowCatalogDetailParams,
+      payload: EnvironmentWorkflowPromptHistoryQuery,
+      success: AgentWorkbenchPromptHistory,
+      error: EnvironmentOrchestrationThreadSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Read prompt revision history")
+      .annotate(
+        OpenApi.Description,
+        "Returns canonical prompt revisions through Agent Workbench. Requires orchestration:read.",
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("compare", "/api/workflows/:itemId/compare", {
+      headers: OptionalBearerHeaders,
+      params: EnvironmentWorkflowCatalogDetailParams,
+      payload: EnvironmentWorkflowPromptCompareQuery,
+      success: AgentWorkbenchPromptReview,
+      error: EnvironmentOrchestrationThreadSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Compare prompt revisions")
+      .annotate(
+        OpenApi.Description,
+        "Returns the authority-owned diff between two prompt versions. Requires orchestration:read.",
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("review", "/api/workflows/:itemId/review", {
+      headers: OptionalBearerHeaders,
+      params: EnvironmentWorkflowCatalogDetailParams,
+      payload: AgentWorkbenchPromptReviewInput,
+      success: AgentWorkbenchPromptReview,
+      error: EnvironmentOrchestrationSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Review a prompt change")
+      .annotate(
+        OpenApi.Description,
+        "Validates and diffs a proposed prompt edit without writing it. Requires access:write.",
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("apply", "/api/workflows/:itemId/apply", {
+      headers: OptionalBearerHeaders,
+      params: EnvironmentWorkflowCatalogDetailParams,
+      payload: AgentWorkbenchPromptApplyInput,
+      success: AgentWorkbenchPromptMutationResult,
+      error: EnvironmentOrchestrationSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Apply a reviewed prompt change")
+      .annotate(
+        OpenApi.Description,
+        "Writes a confirmed prompt change through the canonical authority. Requires access:write and an idempotency request id.",
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("rollback", "/api/workflows/:itemId/rollback", {
+      headers: OptionalBearerHeaders,
+      params: EnvironmentWorkflowCatalogDetailParams,
+      payload: AgentWorkbenchPromptRollbackInput,
+      success: AgentWorkbenchPromptMutationResult,
+      error: EnvironmentOrchestrationSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Roll back a prompt revision")
+      .annotate(
+        OpenApi.Description,
+        "Restores an authority-owned prompt revision after optimistic concurrency validation. Requires access:write.",
       ),
   ) {}
 

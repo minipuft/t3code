@@ -15,6 +15,7 @@ import { projectWorkbenchCatalog, retainWorkbenchSelection } from "../../workben
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
+import { WorkbenchPromptGovernance } from "./WorkbenchPromptGovernance";
 
 export function WorkbenchCatalogPanel(props: {
   readonly environmentId: EnvironmentId;
@@ -297,44 +298,17 @@ function PromptTemplateDetail(props: {
   if (detail.data === null || !("summary" in detail.data)) return null;
 
   return (
-    <div className="grid gap-4">
-      <PromptContentSection
-        label="User message template"
-        content={detail.data.userMessageTemplate}
-      />
-      <PromptContentSection
-        label="System message"
-        content={detail.data.systemMessage ?? "No system message."}
-      />
-    </div>
-  );
-}
-
-function PromptContentSection(props: { readonly label: string; readonly content: string }) {
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(props.content);
-      setCopyState("copied");
-    } catch {
-      setCopyState("failed");
-    }
-    window.setTimeout(() => setCopyState("idle"), 1_500);
-  };
-
-  return (
-    <section className="grid gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <h4 className="font-medium text-xs">{props.label}</h4>
-        <Button size="xs" variant="ghost" onClick={() => void copy()}>
-          {copyState === "copied" ? <CheckIcon /> : <CopyIcon />}
-          {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
-        </Button>
-      </div>
-      <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-border/50 bg-muted/24 p-3 font-mono text-xs leading-5">
-        {props.content}
-      </pre>
-    </section>
+    <WorkbenchPromptGovernance
+      key={detail.data.summary.revision}
+      environmentId={props.environmentId}
+      itemId={props.itemId}
+      currentVersion={detail.data.currentVersion}
+      userMessageTemplate={detail.data.userMessageTemplate}
+      systemMessage={detail.data.systemMessage}
+      onChanged={() => {
+        detail.refresh();
+      }}
+    />
   );
 }
 

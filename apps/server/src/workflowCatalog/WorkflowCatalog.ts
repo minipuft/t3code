@@ -1,14 +1,15 @@
 import * as NodeCrypto from "node:crypto";
 
 import {
+  ProviderDriverKind,
+  WorkflowArgument,
   WorkflowCatalogItemId,
-  WorkflowPromptDetail,
-  WorkflowPromptSummary,
-  type ServerProvider,
-  type ServerSettings,
+  WorkflowRevision,
+  type AgentWorkbenchCatalog,
   type WorkflowCatalogDetail,
   type WorkflowCatalogList,
-  type WorkflowCatalogSource,
+  type WorkflowPromptDetail,
+  type WorkflowPromptSummary,
   type WorkflowSkillSummary,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -16,45 +17,19 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 
-import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
-import { ServerSettingsService } from "../serverSettings.ts";
-
-const CATALOG_REQUEST_TIMEOUT = "5 seconds";
-
-const McpPromptCatalogResponse = Schema.Struct({
-  prompts: Schema.Array(WorkflowPromptSummary),
-});
+import {
+  AgentWorkbench,
+  type AgentWorkbenchAdapterError,
+  type AgentWorkbenchShape,
+} from "../agentWorkbenchAdapter/AgentWorkbench.ts";
 
 export class WorkflowCatalogSourceError extends Schema.TaggedErrorClass<WorkflowCatalogSourceError>()(
   "WorkflowCatalogSourceError",
   {
-    reason: Schema.Literals(["invalid_url", "request_failed", "invalid_response"]),
+    reason: Schema.Literals(["request_failed", "invalid_response"]),
   },
 ) {}
-
-export class WorkflowCatalogDependencyError extends Schema.TaggedErrorClass<WorkflowCatalogDependencyError>()(
-  "WorkflowCatalogDependencyError",
-  { dependency: Schema.Literals(["settings", "providers"]) },
-) {}
-
-const isWorkflowCatalogSourceError = Schema.is(WorkflowCatalogSourceError);
-
-export interface WorkflowCatalogDependencies {
-  readonly getSettings: Effect.Effect<ServerSettings, WorkflowCatalogDependencyError>;
-  readonly getProviders: Effect.Effect<
-    ReadonlyArray<ServerProvider>,
-    WorkflowCatalogDependencyError
-  >;
-  readonly loadPrompts: (
-    source: WorkflowCatalogSource,
-  ) => Effect.Effect<ReadonlyArray<WorkflowPromptSummary>, WorkflowCatalogSourceError>;
-  readonly loadPromptDetail: (
-    source: WorkflowCatalogSource,
-    itemId: WorkflowCatalogItemId,
-  ) => Effect.Effect<WorkflowPromptDetail, WorkflowCatalogSourceError>;
-}
 
 export interface WorkflowCatalogShape {
   readonly list: Effect.Effect<WorkflowCatalogList>;
@@ -67,130 +42,20 @@ export class WorkflowCatalog extends Context.Service<WorkflowCatalog, WorkflowCa
   "t3/workflowCatalog/WorkflowCatalog",
 ) {}
 
-function stableSkillId(name: string, path: string): WorkflowCatalogItemId {
-  const digest = NodeCrypto.createHash("sha256")
-    .update(`${name}\0${path}`)
-    .digest("hex")
-    .slice(0, 24);
-  return WorkflowCatalogItemId.make(`skill:${digest}`);
-}
-
-export function mergeProviderSkills(
-  providers: ReadonlyArray<ServerProvider>,
-): ReadonlyArray<WorkflowSkillSummary> {
-  const skillsByIdentity = new Map<
-    string,
-    {
-      readonly skill: ServerProvider["skills"][number];
-      readonly providers: Set<ServerProvider["driver"]>;
-    }
-  >();
-
-  for (const provider of providers) {
-    for (const skill of provider.skills) {
-      const identity = `${skill.name}\0${skill.path}`;
-      const existing = skillsByIdentity.get(identity);
-      if (existing !== undefined) {
-        existing.providers.add(provider.driver);
-        continue;
-      }
-      skillsByIdentity.set(identity, { skill, providers: new Set([provider.driver]) });
-    }
-  }
-
-  return [...skillsByIdentity.values()]
-    .map(({ skill, providers: skillProviders }) => ({
-      kind: "skill" as const,
-      id: stableSkillId(skill.name, skill.path),
-      name: skill.name,
-      description: skill.description ?? null,
-      scope: skill.scope ?? null,
-      sourcePath: skill.path,
-      providers: [...skillProviders].toSorted((left, right) => left.localeCompare(right)),
-    }))
-    .toSorted((left, right) => left.name.localeCompare(right.name));
-}
-
-function dedupePromptsByInvocationId(
-  prompts: ReadonlyArray<WorkflowPromptSummary>,
-): ReadonlyArray<WorkflowPromptSummary> {
-  const promptsById = new Map<WorkflowCatalogItemId, WorkflowPromptSummary>();
-  for (const prompt of prompts) {
-    if (!promptsById.has(prompt.id)) promptsById.set(prompt.id, prompt);
-  }
-  return [...promptsById.values()];
-}
-
-const sourceFailureReason = (error: WorkflowCatalogSourceError): string => {
-  switch (error.reason) {
-    case "invalid_url":
-      return "The configured prompt catalog URL is invalid.";
-    case "invalid_response":
-      return "The configured prompt catalog returned an invalid response.";
-    case "request_failed":
-      return "The configured prompt catalog is unavailable.";
-  }
-};
-
-export function makeWorkflowCatalog(
-  dependencies: WorkflowCatalogDependencies,
-): WorkflowCatalogShape {
-  const list = Effect.gen(function* () {
-    const [settings, providers] = yield* Effect.all([
-      dependencies.getSettings,
-      dependencies.getProviders,
-    ]);
-    const skills = mergeProviderSkills(providers);
-    const source = settings.workflowCatalogSource;
-
-    if (source === null) {
-      return {
-        capability: {
-          status: "misconfigured" as const,
-          sourceKind: null,
-          reason: "Configure a workflow catalog source in this environment.",
-        },
-        items: skills,
-      } satisfies WorkflowCatalogList;
-    }
-
-    const promptsResult = yield* dependencies.loadPrompts(source).pipe(
-      Effect.map((prompts) => ({ ok: true as const, prompts })),
-      Effect.catch((error) => Effect.succeed({ ok: false as const, error })),
-    );
-    if (!promptsResult.ok) {
-      return {
-        capability: {
-          status: "unavailable" as const,
-          sourceKind: source.kind,
-          reason: isWorkflowCatalogSourceError(promptsResult.error)
-            ? sourceFailureReason(promptsResult.error)
-            : "The configured prompt catalog is unavailable.",
-        },
-        items: skills,
-      } satisfies WorkflowCatalogList;
-    }
-
-    return {
-      capability: { status: "available" as const, sourceKind: source.kind, reason: null },
-      items: [...dedupePromptsByInvocationId(promptsResult.prompts), ...skills],
-    } satisfies WorkflowCatalogList;
-  }).pipe(
-    Effect.catchCause((cause) =>
-      Effect.logError("workflow catalog settings or provider read failed", { cause }).pipe(
-        Effect.as({
-          capability: {
-            status: "unavailable" as const,
-            sourceKind: null,
-            reason: "The environment could not read its workflow catalog configuration.",
-          },
-          items: [],
-        } satisfies WorkflowCatalogList),
-      ),
-    ),
+export function makeWorkflowCatalog(workbench: AgentWorkbenchShape): WorkflowCatalogShape {
+  const list = workbench.catalog.pipe(
+    Effect.map(projectCatalog),
+    Effect.orElseSucceed(() => ({
+      capability: {
+        status: "unavailable" as const,
+        sourceKind: "http" as const,
+        reason: "Agent Workbench workflow catalog is unavailable.",
+      },
+      items: [],
+    })),
   );
 
-  return {
+  return WorkflowCatalog.of({
     list,
     findDetail: (itemId) =>
       Effect.gen(function* () {
@@ -198,86 +63,97 @@ export function makeWorkflowCatalog(
         const item = catalog.items.find((candidate) => candidate.id === itemId);
         if (item === undefined) return Option.none();
         if (item.kind === "skill") return Option.some(item);
-
-        const settings = yield* dependencies.getSettings.pipe(
-          Effect.mapError(() => new WorkflowCatalogSourceError({ reason: "request_failed" })),
-        );
-        if (settings.workflowCatalogSource === null) return Option.none();
-        const detail = yield* dependencies.loadPromptDetail(settings.workflowCatalogSource, itemId);
-        if (detail.summary.id !== itemId) {
-          return yield* new WorkflowCatalogSourceError({ reason: "invalid_response" });
-        }
-        return Option.some(detail);
+        const detail = yield* workbench.promptDetail(itemId).pipe(Effect.mapError(mapAdapterError));
+        if (detail.state !== "available" || detail.id !== itemId) return Option.none();
+        return Option.some({
+          summary: item,
+          currentVersion: detail.currentVersion ?? 0,
+          userMessageTemplate: detail.userMessageTemplate ?? "",
+          systemMessage: detail.systemMessage ?? null,
+        } satisfies WorkflowPromptDetail);
       }),
+  });
+}
+
+export function projectCatalog(value: AgentWorkbenchCatalog): WorkflowCatalogList {
+  const items = value.entries.flatMap(
+    (entry): ReadonlyArray<WorkflowPromptSummary | WorkflowSkillSummary> => {
+      try {
+        const id = WorkflowCatalogItemId.make(entry.id);
+        const providers = (entry.providers ?? []).flatMap((provider) => {
+          const decoded = Schema.decodeUnknownOption(ProviderDriverKind)(provider);
+          return Option.isSome(decoded) ? [decoded.value] : [];
+        });
+        if (entry.kind === "prompt") {
+          const arguments_ = (entry.arguments ?? []).flatMap((argument) => {
+            const decoded = Schema.decodeUnknownOption(WorkflowArgument)(argument);
+            return Option.isSome(decoded) ? [decoded.value] : [];
+          });
+          return [
+            {
+              kind: "prompt",
+              id,
+              name: entry.name,
+              category: entry.category,
+              description: entry.description,
+              arguments: arguments_,
+              composerInputArgument: entry.composerInputArgument ?? null,
+              executionType: entry.executionType === "chain" ? "chain" : "single",
+              providers,
+              revision: workflowRevision(entry),
+            },
+          ];
+        }
+        if (entry.kind === "skill") {
+          return [
+            {
+              kind: "skill",
+              id,
+              name: entry.name,
+              description: entry.description || null,
+              scope: entry.scope ?? null,
+              sourcePath: entry.sourcePath ?? null,
+              providers,
+            },
+          ];
+        }
+        return [];
+      } catch {
+        return [];
+      }
+    },
+  );
+  return {
+    capability: {
+      status:
+        value.state === "unavailable" || value.state === "unsupported"
+          ? "unavailable"
+          : "available",
+      sourceKind: "http",
+      reason: value.reason ?? null,
+    },
+    items,
   };
 }
 
-const make = Effect.gen(function* () {
-  const settings = yield* ServerSettingsService;
-  const providers = yield* ProviderRegistry;
-  const httpClient = yield* HttpClient.HttpClient;
+export const layer = Layer.effect(
+  WorkflowCatalog,
+  Effect.gen(function* () {
+    return makeWorkflowCatalog(yield* AgentWorkbench);
+  }),
+);
 
-  const loadPrompts: WorkflowCatalogDependencies["loadPrompts"] = Effect.fn(
-    "WorkflowCatalog.loadPrompts",
-  )(function* (source) {
-    const catalogUrl = yield* Effect.try({
-      try: () =>
-        new URL("prompts", source.baseUrl.endsWith("/") ? source.baseUrl : `${source.baseUrl}/`),
-      catch: () => new WorkflowCatalogSourceError({ reason: "invalid_url" }),
-    });
+function workflowRevision(entry: AgentWorkbenchCatalog["entries"][number]) {
+  try {
+    return WorkflowRevision.make(entry.revision ?? "");
+  } catch {
+    const digest = NodeCrypto.createHash("sha256").update(JSON.stringify(entry)).digest("hex");
+    return WorkflowRevision.make(`sha256:${digest}`);
+  }
+}
 
-    return yield* httpClient.get(catalogUrl).pipe(
-      Effect.flatMap(HttpClientResponse.filterStatusOk),
-      Effect.flatMap(HttpClientResponse.schemaBodyJson(McpPromptCatalogResponse)),
-      Effect.map((response) => response.prompts),
-      Effect.timeout(CATALOG_REQUEST_TIMEOUT),
-      Effect.mapError((error) =>
-        Schema.isSchemaError(error)
-          ? new WorkflowCatalogSourceError({ reason: "invalid_response" })
-          : new WorkflowCatalogSourceError({ reason: "request_failed" }),
-      ),
-    );
+function mapAdapterError(error: AgentWorkbenchAdapterError) {
+  return new WorkflowCatalogSourceError({
+    reason: error.reason === "invalid_response" ? "invalid_response" : "request_failed",
   });
-
-  const loadPromptDetail: WorkflowCatalogDependencies["loadPromptDetail"] = Effect.fn(
-    "WorkflowCatalog.loadPromptDetail",
-  )(function* (source, itemId) {
-    const readToken = process.env["T3_WORKFLOW_CATALOG_READ_TOKEN"]?.trim();
-    if (!readToken) return yield* new WorkflowCatalogSourceError({ reason: "request_failed" });
-
-    const detailUrl = yield* Effect.try({
-      try: () =>
-        new URL(
-          `api/v1/catalog/prompts/${encodeURIComponent(itemId)}`,
-          source.baseUrl.endsWith("/") ? source.baseUrl : `${source.baseUrl}/`,
-        ),
-      catch: () => new WorkflowCatalogSourceError({ reason: "invalid_url" }),
-    });
-
-    return yield* HttpClientRequest.get(detailUrl).pipe(
-      HttpClientRequest.bearerToken(readToken),
-      httpClient.execute,
-      Effect.flatMap(HttpClientResponse.filterStatusOk),
-      Effect.flatMap(HttpClientResponse.schemaBodyJson(WorkflowPromptDetail)),
-      Effect.timeout(CATALOG_REQUEST_TIMEOUT),
-      Effect.mapError((error) =>
-        Schema.isSchemaError(error)
-          ? new WorkflowCatalogSourceError({ reason: "invalid_response" })
-          : new WorkflowCatalogSourceError({ reason: "request_failed" }),
-      ),
-    );
-  });
-
-  return WorkflowCatalog.of(
-    makeWorkflowCatalog({
-      getSettings: settings.getSettings.pipe(
-        Effect.mapError(() => new WorkflowCatalogDependencyError({ dependency: "settings" })),
-      ),
-      getProviders: providers.getProviders,
-      loadPrompts,
-      loadPromptDetail,
-    }),
-  );
-});
-
-export const layer = Layer.effect(WorkflowCatalog, make);
+}

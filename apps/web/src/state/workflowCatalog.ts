@@ -1,6 +1,12 @@
 import { useAtomValue } from "@effect/atom-react";
 import { createWorkflowCatalogEnvironmentAtoms } from "@t3tools/client-runtime/state/workflow-catalog";
 import {
+  type AgentWorkbenchPromptApplyInput,
+  type AgentWorkbenchPromptHistory,
+  type AgentWorkbenchPromptMutationResult,
+  type AgentWorkbenchPromptReview,
+  type AgentWorkbenchPromptReviewInput,
+  type AgentWorkbenchPromptRollbackInput,
   EMPTY_WORKFLOW_LIBRARY_PREFERENCES,
   type EnvironmentId,
   type WorkflowCatalogList,
@@ -55,6 +61,97 @@ export function useWorkflowCatalogDetail(
     error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
     isPending: result.waiting,
     refresh,
+  };
+}
+
+export function useWorkflowPromptHistory(
+  environmentId: EnvironmentId,
+  itemId: WorkflowCatalogItemId,
+): {
+  readonly data: AgentWorkbenchPromptHistory | null;
+  readonly error: string | null;
+  readonly isPending: boolean;
+  readonly refresh: () => void;
+} {
+  const atom = workflowCatalogEnvironment.history({ environmentId, input: { itemId, limit: 50 } });
+  const result = useAtomValue(atom);
+  const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
+  return {
+    data: Option.getOrNull(AsyncResult.value(result)),
+    error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
+    isPending: result.waiting,
+    refresh,
+  };
+}
+
+export function useWorkflowPromptComparison(
+  environmentId: EnvironmentId,
+  itemId: WorkflowCatalogItemId,
+  from: number,
+  to: number,
+): {
+  readonly data: AgentWorkbenchPromptReview | null;
+  readonly error: string | null;
+  readonly isPending: boolean;
+  readonly refresh: () => void;
+} {
+  const atom = workflowCatalogEnvironment.compare({ environmentId, input: { itemId, from, to } });
+  const result = useAtomValue(atom);
+  const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
+  return {
+    data: Option.getOrNull(AsyncResult.value(result)),
+    error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
+    isPending: result.waiting,
+    refresh,
+  };
+}
+
+export function useWorkflowPromptActions(environmentId: EnvironmentId) {
+  const reviewCommand = useAtomCommand(workflowCatalogEnvironment.review, { reportFailure: false });
+  const applyCommand = useAtomCommand(workflowCatalogEnvironment.apply, { reportFailure: false });
+  const rollbackCommand = useAtomCommand(workflowCatalogEnvironment.rollback, {
+    reportFailure: false,
+  });
+  return {
+    review: useCallback(
+      (itemId: WorkflowCatalogItemId, value: AgentWorkbenchPromptReviewInput) =>
+        reviewCommand({ environmentId, input: { itemId, value } }),
+      [environmentId, reviewCommand],
+    ) as (
+      itemId: WorkflowCatalogItemId,
+      value: AgentWorkbenchPromptReviewInput,
+    ) => Promise<
+      import("@t3tools/client-runtime/state/runtime").AtomCommandResult<
+        AgentWorkbenchPromptReview,
+        unknown
+      >
+    >,
+    apply: useCallback(
+      (itemId: WorkflowCatalogItemId, value: AgentWorkbenchPromptApplyInput) =>
+        applyCommand({ environmentId, input: { itemId, value } }),
+      [applyCommand, environmentId],
+    ) as (
+      itemId: WorkflowCatalogItemId,
+      value: AgentWorkbenchPromptApplyInput,
+    ) => Promise<
+      import("@t3tools/client-runtime/state/runtime").AtomCommandResult<
+        AgentWorkbenchPromptMutationResult,
+        unknown
+      >
+    >,
+    rollback: useCallback(
+      (itemId: WorkflowCatalogItemId, value: AgentWorkbenchPromptRollbackInput) =>
+        rollbackCommand({ environmentId, input: { itemId, value } }),
+      [environmentId, rollbackCommand],
+    ) as (
+      itemId: WorkflowCatalogItemId,
+      value: AgentWorkbenchPromptRollbackInput,
+    ) => Promise<
+      import("@t3tools/client-runtime/state/runtime").AtomCommandResult<
+        AgentWorkbenchPromptMutationResult,
+        unknown
+      >
+    >,
   };
 }
 

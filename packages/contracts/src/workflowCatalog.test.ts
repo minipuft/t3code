@@ -86,6 +86,7 @@ describe("workflow catalog contracts", () => {
   it("decodes prompt detail separately from list metadata", () => {
     const decoded = decodeWorkflowPromptDetail({
       summary,
+      currentVersion: 2,
       userMessageTemplate: "Implement {{ task }}",
       systemMessage: null,
     });

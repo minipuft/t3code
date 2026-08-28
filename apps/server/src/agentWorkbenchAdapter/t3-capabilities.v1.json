@@ -1,0 +1,115 @@
+{
+  "protocolVersion": "1.0.0",
+  "adapter": "t3code",
+  "adapterVersion": "0.0.33",
+  "surfaces": [
+    {
+      "id": "plans",
+      "state": "available",
+      "actions": [
+        {
+          "id": "read",
+          "label": "read",
+          "enabled": true,
+          "destructive": false
+        },
+        {
+          "id": "save",
+          "label": "save",
+          "enabled": true,
+          "destructive": false
+        },
+        {
+          "id": "move",
+          "label": "move",
+          "enabled": true,
+          "destructive": true
+        },
+        {
+          "id": "rename",
+          "label": "rename",
+          "enabled": true,
+          "destructive": true
+        },
+        {
+          "id": "create",
+          "label": "create",
+          "enabled": true,
+          "destructive": false
+        },
+        {
+          "id": "annotate",
+          "label": "annotate",
+          "enabled": true,
+          "destructive": false
+        }
+      ]
+    },
+    {
+      "id": "catalog",
+      "state": "available",
+      "actions": [
+        {
+          "id": "list",
+          "label": "list",
+          "enabled": true,
+          "destructive": false
+        },
+        {
+          "id": "detail",
+          "label": "detail",
+          "enabled": true,
+          "destructive": false
+        }
+      ]
+    },
+    {
+      "id": "vitals",
+      "state": "available",
+      "actions": [
+        {
+          "id": "read",
+          "label": "read",
+          "enabled": true,
+          "destructive": false
+        }
+      ]
+    },
+    {
+      "id": "prompt-governance",
+      "state": "available",
+      "actions": [
+        {
+          "id": "history",
+          "label": "history",
+          "enabled": true,
+          "destructive": false
+        },
+        {
+          "id": "compare",
+          "label": "compare",
+          "enabled": true,
+          "destructive": false
+        },
+        {
+          "id": "review",
+          "label": "review",
+          "enabled": true,
+          "destructive": false
+        },
+        {
+          "id": "apply",
+          "label": "apply",
+          "enabled": true,
+          "destructive": true
+        },
+        {
+          "id": "rollback",
+          "label": "rollback",
+          "enabled": true,
+          "destructive": true
+        }
+      ]
+    }
+  ]
+}

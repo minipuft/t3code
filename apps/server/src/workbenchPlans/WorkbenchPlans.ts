@@ -1,7 +1,7 @@
 import {
   WorkbenchPlanPath,
-  type ServerSettings,
-  type WorkbenchPlanAnnotation,
+  type AgentWorkbenchPlanList,
+  type AgentWorkbenchVitals,
   type WorkbenchPlanAnnotationMutationInput,
   type WorkbenchPlanAnnotations,
   type WorkbenchPlanList,
@@ -11,216 +11,30 @@ import {
   type WorkbenchPlanSaveResult,
   type WorkbenchPlanSourceDocument,
   type WorkbenchPlanSummary,
-  type WorkbenchPlansSource,
-  type WorkbenchQuotaBinding,
   type WorkbenchQuotaWindow,
+  type WorkbenchQuotaBinding,
   type WorkbenchVitalsSnapshot,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 
-import { ServerSettingsService } from "../serverSettings.ts";
-
-const REQUEST_TIMEOUT = "6 seconds";
+import {
+  AgentWorkbench,
+  type AgentWorkbenchAdapterError,
+  type AgentWorkbenchShape,
+} from "../agentWorkbenchAdapter/AgentWorkbench.ts";
 
 export class WorkbenchPlansAdapterError extends Data.TaggedError("WorkbenchPlansAdapterError")<{
   readonly reason:
-    | "invalid_url"
     | "request_failed"
     | "invalid_response"
     | "invalid_request"
     | "not_found"
     | "conflict";
 }> {}
-
-type LoadJson = (
-  source: WorkbenchPlansSource,
-  path: string,
-  body?: unknown,
-) => Effect.Effect<unknown, WorkbenchPlansAdapterError>;
-
-type LegacyFile = {
-  readonly rel?: unknown;
-  readonly name?: unknown;
-  readonly dir?: unknown;
-  readonly project?: unknown;
-  readonly status?: unknown;
-  readonly date?: unknown;
-  readonly tags?: unknown;
-  readonly mtimeMs?: unknown;
-  readonly source?: unknown;
-};
-
-type LegacyBinding = {
-  readonly rel?: unknown;
-  readonly title?: unknown;
-  readonly threads?: unknown;
-  readonly confirmed?: unknown;
-  readonly bound_at?: unknown;
-  readonly notesRel?: unknown;
-  readonly notesStale?: unknown;
-  readonly deviations?: unknown;
-};
-
-type LegacyAnnotation = {
-  readonly id?: unknown;
-  readonly kind?: unknown;
-  readonly body?: unknown;
-  readonly quote?: unknown;
-  readonly heading?: unknown;
-  readonly created_at?: unknown;
-};
-
-const unavailable = (reason: string): WorkbenchPlanList => ({
-  capability: { status: "unavailable", reason },
-  items: [],
-});
-
-const configuredSource = (settings: ServerSettings) =>
-  settings.workbenchPlansSource === null
-    ? Effect.fail(new WorkbenchPlansAdapterError({ reason: "invalid_url" }))
-    : Effect.succeed(settings.workbenchPlansSource);
-
-const finiteNumber = (value: unknown): number | null =>
-  typeof value === "number" && Number.isFinite(value) ? value : null;
-
-const quotaProvider = (value: unknown): "claude" | "codex" | null =>
-  value === "claude" || value === "codex" ? value : null;
-
-function parseQuotaWindow(value: unknown): WorkbenchQuotaWindow | null {
-  const window = value as Record<string, unknown>;
-  const provider = quotaProvider(window.provider);
-  const usedPct = finiteNumber(window.usedPct);
-  const expectedPct = finiteNumber(window.expectedPct);
-  const secondsToReset = finiteNumber(window.secondsToReset);
-  const secondsToExhaustion = finiteNumber(window.secondsToExhaustion);
-  if (
-    provider === null ||
-    typeof window.providerLabel !== "string" ||
-    typeof window.label !== "string" ||
-    usedPct === null ||
-    expectedPct === null ||
-    secondsToReset === null ||
-    typeof window.exhaustsBeforeReset !== "boolean"
-  )
-    return null;
-  return {
-    provider,
-    providerLabel: window.providerLabel,
-    label: window.label,
-    usedPct,
-    expectedPct,
-    secondsToReset,
-    exhaustsBeforeReset: window.exhaustsBeforeReset,
-    secondsToExhaustion,
-  };
-}
-
-function parseQuotaBinding(value: unknown): WorkbenchQuotaBinding | null {
-  if (value === null || typeof value !== "object") return null;
-  const binding = value as Record<string, unknown>;
-  const provider = quotaProvider(binding.provider);
-  const usedPct = finiteNumber(binding.usedPct);
-  const remainingPct = finiteNumber(binding.remainingPct);
-  const secondsToReset = finiteNumber(binding.secondsToReset);
-  const secondsToExhaustion = finiteNumber(binding.secondsToExhaustion);
-  if (
-    provider === null ||
-    typeof binding.providerLabel !== "string" ||
-    typeof binding.label !== "string" ||
-    usedPct === null ||
-    remainingPct === null ||
-    secondsToReset === null ||
-    typeof binding.exhaustsBeforeReset !== "boolean"
-  )
-    return null;
-  return {
-    provider,
-    providerLabel: binding.providerLabel,
-    label: binding.label,
-    remainingPct,
-    usedPct,
-    secondsToReset,
-    exhaustsBeforeReset: binding.exhaustsBeforeReset,
-    secondsToExhaustion,
-  };
-}
-
-export function parseWorkbenchVitals(body: unknown): WorkbenchVitalsSnapshot | null {
-  const value = body as { ok?: unknown; reason?: unknown; windows?: unknown; binding?: unknown };
-  if (value.ok === false) {
-    return {
-      capability: {
-        status: "available",
-        reason:
-          typeof value.reason === "string"
-            ? value.reason
-            : "No provider quota is currently reported.",
-      },
-      binding: null,
-      windows: [],
-    };
-  }
-  if (value.ok !== true || !Array.isArray(value.windows)) {
-    return null;
-  }
-  const windows = value.windows.flatMap((window) => {
-    const parsed = parseQuotaWindow(window);
-    return parsed === null ? [] : [parsed];
-  });
-  return {
-    capability: {
-      status: "available",
-      reason: windows.length === 0 ? "No provider quota is currently reported." : null,
-    },
-    binding: parseQuotaBinding(value.binding),
-    windows,
-  };
-}
-
-function optionalPlanPath(value: unknown): WorkbenchPlanPath | null {
-  if (typeof value !== "string") return null;
-  try {
-    return WorkbenchPlanPath.make(value);
-  } catch {
-    return null;
-  }
-}
-
-function parseAnnotations(
-  path: WorkbenchPlanPath,
-  body: unknown,
-): Effect.Effect<WorkbenchPlanAnnotations, WorkbenchPlansAdapterError> {
-  const value = body as { items?: unknown; markdown?: unknown };
-  if (!Array.isArray(value.items) || typeof value.markdown !== "string") {
-    return Effect.fail(new WorkbenchPlansAdapterError({ reason: "invalid_response" }));
-  }
-  const items = value.items.flatMap((item): ReadonlyArray<WorkbenchPlanAnnotation> => {
-    const annotation = item as LegacyAnnotation;
-    if (
-      typeof annotation.id !== "string" ||
-      (annotation.kind !== "comment" && annotation.kind !== "delete") ||
-      typeof annotation.created_at !== "string"
-    ) {
-      return [];
-    }
-    return [
-      {
-        id: annotation.id,
-        kind: annotation.kind,
-        body: typeof annotation.body === "string" ? annotation.body : "",
-        quote: typeof annotation.quote === "string" ? annotation.quote : "",
-        heading: typeof annotation.heading === "string" ? annotation.heading : "",
-        createdAt: annotation.created_at,
-      },
-    ];
-  });
-  return Effect.succeed({ path, items, markdown: value.markdown });
-}
 
 export interface WorkbenchPlansShape {
   readonly list: Effect.Effect<WorkbenchPlanList>;
@@ -246,273 +60,196 @@ export class WorkbenchPlans extends Context.Service<WorkbenchPlans, WorkbenchPla
   "t3/workbenchPlans/WorkbenchPlans",
 ) {}
 
-export function makeWorkbenchPlans<E>(
-  getSettings: Effect.Effect<ServerSettings, E>,
-  loadJson: LoadJson,
-): WorkbenchPlansShape {
-  const source = getSettings.pipe(
-    Effect.mapError(() => new WorkbenchPlansAdapterError({ reason: "request_failed" })),
-    Effect.flatMap(configuredSource),
-  );
-  return {
-    vitals: getSettings.pipe(
-      Effect.flatMap((settings): Effect.Effect<WorkbenchVitalsSnapshot> => {
-        if (settings.workbenchPlansSource === null) {
-          return Effect.succeed({
-            capability: {
-              status: "misconfigured",
-              reason: "Configure a Workbench source in this environment.",
-            },
-            binding: null,
-            windows: [],
-          });
-        }
-        return loadJson(settings.workbenchPlansSource, "__t3md/api/vitals.json").pipe(
-          Effect.flatMap((body) => {
-            const snapshot = parseWorkbenchVitals(body);
-            return snapshot === null
-              ? Effect.fail(new WorkbenchPlansAdapterError({ reason: "invalid_response" }))
-              : Effect.succeed(snapshot);
-          }),
-          Effect.orElseSucceed(() => ({
-            capability: {
-              status: "unavailable" as const,
-              reason: "The configured Workbench vitals source is unavailable.",
-            },
-            binding: null,
-            windows: [],
-          })),
-        );
-      }),
+export function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPlansShape {
+  return WorkbenchPlans.of({
+    list: workbench.listPlans.pipe(
+      Effect.map(projectPlanList),
+      Effect.orElseSucceed(() => unavailable("Agent Workbench plans are unavailable.")),
+    ),
+    vitals: Effect.gen(function* () {
+      const [value, now] = yield* Effect.all([workbench.vitals, Clock.currentTimeMillis]);
+      return projectVitals(value, now);
+    }).pipe(
       Effect.orElseSucceed(() => ({
         capability: {
           status: "unavailable" as const,
-          reason: "The environment could not read its Workbench configuration.",
+          reason: "Agent Workbench vitals are unavailable.",
         },
         binding: null,
         windows: [],
       })),
     ),
-    list: getSettings.pipe(
-      Effect.flatMap((settings): Effect.Effect<WorkbenchPlanList> => {
-        if (settings.workbenchPlansSource === null) {
-          return Effect.succeed({
-            capability: {
-              status: "misconfigured",
-              reason: "Configure a Workbench plans source in this environment.",
-            },
-            items: [],
-          });
-        }
-        return loadJson(settings.workbenchPlansSource, "__t3md/api/tree").pipe(
-          Effect.map((body): WorkbenchPlanList => {
-            const payload = body as {
-              groups?: ReadonlyArray<{ files?: ReadonlyArray<LegacyFile> }>;
-              bindings?: ReadonlyArray<LegacyBinding>;
-            };
-            const groups = payload.groups ?? [];
-            const bindings = new Map(
-              (payload.bindings ?? [])
-                .filter(
-                  (binding): binding is LegacyBinding & { readonly rel: string } =>
-                    typeof binding.rel === "string",
-                )
-                .map((binding) => [binding.rel, binding] as const),
-            );
-            const items = groups
-              .flatMap((group) => group.files ?? [])
-              .flatMap((file) => {
-                if (
-                  file.source !== "plans" ||
-                  typeof file.rel !== "string" ||
-                  typeof file.name !== "string" ||
-                  typeof file.mtimeMs !== "number"
-                )
-                  return [];
-                try {
-                  const status: WorkbenchPlanSummary["status"] =
-                    file.status === "active" ||
-                    file.status === "backlog" ||
-                    file.status === "done" ||
-                    file.status === "reference"
-                      ? file.status
-                      : null;
-                  const legacyBinding = bindings.get(file.rel);
-                  const notesPath = optionalPlanPath(legacyBinding?.notesRel);
-                  return [
-                    {
-                      path: WorkbenchPlanPath.make(file.rel),
-                      name: file.name,
-                      directory: typeof file.dir === "string" ? file.dir : "",
-                      project: typeof file.project === "string" ? file.project : null,
-                      status,
-                      date: typeof file.date === "string" ? file.date : null,
-                      tags: Array.isArray(file.tags)
-                        ? file.tags.filter((tag): tag is string => typeof tag === "string")
-                        : [],
-                      mtimeMs: file.mtimeMs,
-                      binding:
-                        legacyBinding === undefined
-                          ? null
-                          : {
-                              title:
-                                typeof legacyBinding.title === "string"
-                                  ? legacyBinding.title
-                                  : null,
-                              threads:
-                                typeof legacyBinding.threads === "number"
-                                  ? legacyBinding.threads
-                                  : 1,
-                              confirmed: legacyBinding.confirmed === true,
-                              boundAt:
-                                typeof legacyBinding.bound_at === "string"
-                                  ? legacyBinding.bound_at
-                                  : null,
-                              notesPath,
-                              notesStale: legacyBinding.notesStale === true,
-                              deviations:
-                                typeof legacyBinding.deviations === "number"
-                                  ? legacyBinding.deviations
-                                  : 0,
-                            },
-                    },
-                  ];
-                } catch {
-                  return [];
-                }
-              });
-            return { capability: { status: "available", reason: null }, items };
-          }),
-          Effect.orElseSucceed(() =>
-            unavailable("The configured Workbench plans source is unavailable."),
-          ),
-        );
-      }),
-      Effect.orElseSucceed(() =>
-        unavailable("The environment could not read its Workbench plans configuration."),
-      ),
-    ),
     read: (path) =>
-      source.pipe(
-        Effect.flatMap((value) =>
-          loadJson(value, `__t3md/api/source?p=${encodeURIComponent(path)}`),
-        ),
-        Effect.flatMap((body) => {
-          const value = body as { text?: unknown; mtimeMs?: unknown; size?: unknown };
-          return typeof value.text === "string" &&
-            typeof value.mtimeMs === "number" &&
-            typeof value.size === "number"
-            ? Effect.succeed({ path, text: value.text, mtimeMs: value.mtimeMs, size: value.size })
-            : Effect.fail(new WorkbenchPlansAdapterError({ reason: "invalid_response" }));
-        }),
+      workbench.readPlan(path).pipe(
+        Effect.map((value) => ({
+          path,
+          text: value.text,
+          mtimeMs: value.mtimeMs,
+          size: value.size,
+        })),
+        Effect.mapError(mapAdapterError),
       ),
     save: (input) =>
-      source.pipe(
+      workbench.savePlan(input.path, { text: input.text, baseMtimeMs: input.baseMtimeMs }).pipe(
+        Effect.mapError(mapAdapterError),
         Effect.flatMap((value) =>
-          loadJson(value, "__t3md/api/save", {
-            rel: input.path,
-            text: input.text,
-            baseMtimeMs: input.baseMtimeMs,
-          }),
+          value.mtimeMs === undefined || value.size === undefined
+            ? Effect.fail(new WorkbenchPlansAdapterError({ reason: "invalid_response" }))
+            : Effect.succeed({ path: input.path, mtimeMs: value.mtimeMs, size: value.size }),
         ),
-        Effect.flatMap((body) => {
-          const value = body as { mtimeMs?: unknown; size?: unknown };
-          return typeof value.mtimeMs === "number" && typeof value.size === "number"
-            ? Effect.succeed({ path: input.path, mtimeMs: value.mtimeMs, size: value.size })
-            : Effect.fail(new WorkbenchPlansAdapterError({ reason: "invalid_response" }));
-        }),
       ),
     mutate: (input) =>
-      source.pipe(
-        Effect.flatMap((value) =>
-          loadJson(
-            value,
-            "__t3md/api/plan",
-            input.op === "create" ? input : { ...input, rel: input.path },
-          ),
-        ),
-        Effect.flatMap((body) => {
-          const path = (body as { rel?: unknown }).rel;
-          return typeof path === "string"
-            ? Effect.succeed({ path: WorkbenchPlanPath.make(path) })
-            : Effect.fail(new WorkbenchPlansAdapterError({ reason: "invalid_response" }));
-        }),
+      workbench.mutatePlan(input).pipe(
+        Effect.map((value) => ({ path: WorkbenchPlanPath.make(value.path) })),
+        Effect.mapError(mapAdapterError),
       ),
     readAnnotations: (path) =>
-      source.pipe(
-        Effect.flatMap((value) =>
-          loadJson(value, `__t3md/api/annotations?p=${encodeURIComponent(path)}`),
-        ),
-        Effect.flatMap((body) => parseAnnotations(path, body)),
+      workbench.readAnnotations(path).pipe(
+        Effect.map((value) => ({ path, items: value.items, markdown: value.markdown })),
+        Effect.mapError(mapAdapterError),
       ),
     mutateAnnotations: (input) =>
-      source.pipe(
-        Effect.flatMap((value) =>
-          loadJson(value, "__t3md/api/annotations", {
-            rel: input.path,
-            ...(input.op === "resolve"
-              ? { resolve: input.annotationId }
-              : {
-                  kind: input.kind,
-                  body: input.body,
-                  quote: input.quote,
-                  heading: input.heading,
-                }),
-          }).pipe(
-            Effect.andThen(
-              loadJson(value, `__t3md/api/annotations?p=${encodeURIComponent(input.path)}`),
-            ),
-          ),
-        ),
-        Effect.flatMap((body) => parseAnnotations(input.path, body)),
+      workbench.mutateAnnotations(input.path, input).pipe(
+        Effect.map((value) => ({ path: input.path, items: value.items, markdown: value.markdown })),
+        Effect.mapError(mapAdapterError),
       ),
+  });
+}
+
+export function projectPlanList(value: AgentWorkbenchPlanList): WorkbenchPlanList {
+  const items = value.plans.flatMap((plan): ReadonlyArray<WorkbenchPlanSummary> => {
+    try {
+      return [
+        {
+          path: WorkbenchPlanPath.make(plan.path),
+          name: plan.name,
+          directory: plan.directory,
+          project: plan.project,
+          status: plan.status === "untriaged" ? null : plan.status,
+          date: plan.date,
+          tags: [...plan.tags],
+          mtimeMs: Date.parse(plan.updatedAt),
+          binding: projectBinding(plan.binding),
+        },
+      ];
+    } catch {
+      return [];
+    }
+  });
+  return {
+    capability: {
+      status:
+        value.state === "unavailable" || value.state === "unsupported"
+          ? "unavailable"
+          : "available",
+      reason: value.reason ?? null,
+    },
+    items,
+  };
+}
+
+export function projectVitals(value: AgentWorkbenchVitals, now: number): WorkbenchVitalsSnapshot {
+  const windows = value.windows.flatMap((window): ReadonlyArray<WorkbenchQuotaWindow> => {
+    if (window.provider !== "claude" && window.provider !== "codex") return [];
+    return [
+      {
+        provider: window.provider,
+        providerLabel: window.providerLabel ?? window.provider,
+        label: window.label,
+        usedPct: window.usedPercent ?? 0,
+        expectedPct: window.expectedPercent ?? window.usedPercent ?? 0,
+        secondsToReset:
+          window.resetsAt === null ? 0 : Math.max(0, (Date.parse(window.resetsAt) - now) / 1_000),
+        exhaustsBeforeReset: window.exhaustsBeforeReset ?? false,
+        secondsToExhaustion: window.secondsToExhaustion ?? null,
+      },
+    ];
+  });
+  return {
+    capability: {
+      status:
+        value.state === "unavailable" || value.state === "unsupported"
+          ? "unavailable"
+          : "available",
+      reason:
+        value.reason ?? (windows.length === 0 ? "No provider quota is currently reported." : null),
+    },
+    binding: projectQuotaBinding(value.binding),
+    windows,
   };
 }
 
 export const layer = Layer.effect(
   WorkbenchPlans,
   Effect.gen(function* () {
-    const settings = yield* ServerSettingsService;
-    const httpClient = yield* HttpClient.HttpClient;
-    const loadJson: LoadJson = (source, path, body) =>
-      Effect.gen(function* () {
-        const url = yield* Effect.try({
-          try: () =>
-            new URL(path, source.baseUrl.endsWith("/") ? source.baseUrl : `${source.baseUrl}/`),
-          catch: () => new WorkbenchPlansAdapterError({ reason: "invalid_url" }),
-        });
-        const request =
-          body === undefined
-            ? HttpClientRequest.get(url)
-            : yield* HttpClientRequest.post(url).pipe(
-                HttpClientRequest.bodyJson(body),
-                Effect.mapError(
-                  () => new WorkbenchPlansAdapterError({ reason: "invalid_response" }),
-                ),
-              );
-        return yield* httpClient.execute(request).pipe(
-          Effect.flatMap((response) =>
-            response.status === 400
-              ? Effect.fail(new WorkbenchPlansAdapterError({ reason: "invalid_request" }))
-              : response.status === 404
-                ? Effect.fail(new WorkbenchPlansAdapterError({ reason: "not_found" }))
-                : response.status === 409
-                  ? Effect.fail(new WorkbenchPlansAdapterError({ reason: "conflict" }))
-                  : HttpClientResponse.filterStatusOk(response).pipe(
-                      Effect.mapError(
-                        () => new WorkbenchPlansAdapterError({ reason: "request_failed" }),
-                      ),
-                    ),
-          ),
-          Effect.flatMap(HttpClientResponse.schemaBodyJson(Schema.Unknown)),
-          Effect.timeout(REQUEST_TIMEOUT),
-          Effect.mapError((error) =>
-            error instanceof WorkbenchPlansAdapterError
-              ? error
-              : new WorkbenchPlansAdapterError({ reason: "request_failed" }),
-          ),
-        );
-      });
-    return WorkbenchPlans.of(makeWorkbenchPlans(settings.getSettings, loadJson));
+    return makeWorkbenchPlans(yield* AgentWorkbench);
   }),
 );
+
+function unavailable(reason: string): WorkbenchPlanList {
+  return { capability: { status: "unavailable", reason }, items: [] };
+}
+
+function projectBinding(value: unknown): WorkbenchPlanSummary["binding"] {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const binding = value as Record<string, unknown>;
+  try {
+    return {
+      title: typeof binding["planTitle"] === "string" ? binding["planTitle"] : null,
+      threads: typeof binding["threads"] === "number" ? binding["threads"] : 1,
+      confirmed: binding["confirmed"] === true,
+      boundAt: typeof binding["bound_at"] === "string" ? binding["bound_at"] : null,
+      notesPath:
+        typeof binding["notesRel"] === "string"
+          ? WorkbenchPlanPath.make(binding["notesRel"])
+          : null,
+      notesStale: binding["notesStale"] === true,
+      deviations: typeof binding["deviations"] === "number" ? binding["deviations"] : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function mapAdapterError(error: AgentWorkbenchAdapterError) {
+  switch (error.reason) {
+    case "not_found":
+      return new WorkbenchPlansAdapterError({ reason: "not_found" });
+    case "conflict":
+      return new WorkbenchPlansAdapterError({ reason: "conflict" });
+    case "invalid_response":
+      return new WorkbenchPlansAdapterError({ reason: "invalid_response" });
+    case "forbidden":
+    case "unauthorized":
+      return new WorkbenchPlansAdapterError({ reason: "invalid_request" });
+    default:
+      return new WorkbenchPlansAdapterError({ reason: "request_failed" });
+  }
+}
+
+function projectQuotaBinding(value: unknown): WorkbenchQuotaBinding | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const binding = value as Record<string, unknown>;
+  const provider = binding["provider"];
+  if (provider !== "claude" && provider !== "codex") return null;
+  if (
+    typeof binding["providerLabel"] !== "string" ||
+    typeof binding["label"] !== "string" ||
+    typeof binding["remainingPct"] !== "number" ||
+    typeof binding["usedPct"] !== "number" ||
+    typeof binding["secondsToReset"] !== "number"
+  ) {
+    return null;
+  }
+  return {
+    provider,
+    providerLabel: binding["providerLabel"],
+    label: binding["label"],
+    remainingPct: binding["remainingPct"],
+    usedPct: binding["usedPct"],
+    secondsToReset: binding["secondsToReset"],
+    exhaustsBeforeReset: binding["exhaustsBeforeReset"] === true,
+    secondsToExhaustion:
+      typeof binding["secondsToExhaustion"] === "number" ? binding["secondsToExhaustion"] : null,
+  };
+}

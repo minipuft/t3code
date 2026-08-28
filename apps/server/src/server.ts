@@ -115,6 +115,7 @@ import {
   persistServerRuntimeState,
 } from "./serverRuntimeState.ts";
 import { orchestrationHttpApiLayer } from "./orchestration/http.ts";
+import * as AgentWorkbench from "./agentWorkbenchAdapter/AgentWorkbench.ts";
 import * as WorkflowCatalog from "./workflowCatalog/WorkflowCatalog.ts";
 import * as WorkbenchPlans from "./workbenchPlans/WorkbenchPlans.ts";
 import { workflowCatalogHttpApiLayer } from "./workflowCatalog/http.ts";
@@ -477,6 +478,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   Layer.provide(httpCompressionLayer),
   Layer.provide(WorkflowCatalog.layer),
   Layer.provide(WorkbenchPlans.layer),
+  Layer.provide(AgentWorkbench.layer),
 );
 
 export const makeServerLayer = Layer.unwrap(

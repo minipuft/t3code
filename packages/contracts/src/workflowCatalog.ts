@@ -2,7 +2,7 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import { TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { ProviderDriverKind } from "./providerInstance.ts";
 
 export const WorkflowCatalogItemId = TrimmedNonEmptyString.check(Schema.isMaxLength(256)).pipe(
@@ -143,6 +143,7 @@ export type WorkflowCatalogItem = typeof WorkflowCatalogItem.Type;
 
 export const WorkflowPromptDetail = Schema.Struct({
   summary: WorkflowPromptSummary,
+  currentVersion: NonNegativeInt,
   userMessageTemplate: Schema.String,
   systemMessage: Schema.NullOr(Schema.String),
 });

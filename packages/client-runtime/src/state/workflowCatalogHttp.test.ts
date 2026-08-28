@@ -7,8 +7,10 @@ import { PrimaryConnectionTarget, type PreparedConnection } from "../connection/
 import { ManagedRelayDpopSigner } from "../relay/managedRelay.ts";
 import { remoteHttpClientLayer } from "../rpc/http.ts";
 import {
+  applyEnvironmentWorkflowPrompt,
   fetchEnvironmentWorkflowCatalog,
   fetchEnvironmentWorkflowCatalogDetail,
+  fetchEnvironmentWorkflowPromptHistory,
 } from "./workflowCatalogHttp.ts";
 
 const TARGET = new PrimaryConnectionTarget({
@@ -116,6 +118,7 @@ describe("fetchEnvironmentWorkflowCatalog", () => {
               providers: [],
               revision: WorkflowRevision.make(`sha256:${"a".repeat(64)}`),
             },
+            currentVersion: 2,
             userMessageTemplate: "Implement {{ task }}",
             systemMessage: null,
           }),
@@ -178,5 +181,62 @@ describe("fetchEnvironmentWorkflowCatalog", () => {
       expect(headers.get("dpop")).toBe("test-dpop-proof");
       expect(init.credentials).toBeUndefined();
     }),
+  );
+
+  it.effect(
+    "routes prompt history reads and administrative mutations through the environment",
+    () =>
+      Effect.gen(function* () {
+        const calls: Array<readonly [RequestInfo | URL, RequestInit]> = [];
+        const itemId = WorkflowCatalogItemId.make("strategicImplement");
+        const fetchFn = ((request, init) => {
+          calls.push([request, init ?? {}]);
+          const pathname = new URL(String(request)).pathname;
+          return Promise.resolve(
+            pathname.endsWith("/history")
+              ? Response.json({ state: "available", current_version: 2, versions: [] })
+              : Response.json({ state: "available" }),
+          );
+        }) satisfies typeof fetch;
+        const prepared = {
+          ...PREPARED,
+          httpAuthorization: { _tag: "Bearer" as const, token: "test-environment-token" },
+        };
+        const layer = remoteHttpClientLayer(fetchFn);
+
+        yield* fetchEnvironmentWorkflowPromptHistory({
+          prepared,
+          signer: Option.none(),
+          itemId,
+          limit: 50,
+        }).pipe(Effect.provide(layer));
+        yield* applyEnvironmentWorkflowPrompt({
+          prepared,
+          signer: Option.none(),
+          itemId,
+          value: {
+            expected_version: 2,
+            user_message_template: "Version three",
+            requestId: "request-12345678",
+          },
+        }).pipe(Effect.provide(layer));
+
+        expect(String(calls[0]?.[0])).toBe(
+          "https://environment.example.test/api/workflows/strategicImplement/history?limit=50",
+        );
+        expect(calls[0]?.[1].method).toBe("GET");
+        expect(String(calls[1]?.[0])).toBe(
+          "https://environment.example.test/api/workflows/strategicImplement/apply",
+        );
+        expect(calls[1]?.[1].method).toBe("POST");
+        const requestBody = calls[1]?.[1].body;
+        if (typeof requestBody !== "string" && !(requestBody instanceof Uint8Array)) {
+          throw new Error("expected an encoded JSON request body");
+        }
+        const requestText =
+          typeof requestBody === "string" ? requestBody : new TextDecoder().decode(requestBody);
+        expect(requestText).toContain('"expected_version":2');
+        expect(requestText).toContain('"requestId":"request-12345678"');
+      }),
   );
 });

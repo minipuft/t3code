@@ -633,47 +633,62 @@ public final class T3ComposerEditorView: ExpoView, UITextViewDelegate, UITextDro
       guard range.length > 0, NSMaxRange(range) <= result.length else {
         continue
       }
+      applyMarkdownDecoration(decoration, to: range, in: result)
+    }
+  }
 
-      switch decoration.kind {
-      case "marker", "quote":
-        result.addAttribute(
-          .foregroundColor,
-          value: UIColor(composerHex: theme.markdownMarker) ?? .secondaryLabel,
-          range: range
-        )
-      case "list-marker", "link":
-        result.addAttribute(
-          .foregroundColor,
-          value: UIColor(composerHex: theme.markdownAccent) ?? .link,
-          range: range
-        )
-      case "heading", "bold":
-        applyFontTraits(.traitBold, to: range, in: result)
-      case "italic":
-        applyFontTraits(.traitItalic, to: range, in: result)
-      case "strikethrough":
-        result.addAttribute(
-          .strikethroughStyle,
-          value: NSUnderlineStyle.single.rawValue,
-          range: range
-        )
-      case "inline-code", "code-block":
-        applyMonospacedFont(to: range, in: result)
-        result.addAttribute(
-          .foregroundColor,
-          value: UIColor(composerHex: theme.markdownCode) ?? .label,
-          range: range
-        )
-      default:
-        break
-      }
-      if decoration.kind == "quote" {
-        applyFontTraits(.traitItalic, to: range, in: result)
-      } else if decoration.kind == "list-marker" {
-        applyFontTraits(.traitBold, to: range, in: result)
-      } else if decoration.kind == "link" {
-        result.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
-      }
+  private func applyMarkdownDecoration(
+    _ decoration: ComposerMarkdownDecorationPayload,
+    to range: NSRange,
+    in result: NSMutableAttributedString
+  ) {
+    switch decoration.kind {
+    case "marker":
+      result.addAttribute(
+        .foregroundColor,
+        value: UIColor(composerHex: theme.markdownMarker) ?? .secondaryLabel,
+        range: range
+      )
+    case "quote":
+      result.addAttribute(
+        .foregroundColor,
+        value: UIColor(composerHex: theme.markdownMarker) ?? .secondaryLabel,
+        range: range
+      )
+      applyFontTraits(.traitItalic, to: range, in: result)
+    case "list-marker":
+      result.addAttribute(
+        .foregroundColor,
+        value: UIColor(composerHex: theme.markdownAccent) ?? .link,
+        range: range
+      )
+      applyFontTraits(.traitBold, to: range, in: result)
+    case "link":
+      result.addAttribute(
+        .foregroundColor,
+        value: UIColor(composerHex: theme.markdownAccent) ?? .link,
+        range: range
+      )
+      result.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+    case "heading", "bold":
+      applyFontTraits(.traitBold, to: range, in: result)
+    case "italic":
+      applyFontTraits(.traitItalic, to: range, in: result)
+    case "strikethrough":
+      result.addAttribute(
+        .strikethroughStyle,
+        value: NSUnderlineStyle.single.rawValue,
+        range: range
+      )
+    case "inline-code", "code-block":
+      applyMonospacedFont(to: range, in: result)
+      result.addAttribute(
+        .foregroundColor,
+        value: UIColor(composerHex: theme.markdownCode) ?? .label,
+        range: range
+      )
+    default:
+      break
     }
   }
 

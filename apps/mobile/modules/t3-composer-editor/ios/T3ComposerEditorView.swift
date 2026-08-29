@@ -15,10 +15,17 @@ private struct ComposerSelectionPayload: Decodable {
   let end: Int
 }
 
+private struct ComposerMarkdownDecorationPayload: Decodable, Equatable {
+  let kind: String
+  let start: Int
+  let end: Int
+}
+
 private struct ComposerControlledDocumentPayload: Decodable {
   let value: String
   let selection: ComposerSelectionPayload?
   let tokensJson: String
+  let markdownDecorations: [ComposerMarkdownDecorationPayload]
   let mostRecentEventCount: Int
   let isNativeEcho: Bool
 }
@@ -33,6 +40,9 @@ private struct ComposerThemePayload: Decodable {
   let skillBorder: String
   let skillText: String
   let fileTint: String
+  let markdownMarker: String
+  let markdownAccent: String
+  let markdownCode: String
 }
 
 private struct ComposerChipStyle {
@@ -288,6 +298,7 @@ public final class T3ComposerEditorView: ExpoView, UITextViewDelegate, UITextDro
   private var value = ""
   private var tokensJson = "[]"
   private var tokens: [ComposerTokenPayload] = []
+  private var markdownDecorations: [ComposerMarkdownDecorationPayload] = []
   private var requestedSelection: ComposerSelectionPayload?
   private var theme = ComposerThemePayload(
     text: "#262626",
@@ -298,7 +309,10 @@ public final class T3ComposerEditorView: ExpoView, UITextViewDelegate, UITextDro
     skillBackground: "#f9e8fb",
     skillBorder: "#e5a6eb",
     skillText: "#a21caf",
-    fileTint: "#737373"
+    fileTint: "#737373",
+    markdownMarker: "#737373",
+    markdownAccent: "#2563eb",
+    markdownCode: "#262626"
   )
   private var fontFamily = "DMSans-Regular"
   private var fontSize: CGFloat = 14
@@ -395,9 +409,11 @@ public final class T3ComposerEditorView: ExpoView, UITextViewDelegate, UITextDro
       tokens = decode([ComposerTokenPayload].self, from: document.tokensJson) ?? []
       tokensNeedRebuild = true
     }
+    let markdownDecorationsChanged = markdownDecorations != document.markdownDecorations
+    markdownDecorations = document.markdownDecorations
     value = document.value
     requestedSelection = document.selection
-    applyControlledDocument(force: tokensNeedRebuild)
+    applyControlledDocument(force: tokensNeedRebuild || markdownDecorationsChanged)
     applyRequestedSelection()
     if tokensMatchCurrentValue() {
       tokensNeedRebuild = false
@@ -599,7 +615,96 @@ public final class T3ComposerEditorView: ExpoView, UITextViewDelegate, UITextDro
         to: result
       )
     }
+    applyMarkdownDecorations(to: result)
     return result
+  }
+
+  private func applyMarkdownDecorations(to result: NSMutableAttributedString) {
+    let sourceLength = (value as NSString).length
+    for decoration in markdownDecorations {
+      guard decoration.start >= 0,
+            decoration.end > decoration.start,
+            decoration.end <= sourceLength else {
+        continue
+      }
+      let displayStart = displayOffset(forSourceOffset: decoration.start)
+      let displayEnd = displayOffset(forSourceOffset: decoration.end)
+      let range = NSRange(location: displayStart, length: max(0, displayEnd - displayStart))
+      guard range.length > 0, NSMaxRange(range) <= result.length else {
+        continue
+      }
+
+      switch decoration.kind {
+      case "marker", "quote":
+        result.addAttribute(
+          .foregroundColor,
+          value: UIColor(composerHex: theme.markdownMarker) ?? .secondaryLabel,
+          range: range
+        )
+      case "list-marker", "link":
+        result.addAttribute(
+          .foregroundColor,
+          value: UIColor(composerHex: theme.markdownAccent) ?? .link,
+          range: range
+        )
+      case "heading", "bold":
+        applyFontTraits(.traitBold, to: range, in: result)
+      case "italic":
+        applyFontTraits(.traitItalic, to: range, in: result)
+      case "strikethrough":
+        result.addAttribute(
+          .strikethroughStyle,
+          value: NSUnderlineStyle.single.rawValue,
+          range: range
+        )
+      case "inline-code", "code-block":
+        applyMonospacedFont(to: range, in: result)
+        result.addAttribute(
+          .foregroundColor,
+          value: UIColor(composerHex: theme.markdownCode) ?? .label,
+          range: range
+        )
+      default:
+        break
+      }
+      if decoration.kind == "quote" {
+        applyFontTraits(.traitItalic, to: range, in: result)
+      } else if decoration.kind == "list-marker" {
+        applyFontTraits(.traitBold, to: range, in: result)
+      } else if decoration.kind == "link" {
+        result.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+      }
+    }
+  }
+
+  private func applyFontTraits(
+    _ traits: UIFontDescriptor.SymbolicTraits,
+    to range: NSRange,
+    in result: NSMutableAttributedString
+  ) {
+    result.enumerateAttribute(.font, in: range) { value, subrange, _ in
+      let font = value as? UIFont ?? UIFont.systemFont(ofSize: self.fontSize)
+      let combinedTraits = font.fontDescriptor.symbolicTraits.union(traits)
+      guard let descriptor = font.fontDescriptor.withSymbolicTraits(combinedTraits) else {
+        return
+      }
+      result.addAttribute(
+        .font,
+        value: UIFont(descriptor: descriptor, size: font.pointSize),
+        range: subrange
+      )
+    }
+  }
+
+  private func applyMonospacedFont(to range: NSRange, in result: NSMutableAttributedString) {
+    result.enumerateAttribute(.font, in: range) { value, subrange, _ in
+      let currentFont = value as? UIFont ?? UIFont.systemFont(ofSize: self.fontSize)
+      let monospaced = UIFont.monospacedSystemFont(ofSize: currentFont.pointSize, weight: .regular)
+      let traits = currentFont.fontDescriptor.symbolicTraits
+      let font = monospaced.fontDescriptor.withSymbolicTraits(traits)
+        .map { UIFont(descriptor: $0, size: currentFont.pointSize) } ?? monospaced
+      result.addAttribute(.font, value: font, range: subrange)
+    }
   }
 
   private func appendPlainText(_ text: String, to result: NSMutableAttributedString) {

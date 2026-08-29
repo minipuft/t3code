@@ -85,6 +85,7 @@ export function composerMarkdownTextStyle(
   kinds: ReadonlyArray<ComposerMarkdownDecorationKind>,
 ): string {
   const declarations: string[] = [];
+  const textDecorations: string[] = [];
   if (kinds.includes("marker")) declarations.push("color: var(--color-muted-foreground)");
   if (kinds.includes("quote")) declarations.push("color: var(--color-muted-foreground)");
   if (kinds.includes("list-marker") || kinds.includes("link")) {
@@ -93,6 +94,11 @@ export function composerMarkdownTextStyle(
   if (kinds.includes("inline-code") || kinds.includes("code-block")) {
     declarations.push("font-family: var(--font-mono)");
     declarations.push("color: var(--color-secondary-foreground)");
+  }
+  if (kinds.includes("strikethrough")) textDecorations.push("line-through");
+  if (kinds.includes("link")) textDecorations.push("underline");
+  if (textDecorations.length > 0) {
+    declarations.push(`text-decoration-line: ${textDecorations.join(" ")}`);
   }
   return declarations.join("; ");
 }

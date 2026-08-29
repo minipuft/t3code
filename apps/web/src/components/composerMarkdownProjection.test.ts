@@ -10,7 +10,7 @@ describe("registerComposerMarkdownProjection", () => {
   it("projects Markdown without changing the source text", () => {
     const editor = createEditor();
     const unregister = registerComposerMarkdownProjection(editor);
-    const source = "# **bold** and `code`";
+    const source = "# **bold**, ~~old~~, [docs](https://t3.codes), and `code`";
 
     editor.update(
       () => {
@@ -25,6 +25,22 @@ describe("registerComposerMarkdownProjection", () => {
       expect(textNodes.map((node) => node.getTextContent()).join("")).toBe(source);
       expect(
         textNodes.some((node) => node.getTextContent() === "bold" && node.hasFormat("bold")),
+      ).toBe(true);
+      expect(
+        textNodes.some(
+          (node) =>
+            node.getTextContent() === "old" &&
+            node.hasFormat("strikethrough") &&
+            node.getStyle().includes("text-decoration-line: line-through"),
+        ),
+      ).toBe(true);
+      expect(
+        textNodes.some(
+          (node) =>
+            node.getTextContent() === "docs" &&
+            node.hasFormat("underline") &&
+            node.getStyle().includes("text-decoration-line: underline"),
+        ),
       ).toBe(true);
       expect(
         textNodes.some(
@@ -125,5 +141,9 @@ describe("composerMarkdownTextStyle", () => {
   it("uses existing theme tokens for marker-forward styling", () => {
     expect(composerMarkdownTextStyle(["marker"])).toBe("color: var(--color-muted-foreground)");
     expect(composerMarkdownTextStyle(["inline-code"])).toContain("var(--font-mono)");
+    expect(composerMarkdownTextStyle(["strikethrough"])).toContain(
+      "text-decoration-line: line-through",
+    );
+    expect(composerMarkdownTextStyle(["link"])).toContain("text-decoration-line: underline");
   });
 });

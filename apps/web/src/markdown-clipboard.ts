@@ -309,6 +309,11 @@ function sanitizedHtmlFrom(container: Element): string {
   return `<meta charset="utf-8">${container.innerHTML}`;
 }
 
+function isInsideCodeBlock(node: Node): boolean {
+  const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+  return element?.closest("pre") != null;
+}
+
 export function chatMarkdownClipboardPayload(
   selection: Selection,
 ): MarkdownClipboardPayload | null {
@@ -319,10 +324,11 @@ export function chatMarkdownClipboardPayload(
     if (range.collapsed) continue;
     const container = document.createElement("div");
     container.appendChild(range.cloneContents());
-    const ancestor = range.commonAncestorContainer;
-    const ancestorElement =
-      ancestor.nodeType === Node.ELEMENT_NODE ? (ancestor as Element) : ancestor.parentElement;
-    if (ancestorElement?.closest("pre")) {
+    if (
+      isInsideCodeBlock(range.commonAncestorContainer) ||
+      isInsideCodeBlock(range.startContainer) ||
+      isInsideCodeBlock(range.endContainer)
+    ) {
       const text = range.toString();
       if (text) {
         texts.push(text);

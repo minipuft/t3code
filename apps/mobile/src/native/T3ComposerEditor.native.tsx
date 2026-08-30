@@ -1,4 +1,5 @@
 import { collectComposerInlineTokens } from "@t3tools/shared/composerInlineTokens";
+import { decorateComposerMarkdownForDisplay } from "@t3tools/client-runtime/composer-markdown";
 import { requireNativeView } from "expo";
 import { TextInputWrapper } from "expo-paste-input";
 import {
@@ -148,6 +149,10 @@ export function ComposerEditor({
       })),
     );
   }, [props.value, skillLabels]);
+  const markdownDecorations = useMemo(
+    () => decorateComposerMarkdownForDisplay(props.value),
+    [props.value],
+  );
   // Every render resolves against the snapshot history, so a render whose
   // (value, selection) lags the acknowledged native state is stamped behind
   // the native revision and rejected by the editor instead of re-applying a
@@ -170,6 +175,7 @@ export function ComposerEditor({
     value: props.value,
     selection: isNativeEcho ? null : (selection ?? null),
     tokensJson,
+    markdownDecorations,
     mostRecentEventCount: controlledEventCount,
     isNativeEcho,
   });
@@ -221,6 +227,9 @@ export function ComposerEditor({
     skillBorder: theme["--color-inline-skill-border"],
     skillText: theme["--color-inline-skill-foreground"],
     fileTint: theme["--color-icon-muted"],
+    markdownMarker: theme["--color-foreground-muted"],
+    markdownAccent: theme["--color-md-link"],
+    markdownCode: theme["--color-md-code-text"],
   });
   const resolvedTextStyle = StyleSheet.flatten(textStyle) ?? {};
   const regularFontFamily = useFontFamily("regular");

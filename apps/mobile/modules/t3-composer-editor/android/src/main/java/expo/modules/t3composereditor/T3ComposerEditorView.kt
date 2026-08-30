@@ -364,7 +364,9 @@ class T3ComposerEditorView(context: Context, appContext: AppContext) : ExpoView(
         decoration.start < 0 ||
         decoration.end <= decoration.start ||
         decoration.end > editable.length
-      ) return@forEach
+      ) {
+        return@forEach
+      }
       val spans: List<Any> = when (decoration.kind) {
         "marker" -> listOf(ComposerMarkdownColorSpan(chipTheme.markdownMarker))
         "heading", "bold" -> listOf(ComposerMarkdownStyleSpan(Typeface.BOLD))
@@ -419,7 +421,7 @@ private data class ComposerToken(
 private data class ComposerMarkdownDecoration(
   val kind: String,
   val start: Int,
-  val end: Int,
+  val end: Int
 )
 
 private data class ComposerChipTheme(
@@ -431,7 +433,7 @@ private data class ComposerChipTheme(
   val skillText: Int,
   val markdownMarker: Int,
   val markdownAccent: Int,
-  val markdownCode: Int,
+  val markdownCode: Int
 ) {
   companion object {
     fun default() = ComposerChipTheme(

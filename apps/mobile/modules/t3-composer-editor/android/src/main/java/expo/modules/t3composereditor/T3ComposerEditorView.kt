@@ -367,39 +367,47 @@ class T3ComposerEditorView(context: Context, appContext: AppContext) : ExpoView(
       ) {
         return@forEach
       }
-      val spans: List<Any> = when (decoration.kind) {
-        "marker" -> listOf(ComposerMarkdownColorSpan(chipTheme.markdownMarker))
-        "heading", "bold" -> listOf(ComposerMarkdownStyleSpan(Typeface.BOLD))
-        "quote" -> listOf(
-          ComposerMarkdownColorSpan(chipTheme.markdownMarker),
-          ComposerMarkdownStyleSpan(Typeface.ITALIC),
-        )
-        "list-marker" -> listOf(
-          ComposerMarkdownColorSpan(chipTheme.markdownAccent),
-          ComposerMarkdownStyleSpan(Typeface.BOLD),
-        )
-        "italic" -> listOf(ComposerMarkdownStyleSpan(Typeface.ITALIC))
-        "strikethrough" -> listOf(ComposerMarkdownStrikethroughSpan())
-        "inline-code", "code-block" -> listOf(
-          ComposerMarkdownTypefaceSpan("monospace"),
-          ComposerMarkdownColorSpan(chipTheme.markdownCode),
-        )
-        "link" -> listOf(
-          ComposerMarkdownColorSpan(chipTheme.markdownAccent),
-          ComposerMarkdownUnderlineSpan(),
-        )
-        else -> emptyList()
-      }
-      spans.forEach { span ->
-        editable.setSpan(
-          span,
-          decoration.start,
-          decoration.end,
-          Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-        )
-      }
+      applyMarkdownDecoration(editable, decoration)
     }
     editor.invalidate()
+  }
+
+  private fun applyMarkdownDecoration(
+    editable: Editable,
+    decoration: ComposerMarkdownDecoration
+  ) {
+    markdownSpansFor(decoration.kind).forEach { span ->
+      editable.setSpan(
+        span,
+        decoration.start,
+        decoration.end,
+        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+      )
+    }
+  }
+
+  private fun markdownSpansFor(kind: String): List<Any> = when (kind) {
+    "marker" -> listOf(ComposerMarkdownColorSpan(chipTheme.markdownMarker))
+    "heading", "bold" -> listOf(ComposerMarkdownStyleSpan(Typeface.BOLD))
+    "quote" -> listOf(
+      ComposerMarkdownColorSpan(chipTheme.markdownMarker),
+      ComposerMarkdownStyleSpan(Typeface.ITALIC),
+    )
+    "list-marker" -> listOf(
+      ComposerMarkdownColorSpan(chipTheme.markdownAccent),
+      ComposerMarkdownStyleSpan(Typeface.BOLD),
+    )
+    "italic" -> listOf(ComposerMarkdownStyleSpan(Typeface.ITALIC))
+    "strikethrough" -> listOf(ComposerMarkdownStrikethroughSpan())
+    "inline-code", "code-block" -> listOf(
+      ComposerMarkdownTypefaceSpan("monospace"),
+      ComposerMarkdownColorSpan(chipTheme.markdownCode),
+    )
+    "link" -> listOf(
+      ComposerMarkdownColorSpan(chipTheme.markdownAccent),
+      ComposerMarkdownUnderlineSpan(),
+    )
+    else -> emptyList()
   }
 
   private fun parseColor(value: String, fallback: Int): Int =

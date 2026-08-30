@@ -8,6 +8,7 @@ import {
   resolveDevProtocolClient,
   resolveElectronLaunchCommand,
 } from "./electron-launcher.mjs";
+import { fullAppRestartWatchTargets } from "./dev-reload-policy.mjs";
 import { waitForResources } from "./wait-for-resources.mjs";
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL?.trim();
@@ -26,10 +27,7 @@ const requiredFiles = [
   "dist-electron/preload.cjs",
   "../server/dist/bin.mjs",
 ];
-const watchedDirectories = [
-  { directory: "dist-electron", files: new Set(["main.cjs", "preload.cjs"]) },
-  { directory: "../server/dist", files: new Set(["bin.mjs"]) },
-];
+const watchedDirectories = fullAppRestartWatchTargets;
 const forcedShutdownTimeoutMs = 1_500;
 const restartDebounceMs = 120;
 const childTreeGracePeriodMs = 1_200;

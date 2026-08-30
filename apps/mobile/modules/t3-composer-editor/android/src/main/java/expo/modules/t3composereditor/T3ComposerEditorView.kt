@@ -11,7 +11,12 @@ import android.text.Editable
 import android.text.InputType
 import android.text.Spanned
 import android.text.TextWatcher
+import android.text.style.ForegroundColorSpan
 import android.text.style.ReplacementSpan
+import android.text.style.StrikethroughSpan
+import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
+import android.text.style.UnderlineSpan
 import android.view.Gravity
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
@@ -19,6 +24,7 @@ import android.widget.EditText
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
+import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.max
 
@@ -39,6 +45,7 @@ class T3ComposerEditorView(context: Context, appContext: AppContext) : ExpoView(
   private var contentInsetVertical = 0
   private var tokensJson = "[]"
   private var tokens: List<ComposerToken> = emptyList()
+  private var markdownDecorations: List<ComposerMarkdownDecoration> = emptyList()
   private var chipTheme = ComposerChipTheme.default()
   private var autoCorrect = true
   private var spellCheck = true
@@ -120,6 +127,9 @@ class T3ComposerEditorView(context: Context, appContext: AppContext) : ExpoView(
 
     val nextTokensJson = document.optString("tokensJson", "[]")
     val nextTokens = if (nextTokensJson == tokensJson) tokens else parseTokens(nextTokensJson)
+    val nextMarkdownDecorations = parseMarkdownDecorations(
+      document.optJSONArray("markdownDecorations") ?: JSONArray(),
+    )
     val requestedSelection = document.optJSONObject("selection")
     val previousSelectionStart = editor.selectionStart.coerceAtLeast(0)
     val previousSelectionEnd = editor.selectionEnd.coerceAtLeast(0)
@@ -132,6 +142,8 @@ class T3ComposerEditorView(context: Context, appContext: AppContext) : ExpoView(
       }
       tokensJson = nextTokensJson
       tokens = nextTokens
+      markdownDecorations = nextMarkdownDecorations
+      applyMarkdownSpans()
       applyTokenSpans()
       if (requestedSelection != null) {
         applySelection(
@@ -162,7 +174,17 @@ class T3ComposerEditorView(context: Context, appContext: AppContext) : ExpoView(
         ),
         skillBorder = parseColor(theme.optString("skillBorder"), chipTheme.skillBorder),
         skillText = parseColor(theme.optString("skillText"), chipTheme.skillText),
+        markdownMarker = parseColor(
+          theme.optString("markdownMarker"),
+          chipTheme.markdownMarker,
+        ),
+        markdownAccent = parseColor(
+          theme.optString("markdownAccent"),
+          chipTheme.markdownAccent,
+        ),
+        markdownCode = parseColor(theme.optString("markdownCode"), chipTheme.markdownCode),
       )
+      applyMarkdownSpans()
       applyTokenSpans()
     } catch (_: Exception) {
     }
@@ -333,6 +355,61 @@ class T3ComposerEditorView(context: Context, appContext: AppContext) : ExpoView(
     editor.invalidate()
   }
 
+  private fun applyMarkdownSpans() {
+    val editable = editor.text ?: return
+    editable.getSpans(0, editable.length, ComposerMarkdownSpan::class.java)
+      .forEach(editable::removeSpan)
+    markdownDecorations.forEach { decoration ->
+      if (
+        decoration.start < 0 ||
+        decoration.end <= decoration.start ||
+        decoration.end > editable.length
+      ) {
+        return@forEach
+      }
+      applyMarkdownDecoration(editable, decoration)
+    }
+    editor.invalidate()
+  }
+
+  private fun applyMarkdownDecoration(
+    editable: Editable,
+    decoration: ComposerMarkdownDecoration
+  ) {
+    markdownSpansFor(decoration.kind).forEach { span ->
+      editable.setSpan(
+        span,
+        decoration.start,
+        decoration.end,
+        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+      )
+    }
+  }
+
+  private fun markdownSpansFor(kind: String): List<Any> = when (kind) {
+    "marker" -> listOf(ComposerMarkdownColorSpan(chipTheme.markdownMarker))
+    "heading", "bold" -> listOf(ComposerMarkdownStyleSpan(Typeface.BOLD))
+    "quote" -> listOf(
+      ComposerMarkdownColorSpan(chipTheme.markdownMarker),
+      ComposerMarkdownStyleSpan(Typeface.ITALIC),
+    )
+    "list-marker" -> listOf(
+      ComposerMarkdownColorSpan(chipTheme.markdownAccent),
+      ComposerMarkdownStyleSpan(Typeface.BOLD),
+    )
+    "italic" -> listOf(ComposerMarkdownStyleSpan(Typeface.ITALIC))
+    "strikethrough" -> listOf(ComposerMarkdownStrikethroughSpan())
+    "inline-code", "code-block" -> listOf(
+      ComposerMarkdownTypefaceSpan("monospace"),
+      ComposerMarkdownColorSpan(chipTheme.markdownCode),
+    )
+    "link" -> listOf(
+      ComposerMarkdownColorSpan(chipTheme.markdownAccent),
+      ComposerMarkdownUnderlineSpan(),
+    )
+    else -> emptyList()
+  }
+
   private fun parseColor(value: String, fallback: Int): Int =
     try {
       Color.parseColor(value)
@@ -349,13 +426,22 @@ private data class ComposerToken(
   val end: Int
 )
 
+private data class ComposerMarkdownDecoration(
+  val kind: String,
+  val start: Int,
+  val end: Int
+)
+
 private data class ComposerChipTheme(
   val chipBackground: Int,
   val chipBorder: Int,
   val chipText: Int,
   val skillBackground: Int,
   val skillBorder: Int,
-  val skillText: Int
+  val skillText: Int,
+  val markdownMarker: Int,
+  val markdownAccent: Int,
+  val markdownCode: Int
 ) {
   companion object {
     fun default() = ComposerChipTheme(
@@ -365,9 +451,26 @@ private data class ComposerChipTheme(
       skillBackground = Color.rgb(233, 239, 255),
       skillBorder = Color.rgb(185, 200, 245),
       skillText = Color.rgb(45, 72, 155),
+      markdownMarker = Color.rgb(115, 115, 115),
+      markdownAccent = Color.rgb(37, 99, 235),
+      markdownCode = Color.rgb(38, 38, 38),
     )
   }
 }
+
+private interface ComposerMarkdownSpan
+
+private class ComposerMarkdownColorSpan(color: Int) :
+  ForegroundColorSpan(color), ComposerMarkdownSpan
+
+private class ComposerMarkdownStyleSpan(style: Int) : StyleSpan(style), ComposerMarkdownSpan
+
+private class ComposerMarkdownStrikethroughSpan : StrikethroughSpan(), ComposerMarkdownSpan
+
+private class ComposerMarkdownTypefaceSpan(family: String) :
+  TypefaceSpan(family), ComposerMarkdownSpan
+
+private class ComposerMarkdownUnderlineSpan : UnderlineSpan(), ComposerMarkdownSpan
 
 private class ComposerChipSpan(
   private val label: String,
@@ -448,6 +551,19 @@ private fun parseTokens(value: String): List<ComposerToken> = try {
       label = token.optString("label"),
       start = token.optInt("start"),
       end = token.optInt("end"),
+    )
+  }
+} catch (_: Exception) {
+  emptyList()
+}
+
+private fun parseMarkdownDecorations(value: JSONArray): List<ComposerMarkdownDecoration> = try {
+  List(value.length()) { index ->
+    val decoration = value.getJSONObject(index)
+    ComposerMarkdownDecoration(
+      kind = decoration.optString("kind"),
+      start = decoration.optInt("start"),
+      end = decoration.optInt("end"),
     )
   }
 } catch (_: Exception) {

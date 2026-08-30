@@ -4,6 +4,16 @@ Messages can contain up to 120,000 characters. If a draft is longer, T3 Code kee
 composer and shows how many characters need to be removed. Shorten the draft or split it into
 multiple messages, then send again in the same thread.
 
+## Markdown while composing
+
+Markdown headings, emphasis, strikethrough, inline and fenced code, quotes, lists, and links are
+styled as you type. Their source markers remain visible and editable, and T3 Code sends the exact
+text in the composer without normalizing it.
+
+Tables, footnotes, images, and raw HTML remain ordinary source text. T3 Code does not load link or
+image previews from composer input. Unusually syntax-dense drafts use plain source presentation to
+keep editing responsive; their content is unchanged.
+
 ## Agent Actions
 
 Use the Agent Actions button beside the composer controls, or type `>` in the composer, to browse

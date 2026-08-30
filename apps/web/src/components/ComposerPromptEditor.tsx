@@ -82,6 +82,7 @@ import { ComposerPendingTerminalContextChip } from "./chat/ComposerPendingTermin
 import { formatProviderSkillDisplayName } from "@t3tools/client-runtime/providerSkills";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { registerComposerInlineTokenPaste } from "./composerInlineTokenPaste";
+import { registerComposerMarkdownProjection } from "./composerMarkdownProjection";
 
 const COMPOSER_EDITOR_HMR_KEY = `composer-editor-${Math.random().toString(36).slice(2)}`;
 const SURROUND_SYMBOLS: [string, string][] = [
@@ -1260,6 +1261,14 @@ function ComposerInlineTokenPastePlugin() {
   return null;
 }
 
+function ComposerMarkdownProjectionPlugin() {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => registerComposerMarkdownProjection(editor), [editor]);
+
+  return null;
+}
+
 function ComposerSurroundSelectionPlugin(props: {
   terminalContexts: ReadonlyArray<TerminalContextDraft>;
   skills: ReadonlyArray<ServerProviderSkill>;
@@ -1780,6 +1789,7 @@ function ComposerPromptEditorInner({
         <ComposerInlineTokenSelectionNormalizePlugin />
         <ComposerInlineTokenBackspacePlugin />
         <ComposerInlineTokenPastePlugin />
+        <ComposerMarkdownProjectionPlugin />
         <ComposerChipSelectionPlugin />
         <HistoryPlugin />
       </div>

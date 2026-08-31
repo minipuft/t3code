@@ -18,7 +18,7 @@
     "dev": "node --watch src/bin.ts",
     "build:bundle": "vp pack && vp pack src/service-launcher.ts --out-dir dist --no-clean",
     "dev:bundle:stage": "vp pack --out-dir ../../.t3/dev-server/next && vp pack src/service-launcher.ts --out-dir ../../.t3/dev-server/next --no-clean && node scripts/dev-server-bundle.mjs seal",
-    "dev:bundle:activate": "node scripts/dev-server-bundle.mjs activate",
+    "dev:bundle:activate:interrupt-sessions": "node scripts/dev-server-bundle.mjs activate --acknowledge-session-interruption",
     "start": "node dist/bin.mjs",
     "typecheck": "tsgo --noEmit",
     "test": "vp test run"

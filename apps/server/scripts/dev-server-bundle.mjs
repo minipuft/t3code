@@ -5,6 +5,7 @@ import * as NodeURL from "node:url";
 
 export const ACTIVATION_MARKER_FILE_NAME = ".t3-dev-backend-activation.json";
 export const STAGE_MANIFEST_FILE_NAME = "manifest.json";
+export const SESSION_INTERRUPTION_ACKNOWLEDGEMENT = "--acknowledge-session-interruption";
 
 const scriptDirectory = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
 const serverDirectory = NodePath.resolve(scriptDirectory, "..");
@@ -141,7 +142,11 @@ async function promoteFile(sourcePath, destinationPath, mode) {
 export async function activateStage({
   stageDirectory = defaultStageDirectory,
   targetServerDirectory = serverDirectory,
+  acknowledgeSessionInterruption = false,
 } = {}) {
+  assertActivationAcknowledged(
+    acknowledgeSessionInterruption ? [SESSION_INTERRUPTION_ACKNOWLEDGEMENT] : [],
+  );
   await assertServerDirectory(targetServerDirectory);
   const manifest = await readAndVerifyManifest(stageDirectory);
   const targetDistDirectory = NodePath.join(targetServerDirectory, "dist");
@@ -181,6 +186,14 @@ function readArgument(name) {
   return index === -1 ? undefined : process.argv[index + 1];
 }
 
+export function assertActivationAcknowledged(arguments_) {
+  if (arguments_.includes(SESSION_INTERRUPTION_ACKNOWLEDGEMENT)) return;
+
+  throw new Error(
+    `Activation restarts the environment backend, disconnects every client, and terminates active agent turns. Run it from an external terminal only after all turns finish, then pass ${SESSION_INTERRUPTION_ACKNOWLEDGEMENT}.`,
+  );
+}
+
 async function main() {
   const command = process.argv[2];
   const stageDirectory = readArgument("--stage-dir") ?? defaultStageDirectory;
@@ -192,15 +205,19 @@ async function main() {
   }
   if (command === "activate") {
     const targetServerDirectory = readArgument("--target-server-dir") ?? serverDirectory;
-    const receipt = await activateStage({ stageDirectory, targetServerDirectory });
+    const receipt = await activateStage({
+      stageDirectory,
+      targetServerDirectory,
+      acknowledgeSessionInterruption: process.argv.includes(SESSION_INTERRUPTION_ACKNOWLEDGEMENT),
+    });
     console.log(
-      `Activated ${String(receipt.fileCount)} server artifacts without relaunching Electron.`,
+      `Published ${String(receipt.fileCount)} server artifacts. The environment backend will restart and interrupt its sessions.`,
     );
     return;
   }
 
   throw new Error(
-    "Usage: dev-server-bundle.mjs <seal|activate> [--stage-dir <path>] [--target-server-dir <path>]",
+    `Usage: dev-server-bundle.mjs seal [--stage-dir <path>] | activate ${SESSION_INTERRUPTION_ACKNOWLEDGEMENT} [--stage-dir <path>] [--target-server-dir <path>]`,
   );
 }
 

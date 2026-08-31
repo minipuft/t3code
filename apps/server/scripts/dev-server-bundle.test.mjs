@@ -4,7 +4,13 @@ import * as NodePath from "node:path";
 
 import { assert, describe, expect, it } from "vite-plus/test";
 
-import { ACTIVATION_MARKER_FILE_NAME, activateStage, sealStage } from "./dev-server-bundle.mjs";
+import {
+  ACTIVATION_MARKER_FILE_NAME,
+  SESSION_INTERRUPTION_ACKNOWLEDGEMENT,
+  activateStage,
+  assertActivationAcknowledged,
+  sealStage,
+} from "./dev-server-bundle.mjs";
 
 async function makeFixture() {
   const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-dev-server-bundle-"));
@@ -24,11 +30,37 @@ async function makeFixture() {
 }
 
 describe("development server bundle activation", () => {
+  it("requires explicit acknowledgement that activation interrupts sessions", () => {
+    expect(() => assertActivationAcknowledged([])).toThrow(/terminates active agent turns/);
+    expect(() =>
+      assertActivationAcknowledged([SESSION_INTERRUPTION_ACKNOWLEDGEMENT]),
+    ).not.toThrow();
+  });
+
+  it("refuses programmatic activation before publishing a receipt", async () => {
+    const fixture = await makeFixture();
+    try {
+      await sealStage(fixture);
+
+      await expect(activateStage(fixture)).rejects.toThrow(/terminates active agent turns/);
+      await expect(
+        NodeFSP.access(
+          NodePath.join(fixture.targetServerDirectory, "dist", ACTIVATION_MARKER_FILE_NAME),
+        ),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await NodeFSP.rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it("promotes verified files, preserves old chunks, and emits the activation receipt last", async () => {
     const fixture = await makeFixture();
     try {
       await sealStage(fixture);
-      const receipt = await activateStage(fixture);
+      const receipt = await activateStage({
+        ...fixture,
+        acknowledgeSessionInterruption: true,
+      });
       const dist = NodePath.join(fixture.targetServerDirectory, "dist");
 
       assert.equal(
@@ -57,7 +89,12 @@ describe("development server bundle activation", () => {
       await sealStage(fixture);
       await NodeFSP.writeFile(NodePath.join(fixture.stageDirectory, "bin.mjs"), "tampered\n");
 
-      await expect(activateStage(fixture)).rejects.toThrow(/failed verification: bin\.mjs/);
+      await expect(
+        activateStage({
+          ...fixture,
+          acknowledgeSessionInterruption: true,
+        }),
+      ).rejects.toThrow(/failed verification: bin\.mjs/);
       await expect(
         NodeFSP.access(
           NodePath.join(fixture.targetServerDirectory, "dist", ACTIVATION_MARKER_FILE_NAME),

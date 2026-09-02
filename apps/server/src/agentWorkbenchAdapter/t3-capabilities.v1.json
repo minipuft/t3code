@@ -14,6 +14,24 @@
           "destructive": false
         },
         {
+          "id": "associations",
+          "label": "associations",
+          "enabled": true,
+          "destructive": false
+        },
+        {
+          "id": "suggest",
+          "label": "suggest",
+          "enabled": true,
+          "destructive": false
+        },
+        {
+          "id": "associate",
+          "label": "associate",
+          "enabled": true,
+          "destructive": false
+        },
+        {
           "id": "save",
           "label": "save",
           "enabled": true,

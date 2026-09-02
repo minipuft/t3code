@@ -70,6 +70,9 @@ import {
 import {
   WorkbenchPlanAnnotationMutationInput,
   WorkbenchPlanAnnotations,
+  WorkbenchConversationInput,
+  WorkbenchPlanAssociationMutationInput,
+  WorkbenchPlanAssociations,
   WorkbenchPlanList,
   WorkbenchPlanMutationInput,
   WorkbenchPlanMutationResult,
@@ -77,6 +80,8 @@ import {
   WorkbenchPlanSaveInput,
   WorkbenchPlanSaveResult,
   WorkbenchPlanSourceDocument,
+  WorkbenchPlanSuggestionInput,
+  WorkbenchPlanSuggestions,
   WorkbenchVitalsSnapshot,
 } from "./workbenchPlans.ts";
 
@@ -701,6 +706,7 @@ export class EnvironmentWorkflowCatalogHttpApi extends HttpApiGroup.make("workfl
   ) {}
 
 const EnvironmentWorkbenchPlanParams = { path: WorkbenchPlanPath };
+const EnvironmentWorkbenchConversationParams = WorkbenchConversationInput.fields;
 const EnvironmentWorkbenchPlanMutationErrors = [
   EnvironmentRequestInvalidError,
   EnvironmentScopeRequiredError,
@@ -710,6 +716,48 @@ const EnvironmentWorkbenchPlanMutationErrors = [
 ] as const;
 
 export class EnvironmentWorkbenchPlansHttpApi extends HttpApiGroup.make("workbenchPlans")
+  .add(
+    HttpApiEndpoint.get("associations", "/api/workbench/plans/associations", {
+      headers: OptionalBearerHeaders,
+      payload: EnvironmentWorkbenchConversationParams,
+      success: WorkbenchPlanAssociations,
+      error: EnvironmentOrchestrationThreadSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Read one thread's Workbench plan associations")
+      .annotate(
+        OpenApi.Description,
+        "Returns the primary, reference, and historical plan associations for the explicitly supplied T3 thread id. Requires orchestration:read and never infers an environment-global active thread.",
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("associate", "/api/workbench/plans/associations", {
+      headers: OptionalBearerHeaders,
+      payload: WorkbenchPlanAssociationMutationInput,
+      success: WorkbenchPlanAssociations,
+      error: EnvironmentWorkbenchPlanMutationErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Change one thread's Workbench plan associations")
+      .annotate(
+        OpenApi.Description,
+        "Uses, references, repairs, or unlinks a plan for the explicitly supplied T3 thread id. Requires orchestration:operate. The environment id and current provider resume alias are projected by the server.",
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("suggest", "/api/workbench/plans/suggestions", {
+      headers: OptionalBearerHeaders,
+      payload: WorkbenchPlanSuggestionInput,
+      success: WorkbenchPlanSuggestions,
+      error: EnvironmentOrchestrationThreadSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Suggest relevant plans for a thread message")
+      .annotate(
+        OpenApi.Description,
+        "Returns up to three advisory lexical matches for the explicitly supplied thread and first-message text. Requires orchestration:read and never binds a plan.",
+      ),
+  )
   .add(
     HttpApiEndpoint.get("vitals", "/api/workbench/vitals", {
       headers: OptionalBearerHeaders,

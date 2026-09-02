@@ -2,24 +2,30 @@ import * as NodeCrypto from "node:crypto";
 
 import {
   AgentWorkbenchCatalog,
+  AgentWorkbenchAssociationCommand,
   AgentWorkbenchPlanAnnotations,
+  AgentWorkbenchPlanAssociations,
   AgentWorkbenchPlanList,
   AgentWorkbenchPlanMutationResult,
   AgentWorkbenchPlanSource,
+  AgentWorkbenchPlanSuggestions,
   AgentWorkbenchPromptDetail,
   AgentWorkbenchPromptHistory,
   AgentWorkbenchPromptMutationResult,
   AgentWorkbenchPromptReview,
   AgentWorkbenchVitals,
+  ThreadId,
   type ServerProvider,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import { ServerEnvironment } from "../environment/ServerEnvironment.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
+import { ProviderSessionDirectory } from "../provider/Services/ProviderSessionDirectory.ts";
 import {
   AgentWorkbenchConnection,
   AgentWorkbenchConnectionError,
@@ -47,6 +53,15 @@ export class AgentWorkbenchAdapterError extends Schema.TaggedErrorClass<AgentWor
 export interface AgentWorkbenchShape {
   readonly listPlans: Effect.Effect<AgentWorkbenchPlanList, AgentWorkbenchAdapterError>;
   readonly vitals: Effect.Effect<AgentWorkbenchVitals, AgentWorkbenchAdapterError>;
+  readonly planAssociations: (
+    input: T3ConversationInput,
+  ) => Effect.Effect<AgentWorkbenchPlanAssociations, AgentWorkbenchAdapterError>;
+  readonly mutatePlanAssociation: (
+    input: T3AssociationCommandInput,
+  ) => Effect.Effect<AgentWorkbenchPlanAssociations, AgentWorkbenchAdapterError>;
+  readonly suggestPlans: (
+    input: T3PlanSuggestionInput,
+  ) => Effect.Effect<AgentWorkbenchPlanSuggestions, AgentWorkbenchAdapterError>;
   readonly readPlan: (
     path: string,
   ) => Effect.Effect<typeof AgentWorkbenchPlanSource.Type, AgentWorkbenchAdapterError>;
@@ -100,6 +115,25 @@ export class AgentWorkbench extends Context.Service<AgentWorkbench, AgentWorkben
 interface AgentWorkbenchContextDependencies {
   readonly getEnvironmentId: Effect.Effect<string>;
   readonly getProviders: Effect.Effect<ReadonlyArray<ServerProvider>>;
+  readonly getHarnessAliases?: (
+    threadId: string,
+  ) => Effect.Effect<ReadonlyArray<{ readonly provider: string; readonly sessionId: string }>>;
+}
+
+interface T3ConversationInput {
+  readonly threadId: string;
+  readonly project?: string;
+}
+
+interface T3AssociationCommandInput extends T3ConversationInput {
+  readonly op: "use" | "reference.add" | "reference.remove" | "unlink" | "repair";
+  readonly planPath?: string;
+  readonly associationId?: string;
+  readonly expectedRevision?: number;
+}
+
+interface T3PlanSuggestionInput extends T3ConversationInput {
+  readonly message: string;
 }
 
 export interface AgentWorkbenchConnectionShape {
@@ -159,9 +193,58 @@ export function makeAgentWorkbench(
     );
   });
 
+  const conversation = (input: T3ConversationInput) =>
+    context.getEnvironmentId.pipe(
+      Effect.map((environmentId) => ({
+        host: "t3" as const,
+        environmentId,
+        conversationId: input.threadId,
+        ...(input.project === undefined ? {} : { project: input.project }),
+      })),
+    );
+
+  const aliases = (threadId: string) => context.getHarnessAliases?.(threadId) ?? Effect.succeed([]);
+
   return AgentWorkbench.of({
     listPlans: request(AgentWorkbenchPlanList, "/v1/plans"),
     vitals: request(AgentWorkbenchVitals, "/v1/vitals"),
+    planAssociations: (input) =>
+      conversation(input).pipe(
+        Effect.flatMap((value) =>
+          request(
+            AgentWorkbenchPlanAssociations,
+            `/v1/plan-associations?${conversationQuery(value)}`,
+          ),
+        ),
+      ),
+    mutatePlanAssociation: (input) =>
+      Effect.all([conversation(input), aliases(input.threadId)]).pipe(
+        Effect.flatMap(([value, harnessAliases]) =>
+          request(AgentWorkbenchPlanAssociations, "/v1/plan-associations/commands", {
+            method: "POST",
+            admin: true,
+            body: AgentWorkbenchAssociationCommand.make({
+              op: input.op,
+              conversation: value,
+              ...(input.planPath === undefined ? {} : { planPath: input.planPath }),
+              ...(input.associationId === undefined ? {} : { associationId: input.associationId }),
+              ...(input.expectedRevision === undefined
+                ? {}
+                : { expectedRevision: input.expectedRevision }),
+              aliases: harnessAliases,
+            }),
+          }),
+        ),
+      ),
+    suggestPlans: (input) =>
+      conversation(input).pipe(
+        Effect.flatMap((value) =>
+          request(AgentWorkbenchPlanSuggestions, "/v1/plan-suggestions", {
+            method: "POST",
+            body: { conversation: value, query: input.message, project: input.project, limit: 3 },
+          }),
+        ),
+      ),
     readPlan: (path) => request(AgentWorkbenchPlanSource, `/v1/plans/${encodeURIComponent(path)}`),
     savePlan: (path, input) =>
       request(AgentWorkbenchPlanMutationResult, `/v1/plans/${encodeURIComponent(path)}`, {
@@ -221,11 +304,22 @@ export function makeAgentWorkbench(
 const make = Effect.gen(function* () {
   const environment = yield* ServerEnvironment;
   const providers = yield* ProviderRegistry;
+  const sessions = yield* Effect.serviceOption(ProviderSessionDirectory);
   const connection = new AgentWorkbenchConnection(makeAgentWorkbenchConnectionDependencies());
   yield* Effect.addFinalizer(() => Effect.promise(() => connection.close()));
   return makeAgentWorkbench(connection, {
     getEnvironmentId: environment.getEnvironmentId,
     getProviders: providers.getProviders,
+    getHarnessAliases: (threadId) =>
+      Option.match(sessions, {
+        onNone: () => Effect.succeed([]),
+        onSome: (directory) =>
+          directory.getBinding(ThreadId.make(threadId)).pipe(
+            Effect.map((binding) => Option.flatMap(binding, projectHarnessAlias)),
+            Effect.map(Option.toArray),
+            Effect.orElseSucceed(() => []),
+          ),
+      }),
   });
 });
 
@@ -269,4 +363,37 @@ function mapConnectionError(cause: unknown) {
   return new AgentWorkbenchAdapterError({
     reason: cause instanceof AgentWorkbenchConnectionError ? cause.reason : "request_failed",
   });
+}
+
+function conversationQuery(value: {
+  readonly host: string;
+  readonly environmentId?: string;
+  readonly conversationId: string;
+  readonly project?: string;
+}) {
+  const query = new URLSearchParams({ host: value.host, conversationId: value.conversationId });
+  if (value.environmentId !== undefined) query.set("environmentId", value.environmentId);
+  if (value.project !== undefined) query.set("project", value.project);
+  return query.toString();
+}
+
+export function projectHarnessAlias(binding: {
+  readonly provider: string;
+  readonly resumeCursor?: unknown | null;
+}) {
+  const cursor = binding.resumeCursor;
+  if (cursor === null || typeof cursor !== "object" || Array.isArray(cursor)) return Option.none();
+  const value = cursor as Record<string, unknown>;
+  const provider = binding.provider === "claudeAgent" ? "claude" : binding.provider;
+  const sessionId =
+    binding.provider === "codex"
+      ? value["threadId"]
+      : binding.provider === "claudeAgent"
+        ? value["resume"]
+        : binding.provider === "opencode"
+          ? value["sessionId"]
+          : undefined;
+  return typeof sessionId === "string" && sessionId.length > 0
+    ? Option.some({ provider, sessionId })
+    : Option.none();
 }

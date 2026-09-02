@@ -16,13 +16,19 @@ governance. T3 maps those semantic contracts into native environment HTTP contra
 No browser credential can reach the sidecar token, seed filesystem routes, or Claude Prompts
 authority credentials.
 
+Plan associations use `{environmentId, threadId}` as the stable T3 conversation. Provider resume
+ids are projected from `ProviderSessionDirectory` only as aliases. A direct Codex or Claude
+association can therefore be promoted when T3 later proves the same alias without creating a
+second conversation. Every association and suggestion endpoint requires an explicit `threadId`;
+the adapter never guesses from a project-wide or most-recent thread.
+
 ## Authorization
 
-| Operation                                             | Environment scope       |
-| ----------------------------------------------------- | ----------------------- |
-| Plans, vitals, catalog, prompt detail/history/compare | `orchestration:read`    |
-| Plan save/move/rename/create/annotations              | `orchestration:operate` |
-| Prompt review/apply/rollback                          | `access:write`          |
+| Operation                                                      | Environment scope       |
+| -------------------------------------------------------------- | ----------------------- |
+| Plans, plan associations/suggestions, vitals, catalog, prompts | `orchestration:read`    |
+| Plan association changes, save/move/rename/create/annotations  | `orchestration:operate` |
+| Prompt review/apply/rollback                                   | `access:write`          |
 
 Prompt apply and rollback carry a browser-generated idempotency request id. Agent Workbench forwards
 confirmed mutations to Claude Prompts MCP, which remains the sole writer and revision-history owner.

@@ -16,6 +16,24 @@
               "destructive": false
             },
             {
+              "id": "associations",
+              "label": "associations",
+              "enabled": true,
+              "destructive": false
+            },
+            {
+              "id": "suggest",
+              "label": "suggest",
+              "enabled": true,
+              "destructive": false
+            },
+            {
+              "id": "associate",
+              "label": "associate",
+              "enabled": true,
+              "destructive": false
+            },
+            {
               "id": "save",
               "label": "save",
               "enabled": true,
@@ -127,6 +145,25 @@
               "label": "read",
               "enabled": true,
               "destructive": false
+            },
+            {
+              "id": "associations",
+              "label": "associations",
+              "enabled": true,
+              "destructive": false
+            },
+            {
+              "id": "suggest",
+              "label": "suggest",
+              "enabled": true,
+              "destructive": false
+            },
+            {
+              "id": "associate",
+              "label": "associate",
+              "enabled": false,
+              "destructive": false,
+              "reason": "Administrative access is required."
             },
             {
               "id": "save",
@@ -248,6 +285,27 @@
             {
               "id": "read",
               "label": "read",
+              "enabled": false,
+              "destructive": false,
+              "reason": "Agent Workbench is unavailable."
+            },
+            {
+              "id": "associations",
+              "label": "associations",
+              "enabled": false,
+              "destructive": false,
+              "reason": "Agent Workbench is unavailable."
+            },
+            {
+              "id": "suggest",
+              "label": "suggest",
+              "enabled": false,
+              "destructive": false,
+              "reason": "Agent Workbench is unavailable."
+            },
+            {
+              "id": "associate",
+              "label": "associate",
               "enabled": false,
               "destructive": false,
               "reason": "Agent Workbench is unavailable."

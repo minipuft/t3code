@@ -55,6 +55,92 @@ export const AgentWorkbenchPlanMutationResult = Schema.Struct({
   size: Schema.optionalKey(Schema.Number),
 });
 
+export const AgentWorkbenchConversationRef = Schema.Struct({
+  host: TrimmedNonEmptyString,
+  environmentId: Schema.optionalKey(TrimmedNonEmptyString),
+  conversationId: TrimmedNonEmptyString,
+  project: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type AgentWorkbenchConversationRef = typeof AgentWorkbenchConversationRef.Type;
+
+export const AgentWorkbenchHarnessAlias = Schema.Struct({
+  provider: TrimmedNonEmptyString,
+  sessionId: TrimmedNonEmptyString,
+  conversation: AgentWorkbenchConversationRef,
+  observedAt: Schema.String,
+});
+
+export const AgentWorkbenchPlanAssociation = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  conversation: AgentWorkbenchConversationRef,
+  planId: TrimmedNonEmptyString,
+  planPath: TrimmedNonEmptyString,
+  role: Schema.Literals(["primary", "reference"]),
+  state: Schema.Literals(["current", "historical", "broken", "unverified"]),
+  source: Schema.Literals(["explicit", "workflow", "migration"]),
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+});
+
+export const AgentWorkbenchPlanAssociations = Schema.Struct({
+  protocolVersion: AgentWorkbenchProtocolVersion,
+  revision: NonNegativeInt,
+  conversation: AgentWorkbenchConversationRef,
+  primary: Schema.NullOr(AgentWorkbenchPlanAssociation),
+  references: Schema.Array(AgentWorkbenchPlanAssociation),
+  history: Schema.Array(AgentWorkbenchPlanAssociation),
+  aliases: Schema.Array(AgentWorkbenchHarnessAlias),
+});
+export type AgentWorkbenchPlanAssociations = typeof AgentWorkbenchPlanAssociations.Type;
+
+const AgentWorkbenchAssociationAliasInput = Schema.Struct({
+  provider: TrimmedNonEmptyString,
+  sessionId: TrimmedNonEmptyString,
+});
+
+export const AgentWorkbenchAssociationCommand = Schema.Struct({
+  op: Schema.Literals([
+    "use",
+    "reference.add",
+    "reference.remove",
+    "unlink",
+    "alias.add",
+    "repair",
+  ]),
+  conversation: AgentWorkbenchConversationRef,
+  planPath: Schema.optionalKey(TrimmedNonEmptyString),
+  associationId: Schema.optionalKey(TrimmedNonEmptyString),
+  provider: Schema.optionalKey(TrimmedNonEmptyString),
+  sessionId: Schema.optionalKey(TrimmedNonEmptyString),
+  source: Schema.optionalKey(Schema.Literals(["explicit", "workflow", "migration"])),
+  expectedRevision: Schema.optionalKey(NonNegativeInt),
+  aliases: Schema.optionalKey(Schema.Array(AgentWorkbenchAssociationAliasInput)),
+});
+export type AgentWorkbenchAssociationCommand = typeof AgentWorkbenchAssociationCommand.Type;
+
+export const AgentWorkbenchPlanSuggestionInput = Schema.Struct({
+  conversation: AgentWorkbenchConversationRef,
+  query: Schema.String,
+  project: Schema.optionalKey(TrimmedNonEmptyString),
+  limit: Schema.optionalKey(NonNegativeInt),
+});
+
+export const AgentWorkbenchPlanSuggestions = Schema.Struct({
+  protocolVersion: AgentWorkbenchProtocolVersion,
+  query: Schema.String,
+  suggestions: Schema.Array(
+    Schema.Struct({
+      planId: TrimmedNonEmptyString,
+      planPath: TrimmedNonEmptyString,
+      title: TrimmedNonEmptyString,
+      project: TrimmedNonEmptyString,
+      score: Schema.Number,
+      reasons: Schema.Array(Schema.String),
+    }),
+  ),
+});
+export type AgentWorkbenchPlanSuggestions = typeof AgentWorkbenchPlanSuggestions.Type;
+
 const AgentWorkbenchAnnotation = Schema.Struct({
   id: TrimmedNonEmptyString,
   kind: Schema.Literals(["comment", "delete"]),

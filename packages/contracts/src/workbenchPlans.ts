@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import { TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { NonNegativeInt, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 export const WorkbenchPlanPath = TrimmedNonEmptyString.check(
   Schema.isMaxLength(1_024),
@@ -108,6 +108,60 @@ export const WorkbenchPlanMutationResult = Schema.Struct({
   path: WorkbenchPlanPath,
 });
 export type WorkbenchPlanMutationResult = typeof WorkbenchPlanMutationResult.Type;
+
+export const WorkbenchConversationInput = Schema.Struct({
+  threadId: ThreadId,
+  project: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type WorkbenchConversationInput = typeof WorkbenchConversationInput.Type;
+
+export const WorkbenchPlanAssociation = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  planPath: WorkbenchPlanPath,
+  role: Schema.Literals(["primary", "reference"]),
+  state: Schema.Literals(["current", "historical", "broken", "unverified"]),
+  source: Schema.Literals(["explicit", "workflow", "migration"]),
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+});
+
+export const WorkbenchPlanAssociations = Schema.Struct({
+  revision: NonNegativeInt,
+  primary: Schema.NullOr(WorkbenchPlanAssociation),
+  references: Schema.Array(WorkbenchPlanAssociation),
+  history: Schema.Array(WorkbenchPlanAssociation),
+});
+export type WorkbenchPlanAssociations = typeof WorkbenchPlanAssociations.Type;
+
+export const WorkbenchPlanAssociationMutationInput = Schema.Struct({
+  ...WorkbenchConversationInput.fields,
+  op: Schema.Literals(["use", "reference.add", "reference.remove", "unlink", "repair"]),
+  planPath: Schema.optionalKey(WorkbenchPlanPath),
+  associationId: Schema.optionalKey(TrimmedNonEmptyString),
+  expectedRevision: Schema.optionalKey(NonNegativeInt),
+});
+export type WorkbenchPlanAssociationMutationInput =
+  typeof WorkbenchPlanAssociationMutationInput.Type;
+
+export const WorkbenchPlanSuggestionInput = Schema.Struct({
+  ...WorkbenchConversationInput.fields,
+  message: Schema.String.check(Schema.isMaxLength(64 * 1024)),
+});
+export type WorkbenchPlanSuggestionInput = typeof WorkbenchPlanSuggestionInput.Type;
+
+export const WorkbenchPlanSuggestions = Schema.Struct({
+  query: Schema.String,
+  items: Schema.Array(
+    Schema.Struct({
+      path: WorkbenchPlanPath,
+      title: TrimmedNonEmptyString,
+      project: TrimmedNonEmptyString,
+      score: Schema.Number,
+      reasons: Schema.Array(Schema.String),
+    }),
+  ),
+});
+export type WorkbenchPlanSuggestions = typeof WorkbenchPlanSuggestions.Type;
 
 export const WorkbenchPlanAnnotation = Schema.Struct({
   id: TrimmedNonEmptyString,

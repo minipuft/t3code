@@ -5,9 +5,66 @@ import {
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { projectPlanList, projectVitals } from "./WorkbenchPlans.ts";
+import {
+  projectAssociations,
+  projectPlanList,
+  projectSuggestions,
+  projectVitals,
+} from "./WorkbenchPlans.ts";
 
 describe("Agent Workbench plan projection", () => {
+  it("projects conversation associations and suggestions without exposing harness aliases", () => {
+    const conversation = {
+      host: "t3",
+      environmentId: "environment-1",
+      conversationId: "thread-1",
+    };
+    expect(
+      projectAssociations({
+        protocolVersion: "1.0.0",
+        revision: 2,
+        conversation,
+        primary: {
+          id: "association-1",
+          conversation,
+          planId: "demo/phase.md",
+          planPath: "demo/phase.md",
+          role: "primary",
+          state: "current",
+          source: "explicit",
+          createdAt: "2026-09-01T00:00:00.000Z",
+          updatedAt: "2026-09-01T00:00:00.000Z",
+        },
+        references: [],
+        history: [],
+        aliases: [
+          {
+            provider: "codex",
+            sessionId: "provider-thread",
+            conversation,
+            observedAt: "2026-09-01T00:00:00.000Z",
+          },
+        ],
+      }).primary,
+    ).toMatchObject({ planPath: "demo/phase.md", role: "primary", state: "current" });
+    expect(
+      projectSuggestions({
+        protocolVersion: "1.0.0",
+        query: "phase",
+        suggestions: [
+          {
+            planId: "demo/phase.md",
+            planPath: "demo/phase.md",
+            title: "Phase",
+            project: "demo",
+            score: 10,
+            reasons: ["same project"],
+          },
+        ],
+      }).items[0],
+    ).toMatchObject({ path: "demo/phase.md", title: "Phase" });
+  });
+
   it("projects portable plans into the existing native read model", () => {
     const input: AgentWorkbenchPlanList = {
       protocolVersion: "1.0.0",

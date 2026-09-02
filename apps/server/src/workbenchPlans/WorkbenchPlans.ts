@@ -1,5 +1,10 @@
 import {
   WorkbenchPlanPath,
+  type AgentWorkbenchPlanAssociations,
+  type AgentWorkbenchPlanSuggestions,
+  type WorkbenchConversationInput,
+  type WorkbenchPlanAssociationMutationInput,
+  type WorkbenchPlanAssociations,
   type AgentWorkbenchPlanList,
   type AgentWorkbenchVitals,
   type WorkbenchPlanAnnotationMutationInput,
@@ -10,6 +15,8 @@ import {
   type WorkbenchPlanSaveInput,
   type WorkbenchPlanSaveResult,
   type WorkbenchPlanSourceDocument,
+  type WorkbenchPlanSuggestionInput,
+  type WorkbenchPlanSuggestions,
   type WorkbenchPlanSummary,
   type WorkbenchQuotaWindow,
   type WorkbenchQuotaBinding,
@@ -39,6 +46,15 @@ export class WorkbenchPlansAdapterError extends Data.TaggedError("WorkbenchPlans
 export interface WorkbenchPlansShape {
   readonly list: Effect.Effect<WorkbenchPlanList>;
   readonly vitals: Effect.Effect<WorkbenchVitalsSnapshot>;
+  readonly associations: (
+    input: WorkbenchConversationInput,
+  ) => Effect.Effect<WorkbenchPlanAssociations, WorkbenchPlansAdapterError>;
+  readonly associate: (
+    input: WorkbenchPlanAssociationMutationInput,
+  ) => Effect.Effect<WorkbenchPlanAssociations, WorkbenchPlansAdapterError>;
+  readonly suggest: (
+    input: WorkbenchPlanSuggestionInput,
+  ) => Effect.Effect<WorkbenchPlanSuggestions, WorkbenchPlansAdapterError>;
   readonly read: (
     path: WorkbenchPlanPath,
   ) => Effect.Effect<WorkbenchPlanSourceDocument, WorkbenchPlansAdapterError>;
@@ -79,6 +95,18 @@ export function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPla
         windows: [],
       })),
     ),
+    associations: (input) =>
+      workbench
+        .planAssociations(input)
+        .pipe(Effect.map(projectAssociations), Effect.mapError(mapAdapterError)),
+    associate: (input) =>
+      workbench
+        .mutatePlanAssociation(input)
+        .pipe(Effect.map(projectAssociations), Effect.mapError(mapAdapterError)),
+    suggest: (input) =>
+      workbench
+        .suggestPlans(input)
+        .pipe(Effect.map(projectSuggestions), Effect.mapError(mapAdapterError)),
     read: (path) =>
       workbench.readPlan(path).pipe(
         Effect.map((value) => ({
@@ -176,6 +204,39 @@ export function projectVitals(value: AgentWorkbenchVitals, now: number): Workben
     },
     binding: projectQuotaBinding(value.binding),
     windows,
+  };
+}
+
+export function projectAssociations(
+  value: AgentWorkbenchPlanAssociations,
+): WorkbenchPlanAssociations {
+  const project = (item: NonNullable<AgentWorkbenchPlanAssociations["primary"]>) => ({
+    id: item.id,
+    planPath: WorkbenchPlanPath.make(item.planPath),
+    role: item.role,
+    state: item.state,
+    source: item.source,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+  });
+  return {
+    revision: value.revision,
+    primary: value.primary === null ? null : project(value.primary),
+    references: value.references.map(project),
+    history: value.history.map(project),
+  };
+}
+
+export function projectSuggestions(value: AgentWorkbenchPlanSuggestions): WorkbenchPlanSuggestions {
+  return {
+    query: value.query,
+    items: value.suggestions.map((item) => ({
+      path: WorkbenchPlanPath.make(item.planPath),
+      title: item.title,
+      project: item.project,
+      score: item.score,
+      reasons: [...item.reasons],
+    })),
   };
 }
 

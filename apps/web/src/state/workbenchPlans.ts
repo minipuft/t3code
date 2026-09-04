@@ -2,13 +2,18 @@ import { useAtomValue } from "@effect/atom-react";
 import { createWorkbenchPlansEnvironmentAtoms } from "@t3tools/client-runtime/state/workbench-plans";
 import type {
   EnvironmentId,
+  WorkbenchConversationInput,
   WorkbenchPlanAnnotationMutationInput,
   WorkbenchPlanAnnotations,
+  WorkbenchPlanAssociationMutationInput,
+  WorkbenchPlanAssociations,
   WorkbenchPlanList,
   WorkbenchPlanMutationInput,
   WorkbenchPlanPath,
   WorkbenchPlanSaveInput,
   WorkbenchPlanSourceDocument,
+  WorkbenchPlanSuggestionInput,
+  WorkbenchPlanSuggestions,
   WorkbenchVitalsSnapshot,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
@@ -51,6 +56,46 @@ export function useWorkbenchVitals(environmentId: EnvironmentId): {
   readonly refresh: () => void;
 } {
   const atom = workbenchPlansEnvironment.vitals({ environmentId, input: null });
+  const result = useAtomValue(atom);
+  const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
+  return {
+    data: queryValue(result),
+    error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
+    isPending: result.waiting,
+    refresh,
+  };
+}
+
+export function useWorkbenchPlanAssociations(
+  environmentId: EnvironmentId,
+  input: WorkbenchConversationInput,
+): {
+  readonly data: WorkbenchPlanAssociations | null;
+  readonly error: string | null;
+  readonly isPending: boolean;
+  readonly refresh: () => void;
+} {
+  const atom = workbenchPlansEnvironment.associations({ environmentId, input });
+  const result = useAtomValue(atom);
+  const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
+  return {
+    data: queryValue(result),
+    error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
+    isPending: result.waiting,
+    refresh,
+  };
+}
+
+export function useWorkbenchPlanSuggestions(
+  environmentId: EnvironmentId,
+  input: WorkbenchPlanSuggestionInput,
+): {
+  readonly data: WorkbenchPlanSuggestions | null;
+  readonly error: string | null;
+  readonly isPending: boolean;
+  readonly refresh: () => void;
+} {
+  const atom = workbenchPlansEnvironment.suggestions({ environmentId, input });
   const result = useAtomValue(atom);
   const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
   return {
@@ -109,6 +154,9 @@ export function useWorkbenchPlanActions(environmentId: EnvironmentId) {
   const annotateCommand = useAtomCommand(workbenchPlansEnvironment.annotate, {
     reportFailure: false,
   });
+  const associateCommand = useAtomCommand(workbenchPlansEnvironment.associate, {
+    reportFailure: false,
+  });
   return {
     save: useCallback(
       (input: WorkbenchPlanSaveInput) => saveCommand({ environmentId, input }),
@@ -121,6 +169,10 @@ export function useWorkbenchPlanActions(environmentId: EnvironmentId) {
     annotate: useCallback(
       (input: WorkbenchPlanAnnotationMutationInput) => annotateCommand({ environmentId, input }),
       [annotateCommand, environmentId],
+    ),
+    associate: useCallback(
+      (input: WorkbenchPlanAssociationMutationInput) => associateCommand({ environmentId, input }),
+      [associateCommand, environmentId],
     ),
   };
 }

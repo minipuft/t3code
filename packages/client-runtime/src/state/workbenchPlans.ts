@@ -1,8 +1,11 @@
 import type {
+  WorkbenchConversationInput,
   WorkbenchPlanAnnotationMutationInput,
+  WorkbenchPlanAssociationMutationInput,
   WorkbenchPlanMutationInput,
   WorkbenchPlanPath,
   WorkbenchPlanSaveInput,
+  WorkbenchPlanSuggestionInput,
 } from "@t3tools/contracts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -63,6 +66,19 @@ export function createWorkbenchPlansEnvironmentAtoms<R, E>(
       execute: (_input: null) =>
         withPreparedConnection((loader, prepared) => loader.vitals(prepared)),
     }),
+    associations: createEnvironmentQueryAtomFamily(runtime, {
+      label: "environment-data:workbench-plans:associations",
+      staleTimeMs: 3_000,
+      refreshIntervalMs: 5_000,
+      execute: (input: WorkbenchConversationInput) =>
+        withPreparedConnection((loader, prepared) => loader.associations(prepared, input)),
+    }),
+    suggestions: createEnvironmentQueryAtomFamily(runtime, {
+      label: "environment-data:workbench-plans:suggestions",
+      staleTimeMs: 30_000,
+      execute: (input: WorkbenchPlanSuggestionInput) =>
+        withPreparedConnection((loader, prepared) => loader.suggest(prepared, input)),
+    }),
     source: createEnvironmentQueryAtomFamily(runtime, {
       label: "environment-data:workbench-plans:source",
       staleTimeMs: 3_000,
@@ -105,6 +121,16 @@ export function createWorkbenchPlansEnvironmentAtoms<R, E>(
       concurrency: {
         mode: "serial",
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input.path]),
+      },
+    }),
+    associate: createEnvironmentCommand(runtime, {
+      label: "environment-data:workbench-plans:associate",
+      execute: (input: WorkbenchPlanAssociationMutationInput) =>
+        withPreparedConnection((loader, prepared) => loader.associate(prepared, input)),
+      scheduler: mutationScheduler,
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.threadId]),
       },
     }),
   };

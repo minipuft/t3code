@@ -22,6 +22,9 @@ export const RIGHT_PANEL_KINDS = [
   "terminal",
   "pull-request",
   "agents",
+  "plan",
+  "actions",
+  "skills",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
 
@@ -62,13 +65,17 @@ export type RightPanelSurface =
       repository: string;
       number: number;
     }
-  | { id: "agents"; kind: "agents" };
+  | { id: "agents"; kind: "agents" }
+  | { id: "plan"; kind: "plan" }
+  | { id: "actions"; kind: "actions" }
+  | { id: "skills"; kind: "skills" };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
-// v9 removed the "plan" surface kind (plans render inline in the transcript).
+// v9 removed the legacy plan surface (plans rendered inline in the transcript).
 // v10 keys pull-request surfaces by reference instead of a singleton tab.
 // v11 stops persisting the pull-request list's shared panel, so a restart opens the page fresh.
-const RIGHT_PANEL_STORAGE_VERSION = 11;
+// v12 adds contextual Plan, Actions, and Skills singleton surfaces with strict kind migration.
+const RIGHT_PANEL_STORAGE_VERSION = 12;
 
 /**
  * The pull-request list's shared panel (see PULL_REQUESTS_PANEL_ID in the route) is session
@@ -136,6 +143,12 @@ const singletonSurface = (
       return { id: "files", kind };
     case "agents":
       return { id: "agents", kind };
+    case "plan":
+      return { id: "plan", kind };
+    case "actions":
+      return { id: "actions", kind };
+    case "skills":
+      return { id: "skills", kind };
   }
 };
 
@@ -263,9 +276,38 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
                 threadState && typeof threadState === "object" ? threadState : null;
               const surfaces = Array.isArray(validThreadState?.surfaces)
                 ? validThreadState.surfaces.flatMap<RightPanelSurface>((surface) => {
-                    // Dropped surface kind: plans now render inline in the
-                    // transcript (v9).
-                    if ((surface as { kind?: string }).kind === "plan") return [];
+                    if (!surface || typeof surface !== "object") return [];
+                    const candidate = surface as { readonly id?: unknown; readonly kind?: unknown };
+                    if (
+                      typeof candidate.kind !== "string" ||
+                      !RIGHT_PANEL_KINDS.includes(candidate.kind as RightPanelKind)
+                    ) {
+                      return [];
+                    }
+                    if (
+                      candidate.kind === "diff" ||
+                      candidate.kind === "files" ||
+                      candidate.kind === "agents" ||
+                      candidate.kind === "plan" ||
+                      candidate.kind === "actions" ||
+                      candidate.kind === "skills"
+                    ) {
+                      return candidate.id === candidate.kind ? [surface as RightPanelSurface] : [];
+                    }
+                    if (surface.kind === "preview") {
+                      if (
+                        surface.id === "browser:new" &&
+                        "resourceId" in surface &&
+                        surface.resourceId === null
+                      ) {
+                        return [surface];
+                      }
+                      return "resourceId" in surface &&
+                        typeof surface.resourceId === "string" &&
+                        surface.id === `browser:${surface.resourceId}`
+                        ? [surface]
+                        : [];
+                    }
                     if (surface.kind === "file") {
                       const revealLine =
                         typeof surface.revealLine === "number" &&
@@ -299,7 +341,7 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
                         }),
                       ];
                     }
-                    if (surface.kind !== "terminal") return [surface];
+                    if (surface.kind !== "terminal") return [];
                     if (
                       !("resourceId" in surface) ||
                       typeof surface.resourceId !== "string" ||
@@ -341,8 +383,7 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
                 : rawActiveSurfaceId === "pull-request"
                   ? (surfaces.find((surface) => surface.kind === "pull-request")?.id ?? null)
                   : null;
-              // A migration that dropped every surface (e.g. plan-only panels
-              // in v9) must not reopen an empty panel.
+              // A migration that dropped every invalid surface must not reopen an empty panel.
               const isOpen =
                 surfaces.length > 0 &&
                 (typeof validThreadState?.isOpen === "boolean"

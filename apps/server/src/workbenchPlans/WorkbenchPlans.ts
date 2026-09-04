@@ -172,7 +172,7 @@ export function projectPlanList(value: AgentWorkbenchPlanList): WorkbenchPlanLis
           : "available",
       reason: value.reason ?? null,
     },
-    items,
+    items: [...new Map(items.map((item) => [item.path, item])).values()],
   };
 }
 

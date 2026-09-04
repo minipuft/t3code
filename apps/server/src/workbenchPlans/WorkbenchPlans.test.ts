@@ -105,6 +105,12 @@ describe("Agent Workbench plan projection", () => {
       tags: ["demo"],
       binding: { title: "Phase", threads: 2, confirmed: true, deviations: 1 },
     });
+
+    const duplicatePath = projectPlanList({
+      ...input,
+      plans: [...input.plans, { ...input.plans[0]!, id: "inventory-copy" }],
+    });
+    expect(duplicatePath.items).toHaveLength(1);
   });
 
   it("keeps used, expected, and reset data when projecting portable vitals", () => {

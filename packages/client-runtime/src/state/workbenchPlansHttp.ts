@@ -1,6 +1,9 @@
 import type {
+  WorkbenchConversationInput,
   WorkbenchPlanAnnotationMutationInput,
   WorkbenchPlanAnnotations,
+  WorkbenchPlanAssociationMutationInput,
+  WorkbenchPlanAssociations,
   WorkbenchPlanList,
   WorkbenchPlanMutationInput,
   WorkbenchPlanMutationResult,
@@ -8,6 +11,8 @@ import type {
   WorkbenchPlanSaveInput,
   WorkbenchPlanSaveResult,
   WorkbenchPlanSourceDocument,
+  WorkbenchPlanSuggestionInput,
+  WorkbenchPlanSuggestions,
   WorkbenchVitalsSnapshot,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -86,6 +91,60 @@ export const fetchEnvironmentWorkbenchPlans = Effect.fn(
     requestUrl,
     request: (headers) => client.workbenchPlans.list({ headers }),
   });
+});
+
+export const fetchEnvironmentWorkbenchPlanAssociations = Effect.fn(
+  "clientRuntime.state.fetchEnvironmentWorkbenchPlanAssociations",
+)(function* (input: WorkbenchPlansRequestContext & { readonly value: WorkbenchConversationInput }) {
+  const requestUrl = environmentQueryUrl(
+    input.prepared.httpBaseUrl,
+    "/api/workbench/plans/associations",
+    input.value.project === undefined
+      ? { threadId: input.value.threadId }
+      : { threadId: input.value.threadId, project: input.value.project },
+  );
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  return yield* executeRequest({
+    ...input,
+    method: "GET",
+    requestUrl,
+    request: (headers) => client.workbenchPlans.associations({ payload: input.value, headers }),
+  });
+});
+
+export const associateEnvironmentWorkbenchPlan = Effect.fn(
+  "clientRuntime.state.associateEnvironmentWorkbenchPlan",
+)(function* (
+  input: WorkbenchPlansRequestContext & {
+    readonly value: WorkbenchPlanAssociationMutationInput;
+  },
+) {
+  const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
+  const requestUrl = urlBuilder.workbenchPlans.associate();
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  return yield* executeRequest({
+    ...input,
+    method: "POST",
+    requestUrl,
+    request: (headers) => client.workbenchPlans.associate({ payload: input.value, headers }),
+  });
+});
+
+export const suggestEnvironmentWorkbenchPlans = Effect.fn(
+  "clientRuntime.state.suggestEnvironmentWorkbenchPlans",
+)(function* (
+  input: WorkbenchPlansRequestContext & { readonly value: WorkbenchPlanSuggestionInput },
+) {
+  const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
+  const requestUrl = urlBuilder.workbenchPlans.suggest();
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const suggestions = yield* executeRequest({
+    ...input,
+    method: "POST",
+    requestUrl,
+    request: (headers) => client.workbenchPlans.suggest({ payload: input.value, headers }),
+  });
+  return { ...suggestions, items: suggestions.items.slice(0, 3) };
 });
 
 export const fetchEnvironmentWorkbenchVitals = Effect.fn(
@@ -203,6 +262,18 @@ export class WorkbenchPlansLoader extends Context.Service<
     readonly vitals: (
       prepared: PreparedConnection,
     ) => Effect.Effect<WorkbenchVitalsSnapshot, RemoteEnvironmentRequestError>;
+    readonly associations: (
+      prepared: PreparedConnection,
+      input: WorkbenchConversationInput,
+    ) => Effect.Effect<WorkbenchPlanAssociations, RemoteEnvironmentRequestError>;
+    readonly associate: (
+      prepared: PreparedConnection,
+      input: WorkbenchPlanAssociationMutationInput,
+    ) => Effect.Effect<WorkbenchPlanAssociations, RemoteEnvironmentRequestError>;
+    readonly suggest: (
+      prepared: PreparedConnection,
+      input: WorkbenchPlanSuggestionInput,
+    ) => Effect.Effect<WorkbenchPlanSuggestions, RemoteEnvironmentRequestError>;
     readonly read: (
       prepared: PreparedConnection,
       path: WorkbenchPlanPath,
@@ -240,6 +311,12 @@ export const workbenchPlansLoaderLayer: Layer.Layer<
     return WorkbenchPlansLoader.of({
       list: (prepared) => provideHttp(fetchEnvironmentWorkbenchPlans({ prepared, signer })),
       vitals: (prepared) => provideHttp(fetchEnvironmentWorkbenchVitals({ prepared, signer })),
+      associations: (prepared, value) =>
+        provideHttp(fetchEnvironmentWorkbenchPlanAssociations({ prepared, value, signer })),
+      associate: (prepared, value) =>
+        provideHttp(associateEnvironmentWorkbenchPlan({ prepared, value, signer })),
+      suggest: (prepared, value) =>
+        provideHttp(suggestEnvironmentWorkbenchPlans({ prepared, value, signer })),
       read: (prepared, path) =>
         provideHttp(fetchEnvironmentWorkbenchPlanSource({ prepared, path, signer })),
       save: (prepared, value) =>

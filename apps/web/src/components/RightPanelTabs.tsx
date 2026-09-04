@@ -2,11 +2,14 @@ import type { ContextMenuItem, PreviewSessionSnapshot, PullRequestState } from "
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
   Bot,
+  BookOpenText,
   FileDiff,
   Files,
+  GraduationCap,
   GitPullRequest,
   Globe2,
   Plus,
+  Sparkles,
   TerminalSquare,
   Volume2,
   VolumeOff,
@@ -74,6 +77,11 @@ interface RightPanelTabsProps {
   onAddFiles: () => void;
   onAddPullRequest: () => void;
   onAddAgents: () => void;
+  workbenchSurfaces?: {
+    readonly onAddPlan: () => void;
+    readonly onAddActions: () => void;
+    readonly onAddSkills: () => void;
+  };
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -252,6 +260,7 @@ function RightPanelEmptyState(props: {
   onAddFiles: () => void;
   onAddPullRequest: () => void;
   onAddAgents: () => void;
+  workbenchSurfaces?: RightPanelTabsProps["workbenchSurfaces"];
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -324,6 +333,40 @@ function RightPanelEmptyState(props: {
       onClick: props.onAddAgents,
       badgeCount: props.liveAgentCount,
     },
+    ...(props.workbenchSurfaces
+      ? [
+          {
+            label: "Plan",
+            description: "Keep this thread's plans in view.",
+            icon: BookOpenText,
+            shortcut: "L",
+            available: true,
+            disabledReason: "",
+            onClick: props.workbenchSurfaces.onAddPlan,
+            badgeCount: 0,
+          },
+          {
+            label: "Actions",
+            description: "Find and insert prompt workflows.",
+            icon: Sparkles,
+            shortcut: "Q",
+            available: true,
+            disabledReason: "",
+            onClick: props.workbenchSurfaces.onAddActions,
+            badgeCount: 0,
+          },
+          {
+            label: "Skills",
+            description: "Browse the active skill library.",
+            icon: GraduationCap,
+            shortcut: "S",
+            available: true,
+            disabledReason: "",
+            onClick: props.workbenchSurfaces.onAddSkills,
+            badgeCount: 0,
+          },
+        ]
+      : []),
   ] as const;
 
   type SurfaceAction = (typeof actions)[number];
@@ -508,6 +551,12 @@ function surfaceTitle(
       return `#${surface.number}`;
     case "agents":
       return "Agents";
+    case "plan":
+      return "Plan";
+    case "actions":
+      return "Actions";
+    case "skills":
+      return "Skills";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
@@ -593,6 +642,12 @@ function SurfaceIcon({
     }
     case "agents":
       return <Bot className="size-3 shrink-0" />;
+    case "plan":
+      return <BookOpenText className="size-3 shrink-0" />;
+    case "actions":
+      return <Sparkles className="size-3 shrink-0" />;
+    case "skills":
+      return <GraduationCap className="size-3 shrink-0" />;
   }
 }
 
@@ -651,6 +706,34 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       disabledReason: SURFACE_DISABLED_REASONS.agents,
       onClick: props.onAddAgents,
     },
+    ...(props.workbenchSurfaces
+      ? [
+          {
+            label: "Plan",
+            icon: BookOpenText,
+            shortcut: "L",
+            available: true,
+            disabledReason: "",
+            onClick: props.workbenchSurfaces.onAddPlan,
+          },
+          {
+            label: "Actions",
+            icon: Sparkles,
+            shortcut: "Q",
+            available: true,
+            disabledReason: "",
+            onClick: props.workbenchSurfaces.onAddActions,
+          },
+          {
+            label: "Skills",
+            icon: GraduationCap,
+            shortcut: "S",
+            available: true,
+            disabledReason: "",
+            onClick: props.workbenchSurfaces.onAddSkills,
+          },
+        ]
+      : []),
   ] as const;
 
   const handleAddSurfaceMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -938,6 +1021,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddFiles={props.onAddFiles}
             onAddPullRequest={props.onAddPullRequest}
             onAddAgents={props.onAddAgents}
+            workbenchSurfaces={props.workbenchSurfaces}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
             diffAvailable={props.diffAvailable}

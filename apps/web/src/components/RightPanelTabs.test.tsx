@@ -171,6 +171,53 @@ describe("surface shortcuts", () => {
   });
 });
 
+describe("Workbench surfaces", () => {
+  it("exposes Plan, Actions, and Skills through the native empty-state launcher", () => {
+    const html = renderToStaticMarkup(
+      <RightPanelTabs
+        mode="inline"
+        surfaces={[]}
+        activeSurfaceId={null}
+        pendingSurfaceIds={new Set()}
+        previewSessions={{}}
+        desktopByTabId={{}}
+        terminalLabelsById={new Map()}
+        onActivate={() => undefined}
+        onCloseSurface={() => undefined}
+        onCloseOtherSurfaces={() => undefined}
+        onCloseSurfacesToRight={() => undefined}
+        onCloseAllSurfaces={() => undefined}
+        onCopyFilePath={() => undefined}
+        onAddBrowser={() => undefined}
+        onAddTerminal={() => undefined}
+        onAddPullRequest={() => undefined}
+        onAddDiff={() => undefined}
+        onAddFiles={() => undefined}
+        onAddAgents={() => undefined}
+        workbenchSurfaces={{
+          onAddPlan: () => undefined,
+          onAddActions: () => undefined,
+          onAddSkills: () => undefined,
+        }}
+        liveAgentCount={0}
+        browserAvailable
+        terminalAvailable={false}
+        diffAvailable={false}
+        filesAvailable={false}
+        pullRequestAvailable={false}
+        agentsAvailable={false}
+      >
+        <div />
+      </RightPanelTabs>,
+    );
+
+    expect(html).toContain("Plan");
+    expect(html).toContain("Actions");
+    expect(html).toContain("Skills");
+    expect(html).toContain('data-surface-launcher-keys="BLQS"');
+  });
+});
+
 describe("surface shortcut typing contexts", () => {
   // Selector-aware stub: closest() answers only tokens the combined selector
   // would actually match, mirroring how the browser resolves it.

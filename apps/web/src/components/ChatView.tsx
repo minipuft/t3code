@@ -170,6 +170,8 @@ import { PullRequestDetailGhost } from "./pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavailableState";
 import { RightPanelTabs, type PullRequestTabStatus } from "./RightPanelTabs";
 import { AgentsPanel } from "./AgentsPanel";
+import { WorkbenchCatalogContextPanel } from "./workbench/WorkbenchCatalogContextPanel";
+import { WorkbenchPlanContextPanel } from "./workbench/WorkbenchPlanContextPanel";
 import {
   deriveAgentPanelModel,
   foldSubagentActivities,
@@ -3541,6 +3543,33 @@ function ChatViewContent(props: ChatViewProps) {
     if (!activeThreadRef) return;
     useRightPanelStore.getState().open(activeThreadRef, "agents");
   }, [activeThreadRef]);
+  const addPlanSurface = useCallback(() => {
+    if (!activeThreadRef) return;
+    useRightPanelStore.getState().open(activeThreadRef, "plan");
+  }, [activeThreadRef]);
+  const addActionsSurface = useCallback(() => {
+    if (!activeThreadRef) return;
+    useRightPanelStore.getState().open(activeThreadRef, "actions");
+  }, [activeThreadRef]);
+  const addSkillsSurface = useCallback(() => {
+    if (!activeThreadRef) return;
+    useRightPanelStore.getState().open(activeThreadRef, "skills");
+  }, [activeThreadRef]);
+  const insertWorkbenchInvocation = useCallback(
+    (invocation: string) => {
+      const inserted = composerRef.current?.insertTextAtEnd(invocation, {
+        ensureLeadingBoundary: true,
+      });
+      if (!inserted) {
+        toastManager.add({
+          type: "warning",
+          title: "Composer is not ready",
+          description: "Try inserting the workflow again when the composer is available.",
+        });
+      }
+    },
+    [composerRef],
+  );
   const openFileSurface = useCallback(
     (relativePath: string) => {
       if (!activeThreadRef || !activeProject) return;
@@ -6898,6 +6927,9 @@ function ChatViewContent(props: ChatViewProps) {
       {panelToggleControls}
     </div>
   );
+  const firstUserMessageText = activeThread.messages.find(
+    (message) => message.role === "user",
+  )?.text;
   const rightPanelContent = activeThreadRef ? (
     activeRightPanelSurface?.kind === "preview" ? (
       <Suspense fallback={null}>
@@ -6984,6 +7016,30 @@ function ChatViewContent(props: ChatViewProps) {
         model={agentPanelModel}
         environmentId={activeThreadRef?.environmentId ?? null}
         threadId={activeThreadRef?.threadId ?? null}
+      />
+    ) : activeRightPanelSurface?.kind === "plan" ? (
+      <WorkbenchPlanContextPanel
+        environmentId={activeThreadRef.environmentId}
+        threadRef={activeThreadRef}
+        project={
+          activeProject?.title ?? activeProject?.workspaceRoot.match(/[^\\/]+$/)?.[0] ?? "Project"
+        }
+        {...(activeProject?.workspaceRoot === undefined
+          ? {}
+          : { cwd: activeProject.workspaceRoot })}
+        {...(firstUserMessageText === undefined ? {} : { firstUserMessage: firstUserMessageText })}
+      />
+    ) : activeRightPanelSurface?.kind === "actions" ? (
+      <WorkbenchCatalogContextPanel
+        environmentId={activeThreadRef.environmentId}
+        module="prompts"
+        onInsertInvocation={insertWorkbenchInvocation}
+      />
+    ) : activeRightPanelSurface?.kind === "skills" ? (
+      <WorkbenchCatalogContextPanel
+        environmentId={activeThreadRef.environmentId}
+        module="skills"
+        onInsertInvocation={insertWorkbenchInvocation}
       />
     ) : (activeRightPanelSurface?.kind === "files" || activeRightPanelSurface?.kind === "file") &&
       activeProject &&
@@ -7462,6 +7518,11 @@ function ChatViewContent(props: ChatViewProps) {
           onAddFiles={addFilesSurface}
           onAddPullRequest={addPullRequestSurface}
           onAddAgents={addAgentsSurface}
+          workbenchSurfaces={{
+            onAddPlan: addPlanSurface,
+            onAddActions: addActionsSurface,
+            onAddSkills: addSkillsSurface,
+          }}
           browserAvailable={isPreviewSupportedInRuntime()}
           terminalAvailable={activeProject !== null}
           diffAvailable={isServerThread && isGitRepo}
@@ -7502,6 +7563,11 @@ function ChatViewContent(props: ChatViewProps) {
             onAddFiles={addFilesSurface}
             onAddPullRequest={addPullRequestSurface}
             onAddAgents={addAgentsSurface}
+            workbenchSurfaces={{
+              onAddPlan: addPlanSurface,
+              onAddActions: addActionsSurface,
+              onAddSkills: addSkillsSurface,
+            }}
             browserAvailable={isPreviewSupportedInRuntime()}
             terminalAvailable={activeProject !== null}
             diffAvailable={isServerThread && isGitRepo}

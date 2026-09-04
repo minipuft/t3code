@@ -8,7 +8,7 @@ import {
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
-import { WorkbenchCatalogView } from "./WorkbenchCatalogView";
+import { groupCatalogItems, WorkbenchCatalogView } from "./WorkbenchCatalogView";
 import { WorkbenchModuleRail } from "./WorkbenchPage";
 import { filterWorkbenchPlans, markdownHeadingBefore, PlanList } from "./WorkbenchPlansPanel";
 
@@ -113,6 +113,26 @@ describe("WorkbenchCatalogView", () => {
     expect(markup).toContain("string · required");
     expect(markup).toContain("Composer mapping");
     expect(markup).toContain("Connect this view to an environment");
+  });
+
+  it("adapts the catalog to the compact Actions surface with an insert affordance", () => {
+    const markup = renderCatalog({
+      initialSelectedItemId: "strategicImplement",
+      variant: "compact",
+      onInsertInvocation: () => undefined,
+    });
+    expect(markup).toContain("Actions");
+    expect(markup).toContain("&gt;&gt;strategicImplement");
+    expect(markup).toContain("Insert");
+  });
+
+  it("groups actions by category and skills by scope without changing catalog authority", () => {
+    expect(groupCatalogItems(catalog.items).map((group) => group.label)).toEqual([
+      "development",
+      "Unscoped",
+    ]);
+    const markup = renderCatalog({ variant: "compact" });
+    expect(markup).toContain('aria-label="development"');
   });
 
   it("renders null-safe skill metadata and multi-provider aggregation", () => {

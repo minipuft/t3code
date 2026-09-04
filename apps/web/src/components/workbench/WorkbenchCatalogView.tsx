@@ -42,6 +42,8 @@ export function WorkbenchCatalogView(props: {
   readonly isPending: boolean;
   readonly module: "prompts" | "skills";
   readonly onRefresh: () => void;
+  readonly onInsertInvocation?: (invocation: string) => void;
+  readonly variant?: "page" | "compact";
 }) {
   const [query, setQuery] = useState("");
   const [selectedItemId, setSelectedItemId] = useState<string | null>(
@@ -58,19 +60,26 @@ export function WorkbenchCatalogView(props: {
   );
   const usableSelectionId = retainWorkbenchSelection(selectedItemId, items);
   const selectedItem = items.find((item) => item.id === usableSelectionId) ?? null;
+  const groups = useMemo(() => groupCatalogItems(items), [items]);
   const capability = props.data?.capability ?? null;
   const capabilityMessage =
     props.error ??
     (capability?.status === "available"
       ? null
       : (capability?.reason ?? "The configured prompt catalog is not available."));
-  const title = props.module === "prompts" ? "Prompts" : "Skills";
+  const compact = props.variant === "compact";
+  const title = props.module === "prompts" ? (compact ? "Actions" : "Prompts") : "Skills";
 
   return (
-    <section className="grid min-h-[28rem] gap-5" aria-label={`${title} library`}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+    <section
+      className={cn("grid gap-5", compact ? "content-start" : "min-h-[28rem]")}
+      aria-label={`${title} library`}
+    >
+      <div className={cn("flex flex-col gap-3", !compact && "sm:flex-row sm:items-end")}>
         <div className="min-w-0 flex-1">
-          <h2 className="font-semibold text-xl tracking-tight">{title}</h2>
+          <h2 className={cn("font-semibold tracking-tight", compact ? "text-base" : "text-xl")}>
+            {title}
+          </h2>
           <p className="mt-1 text-muted-foreground text-sm">
             {props.module === "prompts"
               ? "Inspect workflow inputs before inserting an action from the composer."
@@ -81,7 +90,7 @@ export function WorkbenchCatalogView(props: {
           nativeInput
           type="search"
           value={query}
-          className="sm:w-72"
+          className={compact ? "w-full" : "sm:w-72"}
           aria-label={`Search ${title}`}
           placeholder={`Search ${title.toLowerCase()}`}
           onChange={(event) => setQuery(event.currentTarget.value)}
@@ -114,15 +123,32 @@ export function WorkbenchCatalogView(props: {
           }
         />
       ) : (
-        <div className="grid min-h-0 gap-5 lg:grid-cols-[minmax(15rem,0.8fr)_minmax(20rem,1.2fr)]">
-          <div className="grid content-start gap-1">
-            {items.map((item) => (
-              <CatalogRow
-                key={item.id}
-                item={item}
-                selected={item.id === usableSelectionId}
-                onSelect={() => setSelectedItemId(item.id)}
-              />
+        <div
+          className={cn(
+            "grid min-h-0 gap-5",
+            compact
+              ? "grid-rows-[minmax(8rem,auto)_auto]"
+              : "lg:grid-cols-[minmax(15rem,0.8fr)_minmax(20rem,1.2fr)]",
+          )}
+        >
+          <div
+            className={cn("grid content-start gap-3", compact && "max-h-72 overflow-y-auto pr-1")}
+          >
+            {groups.map((group) => (
+              <section key={group.label} className="grid gap-1" aria-label={group.label}>
+                <h3 className="px-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  {group.label}
+                </h3>
+                {group.items.map((item) => (
+                  <CatalogRow
+                    key={item.id}
+                    item={item}
+                    selected={item.id === usableSelectionId}
+                    compact={compact}
+                    onSelect={() => setSelectedItemId(item.id)}
+                  />
+                ))}
+              </section>
             ))}
           </div>
           <div className="min-h-64">
@@ -132,6 +158,10 @@ export function WorkbenchCatalogView(props: {
                 {...(props.environmentId === undefined
                   ? {}
                   : { environmentId: props.environmentId })}
+                {...(props.onInsertInvocation === undefined
+                  ? {}
+                  : { onInsertInvocation: props.onInsertInvocation })}
+                compact={compact}
               />
             ) : (
               <WorkbenchEmptyState
@@ -146,17 +176,32 @@ export function WorkbenchCatalogView(props: {
   );
 }
 
+export function groupCatalogItems(
+  items: ReadonlyArray<WorkflowCatalogItem>,
+): ReadonlyArray<{ readonly label: string; readonly items: ReadonlyArray<WorkflowCatalogItem> }> {
+  const groups = new Map<string, WorkflowCatalogItem[]>();
+  for (const item of items) {
+    const label = item.kind === "prompt" ? item.category : (item.scope ?? "Unscoped");
+    const group = groups.get(label) ?? [];
+    group.push(item);
+    groups.set(label, group);
+  }
+  return [...groups].map(([label, groupedItems]) => ({ label, items: groupedItems }));
+}
+
 function CatalogRow(props: {
   readonly item: WorkflowCatalogItem;
   readonly selected: boolean;
   readonly onSelect: () => void;
+  readonly compact?: boolean;
 }) {
   return (
     <button
       type="button"
       aria-pressed={props.selected}
       className={cn(
-        "grid min-w-0 gap-1 rounded-xl border px-4 py-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+        "grid min-w-0 gap-1 border text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+        props.compact ? "rounded-lg px-3 py-2" : "rounded-xl px-4 py-3",
         props.selected
           ? "border-primary/35 bg-primary/8"
           : "border-transparent hover:border-border/60 hover:bg-muted/32",
@@ -181,6 +226,8 @@ function CatalogRow(props: {
 function CatalogDetail(props: {
   readonly item: WorkflowCatalogItem;
   readonly environmentId?: EnvironmentId;
+  readonly onInsertInvocation?: (invocation: string) => void;
+  readonly compact?: boolean;
 }) {
   const { item } = props;
   const invocation = item.kind === "prompt" ? `>>${item.id}` : `$${item.name}`;
@@ -196,7 +243,12 @@ function CatalogDetail(props: {
   };
 
   return (
-    <article className="grid gap-5 rounded-2xl border border-border/60 bg-card p-5 shadow-xs/5">
+    <article
+      className={cn(
+        "grid border border-border/60 bg-card shadow-xs/5",
+        props.compact ? "gap-4 rounded-xl p-4" : "gap-5 rounded-2xl p-5",
+      )}
+    >
       <div className="grid gap-2">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
           {item.kind}
@@ -213,6 +265,11 @@ function CatalogDetail(props: {
           {copyState === "copied" ? <CheckIcon /> : <CopyIcon />}
           {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
         </Button>
+        {props.onInsertInvocation ? (
+          <Button size="xs" onClick={() => props.onInsertInvocation?.(invocation)}>
+            Insert
+          </Button>
+        ) : null}
       </div>
 
       {item.kind === "prompt" ? (

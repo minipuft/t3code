@@ -22,6 +22,16 @@ association can therefore be promoted when T3 later proves the same alias withou
 second conversation. Every association and suggestion endpoint requires an explicit `threadId`;
 the adapter never guesses from a project-wide or most-recent thread.
 
+The web client consumes those contracts through `packages/client-runtime`; it does not call Agent
+Workbench directly. The full Workbench and contextual right-panel surfaces reuse the same list,
+source, association, suggestion, and catalog atoms. The contextual Plan surface scopes reads and
+mutations to the routed `{environmentId, threadId}`. Actions and Skills insert text through the
+active composer's existing imperative boundary rather than dispatching a turn.
+
+Plan Markdown uses the chat renderer for GFM, sanitized HTML, links, and images. Mermaid 11.17.2 is
+loaded only after a Mermaid fence appears, initializes with strict security, and leaves source plus
+an error/retry state visible when rendering fails. Vitals remains a full-page module.
+
 ## Authorization
 
 | Operation                                                      | Environment scope       |

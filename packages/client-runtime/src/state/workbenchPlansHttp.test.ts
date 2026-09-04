@@ -1,4 +1,4 @@
-import { EnvironmentId, WorkbenchPlanPath } from "@t3tools/contracts";
+import { EnvironmentId, ThreadId, WorkbenchPlanPath } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -7,12 +7,15 @@ import { PrimaryConnectionTarget, type PreparedConnection } from "../connection/
 import { ManagedRelayDpopSigner } from "../relay/managedRelay.ts";
 import { remoteHttpClientLayer } from "../rpc/http.ts";
 import {
+  associateEnvironmentWorkbenchPlan,
+  fetchEnvironmentWorkbenchPlanAssociations,
   fetchEnvironmentWorkbenchPlanAnnotations,
   fetchEnvironmentWorkbenchPlanSource,
   fetchEnvironmentWorkbenchPlans,
   fetchEnvironmentWorkbenchVitals,
   mutateEnvironmentWorkbenchPlan,
   saveEnvironmentWorkbenchPlan,
+  suggestEnvironmentWorkbenchPlans,
 } from "./workbenchPlansHttp.ts";
 
 const TARGET = new PrimaryConnectionTarget({
@@ -173,6 +176,83 @@ describe("Workbench plan environment HTTP", () => {
       const headers = new Headers(calls[0]?.[1].headers);
       expect(headers.get("authorization")).toBe("DPoP test-token");
       expect(headers.get("dpop")).toBe("test-proof");
+    }),
+  );
+
+  it.effect("reads and mutates explicit-thread associations and bounds advisory suggestions", () =>
+    Effect.gen(function* () {
+      const calls: Array<readonly [RequestInfo | URL, RequestInit]> = [];
+      const threadId = ThreadId.make("thread-1");
+      const associationSnapshot = {
+        revision: 2,
+        primary: null,
+        references: [],
+        history: [],
+      };
+      const suggestion = (index: number) => ({
+        path: WorkbenchPlanPath.make(`t3code/phase-${index}.md`),
+        title: `Phase ${index}`,
+        project: "t3code",
+        score: 1 - index / 10,
+        reasons: ["title"],
+      });
+      const fetchFn = ((request, init) => {
+        calls.push([request, init ?? {}]);
+        if (String(request).endsWith("/suggestions")) {
+          return Promise.resolve(
+            Response.json({ query: "phase", items: [1, 2, 3, 4].map(suggestion) }),
+          );
+        }
+        return Promise.resolve(Response.json(associationSnapshot));
+      }) satisfies typeof fetch;
+      const layer = remoteHttpClientLayer(fetchFn);
+
+      yield* fetchEnvironmentWorkbenchPlanAssociations({
+        prepared: PREPARED,
+        signer: Option.none(),
+        value: { threadId, project: "t3code" },
+      }).pipe(Effect.provide(layer));
+      yield* associateEnvironmentWorkbenchPlan({
+        prepared: PREPARED,
+        signer: Option.none(),
+        value: {
+          threadId,
+          project: "t3code",
+          op: "use",
+          planPath: PLAN_PATH,
+          expectedRevision: 2,
+        },
+      }).pipe(Effect.provide(layer));
+      const suggestions = yield* suggestEnvironmentWorkbenchPlans({
+        prepared: PREPARED,
+        signer: Option.none(),
+        value: { threadId, project: "t3code", message: "phase" },
+      }).pipe(Effect.provide(layer));
+
+      expect(String(calls[0]?.[0])).toBe(
+        "https://environment.example.test/api/workbench/plans/associations?threadId=thread-1&project=t3code",
+      );
+      expect(calls[0]?.[1].method).toBe("GET");
+      expect(requestBody(calls[1]?.[1] ?? {})).toEqual({
+        threadId,
+        project: "t3code",
+        op: "use",
+        planPath: PLAN_PATH,
+        expectedRevision: 2,
+      });
+      expect(String(calls[2]?.[0])).toBe(
+        "https://environment.example.test/api/workbench/plans/suggestions",
+      );
+      expect(requestBody(calls[2]?.[1] ?? {})).toEqual({
+        threadId,
+        project: "t3code",
+        message: "phase",
+      });
+      expect(suggestions.items.map((item) => item.title)).toEqual([
+        "Phase 1",
+        "Phase 2",
+        "Phase 3",
+      ]);
     }),
   );
 });

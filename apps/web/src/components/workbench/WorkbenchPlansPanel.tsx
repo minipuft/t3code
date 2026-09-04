@@ -12,8 +12,10 @@ import type {
 } from "@t3tools/contracts";
 import {
   CheckIcon,
+  Code2Icon,
   CopyIcon,
   FilePlus2Icon,
+  EyeIcon,
   MessageSquareIcon,
   RefreshCwIcon,
   SaveIcon,
@@ -33,6 +35,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { Textarea } from "../ui/textarea";
 import { toastManager } from "../ui/toast";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
+import { WorkbenchPlanMarkdown } from "./WorkbenchPlanMarkdown";
 
 type PlanMoveState = typeof WorkbenchPlanMoveState.Type;
 
@@ -224,6 +227,7 @@ function PlanEditor(props: {
   const [externalChange, setExternalChange] = useState(false);
   const [saving, setSaving] = useState(false);
   const [rename, setRename] = useState("");
+  const [view, setView] = useState<"rendered" | "source">("rendered");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const dirty = draft !== baseText;
 
@@ -329,6 +333,28 @@ function PlanEditor(props: {
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div
+            className="flex items-center rounded-md border border-border/70 p-0.5"
+            role="group"
+            aria-label="Plan view"
+          >
+            <Button
+              size="xs"
+              variant={view === "rendered" ? "secondary" : "ghost"}
+              aria-pressed={view === "rendered"}
+              onClick={() => setView("rendered")}
+            >
+              <EyeIcon /> Rendered
+            </Button>
+            <Button
+              size="xs"
+              variant={view === "source" ? "secondary" : "ghost"}
+              aria-pressed={view === "source"}
+              onClick={() => setView("source")}
+            >
+              <Code2Icon /> Source
+            </Button>
+          </div>
           <Select
             disabled={dirty}
             value={stateForSummary(props.summary)}
@@ -379,14 +405,23 @@ function PlanEditor(props: {
         </div>
       ) : null}
 
-      <Textarea
-        ref={textareaRef}
-        aria-label="Plan Markdown"
-        className="font-mono"
-        style={{ minHeight: "28rem" }}
-        value={draft}
-        onChange={(event) => setDraft(event.currentTarget.value)}
-      />
+      {view === "source" ? (
+        <Textarea
+          ref={textareaRef}
+          aria-label="Plan Markdown"
+          className="font-mono"
+          style={{ minHeight: "28rem" }}
+          value={draft}
+          onChange={(event) => setDraft(event.currentTarget.value)}
+        />
+      ) : (
+        <div
+          className="min-h-[28rem] rounded-lg border border-border/60 bg-background/48 p-5"
+          aria-label="Rendered plan"
+        >
+          <WorkbenchPlanMarkdown text={draft} environmentId={props.environmentId} />
+        </div>
+      )}
 
       <div className="flex flex-col gap-2 sm:flex-row">
         <Input

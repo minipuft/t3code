@@ -177,7 +177,7 @@ describe("rightPanelStore", () => {
     ).toEqual({ byThreadKey: { "env-1:thread-A": panelState } });
   });
 
-  it("drops persisted plan surfaces and does not reopen an empty panel", () => {
+  it("restores contextual workbench surfaces and drops unknown persisted kinds", () => {
     expect(
       migratePersistedRightPanelState({
         byThreadKey: {
@@ -188,10 +188,12 @@ describe("rightPanelStore", () => {
           },
           "env-1:thread-B": {
             isOpen: true,
-            activeSurfaceId: "plan",
+            activeSurfaceId: "unknown",
             surfaces: [
-              { id: "plan", kind: "plan" },
+              { id: "unknown", kind: "unknown" },
               { id: "diff", kind: "diff" },
+              { id: "actions", kind: "actions" },
+              { id: "skills", kind: "skills" },
             ],
           },
         },
@@ -199,14 +201,18 @@ describe("rightPanelStore", () => {
     ).toEqual({
       byThreadKey: {
         "env-1:thread-A": {
-          isOpen: false,
-          activeSurfaceId: null,
-          surfaces: [],
+          isOpen: true,
+          activeSurfaceId: "plan",
+          surfaces: [{ id: "plan", kind: "plan" }],
         },
         "env-1:thread-B": {
           isOpen: true,
           activeSurfaceId: "diff",
-          surfaces: [{ id: "diff", kind: "diff" }],
+          surfaces: [
+            { id: "diff", kind: "diff" },
+            { id: "actions", kind: "actions" },
+            { id: "skills", kind: "skills" },
+          ],
         },
       },
     });
@@ -249,6 +255,23 @@ describe("rightPanelStore", () => {
       isOpen: true,
       activeSurfaceId: "files",
       surfaces: [{ id: "files", kind: "files" }],
+    });
+  });
+
+  it("keeps Plan, Actions, and Skills as native singleton surfaces", () => {
+    useRightPanelStore.getState().open(refA, "plan");
+    useRightPanelStore.getState().open(refA, "actions");
+    useRightPanelStore.getState().open(refA, "skills");
+    useRightPanelStore.getState().open(refA, "plan");
+
+    expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
+      isOpen: true,
+      activeSurfaceId: "plan",
+      surfaces: [
+        { id: "plan", kind: "plan" },
+        { id: "actions", kind: "actions" },
+        { id: "skills", kind: "skills" },
+      ],
     });
   });
 

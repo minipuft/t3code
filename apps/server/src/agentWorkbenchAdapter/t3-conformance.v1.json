@@ -130,6 +130,54 @@
               "destructive": true
             }
           ]
+        },
+        {
+          "id": "resource-library",
+          "state": "available",
+          "actions": [
+            {
+              "id": "list",
+              "label": "list",
+              "enabled": true,
+              "destructive": false
+            },
+            {
+              "id": "source",
+              "label": "source",
+              "enabled": true,
+              "destructive": false
+            },
+            {
+              "id": "review-inbox",
+              "label": "review-inbox",
+              "enabled": true,
+              "destructive": false
+            },
+            {
+              "id": "unlock",
+              "label": "unlock",
+              "enabled": true,
+              "destructive": false
+            },
+            {
+              "id": "review",
+              "label": "review",
+              "enabled": true,
+              "destructive": false
+            },
+            {
+              "id": "apply",
+              "label": "apply",
+              "enabled": true,
+              "destructive": true
+            },
+            {
+              "id": "rollback",
+              "label": "rollback",
+              "enabled": true,
+              "destructive": true
+            }
+          ]
         }
       ]
     },
@@ -269,6 +317,59 @@
               "enabled": false,
               "destructive": true,
               "reason": "Administrative access is required."
+            }
+          ]
+        },
+        {
+          "id": "resource-library",
+          "state": "read-only",
+          "reason": "Direct local administrative access is required.",
+          "actions": [
+            {
+              "id": "list",
+              "label": "list",
+              "enabled": true,
+              "destructive": false
+            },
+            {
+              "id": "source",
+              "label": "source",
+              "enabled": true,
+              "destructive": false
+            },
+            {
+              "id": "review-inbox",
+              "label": "review-inbox",
+              "enabled": true,
+              "destructive": false
+            },
+            {
+              "id": "unlock",
+              "label": "unlock",
+              "enabled": false,
+              "destructive": false,
+              "reason": "Direct local administrative access is required."
+            },
+            {
+              "id": "review",
+              "label": "review",
+              "enabled": false,
+              "destructive": false,
+              "reason": "Direct local administrative access is required."
+            },
+            {
+              "id": "apply",
+              "label": "apply",
+              "enabled": false,
+              "destructive": true,
+              "reason": "Direct local administrative access is required."
+            },
+            {
+              "id": "rollback",
+              "label": "rollback",
+              "enabled": false,
+              "destructive": true,
+              "reason": "Direct local administrative access is required."
             }
           ]
         }
@@ -421,6 +522,62 @@
               "enabled": false,
               "destructive": true,
               "reason": "Administrative access is required."
+            }
+          ]
+        },
+        {
+          "id": "resource-library",
+          "state": "unavailable",
+          "reason": "Agent Workbench is unavailable.",
+          "actions": [
+            {
+              "id": "list",
+              "label": "list",
+              "enabled": false,
+              "destructive": false,
+              "reason": "Agent Workbench is unavailable."
+            },
+            {
+              "id": "source",
+              "label": "source",
+              "enabled": false,
+              "destructive": false,
+              "reason": "Agent Workbench is unavailable."
+            },
+            {
+              "id": "review-inbox",
+              "label": "review-inbox",
+              "enabled": false,
+              "destructive": false,
+              "reason": "Agent Workbench is unavailable."
+            },
+            {
+              "id": "unlock",
+              "label": "unlock",
+              "enabled": false,
+              "destructive": false,
+              "reason": "Agent Workbench is unavailable."
+            },
+            {
+              "id": "review",
+              "label": "review",
+              "enabled": false,
+              "destructive": false,
+              "reason": "Agent Workbench is unavailable."
+            },
+            {
+              "id": "apply",
+              "label": "apply",
+              "enabled": false,
+              "destructive": true,
+              "reason": "Agent Workbench is unavailable."
+            },
+            {
+              "id": "rollback",
+              "label": "rollback",
+              "enabled": false,
+              "destructive": true,
+              "reason": "Agent Workbench is unavailable."
             }
           ]
         }

@@ -6,6 +6,10 @@ import type {
   WorkbenchPlanPath,
   WorkbenchPlanSaveInput,
   WorkbenchPlanSuggestionInput,
+  WorkbenchResourceApplyInput,
+  WorkbenchResourceReviewInput,
+  WorkbenchResourceRollbackInput,
+  WorkbenchResourceTarget,
 } from "@t3tools/contracts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -132,6 +136,82 @@ export function createWorkbenchPlansEnvironmentAtoms<R, E>(
         mode: "serial",
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input.threadId]),
       },
+    }),
+    resourceLibrary: createEnvironmentQueryAtomFamily(runtime, {
+      label: "environment-data:workbench-resources:library",
+      staleTimeMs: 3_000,
+      refreshIntervalMs: 5_000,
+      execute: (input: { readonly lens: "global" | "effective"; readonly project?: string }) =>
+        withPreparedConnection((loader, prepared) => loader.resourceLibrary(prepared, input)),
+    }),
+    reviewInbox: createEnvironmentQueryAtomFamily(runtime, {
+      label: "environment-data:workbench-resources:review-inbox",
+      staleTimeMs: 3_000,
+      refreshIntervalMs: 5_000,
+      execute: (_input: null) =>
+        withPreparedConnection((loader, prepared) => loader.reviewInbox(prepared)),
+    }),
+    resourceAuthority: createEnvironmentQueryAtomFamily(runtime, {
+      label: "environment-data:workbench-resources:authority",
+      staleTimeMs: 1_000,
+      execute: (_input: null) =>
+        withPreparedConnection((loader, prepared) => loader.resourceAuthority(prepared)),
+    }),
+    resourcePolicy: createEnvironmentQueryAtomFamily(runtime, {
+      label: "environment-data:workbench-resources:policy",
+      staleTimeMs: 1_000,
+      execute: (_input: null) =>
+        withPreparedConnection((loader, prepared) => loader.resourcePolicy(prepared)),
+    }),
+    resourceMutations: createEnvironmentQueryAtomFamily(runtime, {
+      label: "environment-data:workbench-resources:mutations",
+      staleTimeMs: 1_000,
+      execute: (_input: null) =>
+        withPreparedConnection((loader, prepared) => loader.resourceMutations(prepared)),
+    }),
+    resourceSource: createEnvironmentQueryAtomFamily(runtime, {
+      label: "environment-data:workbench-resources:source",
+      staleTimeMs: 1_000,
+      execute: (target: WorkbenchResourceTarget) =>
+        withPreparedConnection((loader, prepared) => loader.resourceSource(prepared, target)),
+    }),
+    unlockResources: createEnvironmentCommand(runtime, {
+      label: "environment-data:workbench-resources:unlock",
+      execute: (_input: null) =>
+        withPreparedConnection((loader, prepared) => loader.unlockResources(prepared)),
+      scheduler: mutationScheduler,
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
+    relockResources: createEnvironmentCommand(runtime, {
+      label: "environment-data:workbench-resources:relock",
+      execute: (_input: null) =>
+        withPreparedConnection((loader, prepared) => loader.relockResources(prepared)),
+      scheduler: mutationScheduler,
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
+    reviewResource: createEnvironmentCommand(runtime, {
+      label: "environment-data:workbench-resources:review",
+      execute: (input: WorkbenchResourceReviewInput) =>
+        withPreparedConnection((loader, prepared) => loader.reviewResource(prepared, input)),
+      scheduler: mutationScheduler,
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.target]),
+      },
+    }),
+    applyResource: createEnvironmentCommand(runtime, {
+      label: "environment-data:workbench-resources:apply",
+      execute: (input: WorkbenchResourceApplyInput) =>
+        withPreparedConnection((loader, prepared) => loader.applyResource(prepared, input)),
+      scheduler: mutationScheduler,
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
+    rollbackResource: createEnvironmentCommand(runtime, {
+      label: "environment-data:workbench-resources:rollback",
+      execute: (input: WorkbenchResourceRollbackInput) =>
+        withPreparedConnection((loader, prepared) => loader.rollbackResource(prepared, input)),
+      scheduler: mutationScheduler,
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
     }),
   };
 }

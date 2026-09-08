@@ -128,6 +128,54 @@
           "destructive": true
         }
       ]
+    },
+    {
+      "id": "resource-library",
+      "state": "available",
+      "actions": [
+        {
+          "id": "list",
+          "label": "list",
+          "enabled": true,
+          "destructive": false
+        },
+        {
+          "id": "source",
+          "label": "source",
+          "enabled": true,
+          "destructive": false
+        },
+        {
+          "id": "review-inbox",
+          "label": "review-inbox",
+          "enabled": true,
+          "destructive": false
+        },
+        {
+          "id": "unlock",
+          "label": "unlock",
+          "enabled": true,
+          "destructive": false
+        },
+        {
+          "id": "review",
+          "label": "review",
+          "enabled": true,
+          "destructive": false
+        },
+        {
+          "id": "apply",
+          "label": "apply",
+          "enabled": true,
+          "destructive": true
+        },
+        {
+          "id": "rollback",
+          "label": "rollback",
+          "enabled": true,
+          "destructive": true
+        }
+      ]
     }
   ]
 }

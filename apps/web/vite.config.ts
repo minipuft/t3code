@@ -235,6 +235,9 @@ export default defineConfig(() => {
                 {
                   target: devProxyTarget,
                   changeOrigin: true,
+                  // Preserve the browser address so the server can distinguish
+                  // a local dev browser from LAN, tailnet, and tunnel clients.
+                  xfwd: true,
                   ...(prefix === "/ws" ? { ws: true } : {}),
                 },
               ]),

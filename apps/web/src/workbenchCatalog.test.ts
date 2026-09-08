@@ -43,6 +43,7 @@ const environment = (id: string): EnvironmentPresentation =>
 describe("workbench catalog projection", () => {
   it("normalizes unknown modules without hiding the default Plans surface", () => {
     expect(parseWorkbenchModule("skills")).toBe("skills");
+    expect(parseWorkbenchModule("library")).toBe("library");
     expect(parseWorkbenchModule("unknown")).toBe("plans");
     expect(parseWorkbenchModule(undefined)).toBe("plans");
   });

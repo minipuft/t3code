@@ -106,6 +106,17 @@ const workbench = {
     }),
   applyPrompt: () => Effect.die(new Error("unused")),
   rollbackPrompt: () => Effect.die(new Error("unused")),
+  resourceLibrary: () => Effect.die(new Error("unused")),
+  reviewInbox: Effect.die(new Error("unused")),
+  resourceAuthority: () => Effect.die(new Error("unused")),
+  unlockResources: () => Effect.die(new Error("unused")),
+  relockResources: () => Effect.die(new Error("unused")),
+  resourcePolicy: () => Effect.die(new Error("unused")),
+  resourceMutations: Effect.die(new Error("unused")),
+  resourceSource: () => Effect.die(new Error("unused")),
+  reviewResource: () => Effect.die(new Error("unused")),
+  applyResource: () => Effect.die(new Error("unused")),
+  rollbackResource: () => Effect.die(new Error("unused")),
 } satisfies AgentWorkbenchShape;
 
 const providePrincipal = <A, E, R>(

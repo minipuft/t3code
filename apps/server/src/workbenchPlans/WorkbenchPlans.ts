@@ -7,6 +7,11 @@ import {
   type WorkbenchPlanAssociations,
   type AgentWorkbenchPlanList,
   type AgentWorkbenchVitals,
+  type AgentWorkbenchResourceLibrary as RawResourceLibrary,
+  type AgentWorkbenchResourceMutationLedger as RawResourceMutationLedger,
+  type AgentWorkbenchResourceMutationReceipt as RawResourceMutationReceipt,
+  type AgentWorkbenchResourceMutationReview as RawResourceMutationReview,
+  type AgentWorkbenchResourcePolicy as RawResourcePolicy,
   type WorkbenchPlanAnnotationMutationInput,
   type WorkbenchPlanAnnotations,
   type WorkbenchPlanList,
@@ -21,6 +26,18 @@ import {
   type WorkbenchQuotaWindow,
   type WorkbenchQuotaBinding,
   type WorkbenchVitalsSnapshot,
+  type WorkbenchResourceApplyInput,
+  type WorkbenchResourceAuthority,
+  type WorkbenchResourceLibrary,
+  type WorkbenchResourceMutationLedger,
+  type WorkbenchResourceMutationReceipt,
+  type WorkbenchResourceMutationReview,
+  type WorkbenchResourcePolicy,
+  type WorkbenchResourceReviewInput,
+  type WorkbenchResourceRollbackInput,
+  type WorkbenchResourceSource,
+  type WorkbenchResourceTarget,
+  type WorkbenchReviewInbox,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Clock from "effect/Clock";
@@ -70,6 +87,43 @@ export interface WorkbenchPlansShape {
   readonly mutateAnnotations: (
     input: WorkbenchPlanAnnotationMutationInput,
   ) => Effect.Effect<WorkbenchPlanAnnotations, WorkbenchPlansAdapterError>;
+  readonly resourceLibrary: (input: {
+    readonly lens: "global" | "effective";
+    readonly project?: string;
+  }) => Effect.Effect<WorkbenchResourceLibrary, WorkbenchPlansAdapterError>;
+  readonly reviewInbox: Effect.Effect<WorkbenchReviewInbox, WorkbenchPlansAdapterError>;
+  readonly resourceAuthority: (
+    sessionId: string,
+  ) => Effect.Effect<WorkbenchResourceAuthority, WorkbenchPlansAdapterError>;
+  readonly unlockResources: (
+    sessionId: string,
+    directLocal: boolean,
+  ) => Effect.Effect<WorkbenchResourceAuthority, WorkbenchPlansAdapterError>;
+  readonly relockResources: (
+    sessionId: string,
+  ) => Effect.Effect<WorkbenchResourceAuthority, WorkbenchPlansAdapterError>;
+  readonly resourcePolicy: (
+    sessionId: string,
+  ) => Effect.Effect<WorkbenchResourcePolicy, WorkbenchPlansAdapterError>;
+  readonly resourceMutations: Effect.Effect<
+    WorkbenchResourceMutationLedger,
+    WorkbenchPlansAdapterError
+  >;
+  readonly resourceSource: (
+    target: WorkbenchResourceTarget,
+  ) => Effect.Effect<WorkbenchResourceSource, WorkbenchPlansAdapterError>;
+  readonly reviewResource: (
+    sessionId: string,
+    input: WorkbenchResourceReviewInput,
+  ) => Effect.Effect<WorkbenchResourceMutationReview, WorkbenchPlansAdapterError>;
+  readonly applyResource: (
+    sessionId: string,
+    input: WorkbenchResourceApplyInput,
+  ) => Effect.Effect<WorkbenchResourceMutationReceipt, WorkbenchPlansAdapterError>;
+  readonly rollbackResource: (
+    sessionId: string,
+    input: WorkbenchResourceRollbackInput,
+  ) => Effect.Effect<WorkbenchResourceMutationReceipt, WorkbenchPlansAdapterError>;
 }
 
 export class WorkbenchPlans extends Context.Service<WorkbenchPlans, WorkbenchPlansShape>()(
@@ -141,7 +195,165 @@ export function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPla
         Effect.map((value) => ({ path: input.path, items: value.items, markdown: value.markdown })),
         Effect.mapError(mapAdapterError),
       ),
+    resourceLibrary: (input) =>
+      workbench
+        .resourceLibrary(input)
+        .pipe(Effect.map(projectResourceLibrary), Effect.mapError(mapAdapterError)),
+    reviewInbox: workbench.reviewInbox.pipe(
+      Effect.map((value) => ({ revision: value.revision, items: value.items })),
+      Effect.mapError(mapAdapterError),
+    ),
+    resourceAuthority: (sessionId) =>
+      workbench.resourceAuthority(sessionId).pipe(Effect.mapError(mapAdapterError)),
+    unlockResources: (sessionId, directLocal) =>
+      workbench.unlockResources(sessionId, directLocal).pipe(Effect.mapError(mapAdapterError)),
+    relockResources: (sessionId) =>
+      workbench.relockResources(sessionId).pipe(Effect.mapError(mapAdapterError)),
+    resourcePolicy: (sessionId) =>
+      workbench
+        .resourcePolicy(sessionId)
+        .pipe(Effect.map(projectResourcePolicy), Effect.mapError(mapAdapterError)),
+    resourceMutations: workbench.resourceMutations.pipe(
+      Effect.map(projectResourceLedger),
+      Effect.mapError(mapAdapterError),
+    ),
+    resourceSource: (target) =>
+      workbench.resourceSource(target).pipe(
+        Effect.map((value) => ({
+          target: value.target,
+          content: value.content,
+          digest: value.digest,
+          scope: value.scope,
+        })),
+        Effect.mapError(mapAdapterError),
+      ),
+    reviewResource: (sessionId, input) =>
+      workbench.reviewResource(sessionId, input).pipe(
+        Effect.map((value) => ({
+          revision: value.revision,
+          proposal: projectResourceProposal(value.proposal),
+        })),
+        Effect.mapError(mapAdapterError),
+      ),
+    applyResource: (sessionId, input) =>
+      workbench.applyResource(sessionId, input).pipe(
+        Effect.map((value) => ({
+          revision: value.revision,
+          receipt: projectResourceReceipt(value.receipt),
+        })),
+        Effect.mapError(mapAdapterError),
+      ),
+    rollbackResource: (sessionId, input) =>
+      workbench.rollbackResource(sessionId, input).pipe(
+        Effect.map((value) => ({
+          revision: value.revision,
+          receipt: projectResourceReceipt(value.receipt),
+        })),
+        Effect.mapError(mapAdapterError),
+      ),
   });
+}
+
+export function projectResourceLibrary(value: RawResourceLibrary): WorkbenchResourceLibrary {
+  return {
+    revision: value.revision,
+    lens: value.lens,
+    project: value.project,
+    entries: value.entries.map((entry) => ({
+      id: entry.id,
+      kind: entry.kind,
+      name: entry.name,
+      description: entry.description,
+      category: entry.category,
+      group: entry.group,
+      scope: entry.scope,
+      project: entry.project,
+      provenance: {
+        sourceId: entry.provenance.sourceId,
+        sourceType: entry.provenance.sourceType,
+        canonical: entry.provenance.canonical,
+        ...(entry.provenance.revision === undefined ? {} : { revision: entry.provenance.revision }),
+      },
+      effective: entry.effective,
+      ...(entry.reason === undefined ? {} : { reason: entry.reason }),
+      ...(entry.replacementId === undefined ? {} : { replacementId: entry.replacementId }),
+      ...(entry.relativePath === undefined ? {} : { relativePath: entry.relativePath }),
+    })),
+    projects: [...value.projects],
+  };
+}
+
+function projectResourcePolicy(value: RawResourcePolicy): WorkbenchResourcePolicy {
+  return { revision: value.revision, enabledThrough: value.enabledThrough, stages: value.stages };
+}
+
+function redactDependency(value: string) {
+  return value.split(/[\\/]/).at(-1) ?? "registered dependency";
+}
+
+function projectResourceProposal(
+  value: RawResourceMutationReview["proposal"] | RawResourceMutationLedger["proposals"][number],
+): WorkbenchResourceMutationReview["proposal"] {
+  return {
+    id: value.id,
+    requestId: value.requestId,
+    revision: value.revision,
+    state: value.state,
+    operation: value.operation,
+    mutationClass: value.mutationClass,
+    target: value.target,
+    scope: value.scope,
+    beforeDigest: value.beforeDigest,
+    afterDigest: value.afterDigest,
+    diff: value.diff,
+    diffDigest: value.diffDigest,
+    validator: value.validator,
+    git: {
+      head: value.git.head,
+      clean: value.git.clean,
+      statusDigest: value.git.statusDigest,
+      changedPaths: value.git.changedPaths,
+      requiresCheckpoint: value.git.requiresCheckpoint,
+    },
+    dependencies: value.dependencies.map(redactDependency),
+    ...(value.sourceReviewId === undefined ? {} : { sourceReviewId: value.sourceReviewId }),
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+}
+
+function projectResourceReceipt(
+  value: RawResourceMutationReceipt["receipt"] | RawResourceMutationLedger["receipts"][number],
+): WorkbenchResourceMutationReceipt["receipt"] {
+  return {
+    id: value.id,
+    requestId: value.requestId,
+    proposalId: value.proposalId,
+    operation: value.operation,
+    mutationClass: value.mutationClass,
+    target: value.target,
+    scope: value.scope,
+    beforeDigest: value.beforeDigest,
+    afterDigest: value.afterDigest,
+    diffDigest: value.diffDigest,
+    validatorId: value.validatorId,
+    checkpoint: value.checkpoint,
+    status: value.status,
+    undoAvailable: value.undoAvailable,
+    ...(value.sourceReviewId === undefined ? {} : { sourceReviewId: value.sourceReviewId }),
+    appliedAt: value.appliedAt,
+    ...(value.rolledBackAt === undefined ? {} : { rolledBackAt: value.rolledBackAt }),
+  };
+}
+
+export function projectResourceLedger(
+  value: RawResourceMutationLedger,
+): WorkbenchResourceMutationLedger {
+  return {
+    revision: value.revision,
+    proposals: value.proposals.map(projectResourceProposal),
+    receipts: value.receipts.map(projectResourceReceipt),
+  };
 }
 
 export function projectPlanList(value: AgentWorkbenchPlanList): WorkbenchPlanList {

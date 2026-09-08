@@ -13,6 +13,14 @@ import {
   AgentWorkbenchPromptHistory,
   AgentWorkbenchPromptMutationResult,
   AgentWorkbenchPromptReview,
+  AgentWorkbenchResourceAuthority,
+  AgentWorkbenchResourceLibrary,
+  AgentWorkbenchResourceMutationLedger,
+  AgentWorkbenchResourceMutationReceipt,
+  AgentWorkbenchResourceMutationReview,
+  AgentWorkbenchResourcePolicy,
+  AgentWorkbenchResourceSource,
+  AgentWorkbenchReviewInbox,
   AgentWorkbenchVitals,
   ThreadId,
   type ServerProvider,
@@ -106,6 +114,43 @@ export interface AgentWorkbenchShape {
     requestId: string,
     input: unknown,
   ) => Effect.Effect<AgentWorkbenchPromptMutationResult, AgentWorkbenchAdapterError>;
+  readonly resourceLibrary: (input: {
+    readonly lens: "global" | "effective";
+    readonly project?: string;
+  }) => Effect.Effect<AgentWorkbenchResourceLibrary, AgentWorkbenchAdapterError>;
+  readonly reviewInbox: Effect.Effect<AgentWorkbenchReviewInbox, AgentWorkbenchAdapterError>;
+  readonly resourceAuthority: (
+    sessionId: string,
+  ) => Effect.Effect<AgentWorkbenchResourceAuthority, AgentWorkbenchAdapterError>;
+  readonly unlockResources: (
+    sessionId: string,
+    directLocal: boolean,
+  ) => Effect.Effect<AgentWorkbenchResourceAuthority, AgentWorkbenchAdapterError>;
+  readonly relockResources: (
+    sessionId: string,
+  ) => Effect.Effect<AgentWorkbenchResourceAuthority, AgentWorkbenchAdapterError>;
+  readonly resourcePolicy: (
+    sessionId: string,
+  ) => Effect.Effect<AgentWorkbenchResourcePolicy, AgentWorkbenchAdapterError>;
+  readonly resourceMutations: Effect.Effect<
+    AgentWorkbenchResourceMutationLedger,
+    AgentWorkbenchAdapterError
+  >;
+  readonly resourceSource: (
+    target: AgentWorkbenchResourceTargetInput,
+  ) => Effect.Effect<AgentWorkbenchResourceSource, AgentWorkbenchAdapterError>;
+  readonly reviewResource: (
+    sessionId: string,
+    input: unknown,
+  ) => Effect.Effect<AgentWorkbenchResourceMutationReview, AgentWorkbenchAdapterError>;
+  readonly applyResource: (
+    sessionId: string,
+    input: unknown,
+  ) => Effect.Effect<AgentWorkbenchResourceMutationReceipt, AgentWorkbenchAdapterError>;
+  readonly rollbackResource: (
+    sessionId: string,
+    input: unknown,
+  ) => Effect.Effect<AgentWorkbenchResourceMutationReceipt, AgentWorkbenchAdapterError>;
 }
 
 export class AgentWorkbench extends Context.Service<AgentWorkbench, AgentWorkbenchShape>()(
@@ -134,6 +179,13 @@ interface T3AssociationCommandInput extends T3ConversationInput {
 
 interface T3PlanSuggestionInput extends T3ConversationInput {
   readonly message: string;
+}
+
+interface AgentWorkbenchResourceTargetInput {
+  readonly kind: "workspace" | "profile" | "skill" | "projection" | "rule" | "hook";
+  readonly sourceId: string;
+  readonly relativePath: string;
+  readonly project?: string;
 }
 
 export interface AgentWorkbenchConnectionShape {
@@ -204,6 +256,11 @@ export function makeAgentWorkbench(
     );
 
   const aliases = (threadId: string) => context.getHarnessAliases?.(threadId) ?? Effect.succeed([]);
+
+  const authorityContext = (sessionId: string) =>
+    Effect.tryPromise({ try: () => connection.leaseId(), catch: mapConnectionError }).pipe(
+      Effect.map((leaseId) => ({ sessionId, leaseId })),
+    );
 
   return AgentWorkbench.of({
     listPlans: request(AgentWorkbenchPlanList, "/v1/plans"),
@@ -298,6 +355,86 @@ export function makeAgentWorkbench(
         `/v1/prompts/${encodeURIComponent(id)}/rollback`,
         { method: "POST", admin: true, body: input, requestId },
       ),
+    resourceLibrary: (input) =>
+      Effect.tryPromise({ try: () => connection.leaseId(), catch: mapConnectionError }).pipe(
+        Effect.flatMap((leaseId) => {
+          const query = new URLSearchParams({ lens: input.lens, leaseId });
+          if (input.project !== undefined) query.set("project", input.project);
+          return request(AgentWorkbenchResourceLibrary, `/v1/library?${query}`);
+        }),
+      ),
+    reviewInbox: request(AgentWorkbenchReviewInbox, "/v1/review-inbox"),
+    resourceAuthority: (sessionId) =>
+      authorityContext(sessionId).pipe(
+        Effect.flatMap((authority) =>
+          request(
+            AgentWorkbenchResourceAuthority,
+            `/v1/resource-mutations/authority?${authorityQuery(authority)}`,
+          ),
+        ),
+      ),
+    unlockResources: (sessionId, directLocal) =>
+      authorityContext(sessionId).pipe(
+        Effect.flatMap((authority) =>
+          request(AgentWorkbenchResourceAuthority, "/v1/resource-mutations/authority/unlock", {
+            method: "POST",
+            admin: true,
+            body: { ...authority, directLocal, administrative: true },
+          }),
+        ),
+      ),
+    relockResources: (sessionId) =>
+      authorityContext(sessionId).pipe(
+        Effect.flatMap((authority) =>
+          request(AgentWorkbenchResourceAuthority, "/v1/resource-mutations/authority/relock", {
+            method: "POST",
+            admin: true,
+            body: authority,
+          }),
+        ),
+      ),
+    resourcePolicy: (sessionId) =>
+      authorityContext(sessionId).pipe(
+        Effect.flatMap((authority) =>
+          request(
+            AgentWorkbenchResourcePolicy,
+            `/v1/resource-mutations/policy?${authorityQuery(authority)}`,
+          ),
+        ),
+      ),
+    resourceMutations: request(AgentWorkbenchResourceMutationLedger, "/v1/resource-mutations"),
+    resourceSource: (target) =>
+      request(AgentWorkbenchResourceSource, `/v1/resources/source?${resourceTargetQuery(target)}`),
+    reviewResource: (sessionId, input) =>
+      authorityContext(sessionId).pipe(
+        Effect.flatMap((authority) =>
+          request(AgentWorkbenchResourceMutationReview, "/v1/resource-mutations/review", {
+            method: "POST",
+            admin: true,
+            body: { ...(input as object), authority },
+          }),
+        ),
+      ),
+    applyResource: (sessionId, input) =>
+      authorityContext(sessionId).pipe(
+        Effect.flatMap((authority) =>
+          request(AgentWorkbenchResourceMutationReceipt, "/v1/resource-mutations/apply", {
+            method: "POST",
+            admin: true,
+            body: { ...(input as object), authority },
+          }),
+        ),
+      ),
+    rollbackResource: (sessionId, input) =>
+      authorityContext(sessionId).pipe(
+        Effect.flatMap((authority) =>
+          request(AgentWorkbenchResourceMutationReceipt, "/v1/resource-mutations/rollback", {
+            method: "POST",
+            admin: true,
+            body: { ...(input as object), authority },
+          }),
+        ),
+      ),
   });
 }
 
@@ -373,6 +510,20 @@ function conversationQuery(value: {
 }) {
   const query = new URLSearchParams({ host: value.host, conversationId: value.conversationId });
   if (value.environmentId !== undefined) query.set("environmentId", value.environmentId);
+  if (value.project !== undefined) query.set("project", value.project);
+  return query.toString();
+}
+
+function authorityQuery(value: { readonly sessionId: string; readonly leaseId: string }) {
+  return new URLSearchParams(value).toString();
+}
+
+function resourceTargetQuery(value: AgentWorkbenchResourceTargetInput) {
+  const query = new URLSearchParams({
+    kind: value.kind,
+    sourceId: value.sourceId,
+    relativePath: value.relativePath,
+  });
   if (value.project !== undefined) query.set("project", value.project);
   return query.toString();
 }

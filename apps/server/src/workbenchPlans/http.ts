@@ -1,11 +1,15 @@
 import {
+  AuthAccessWriteScope,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
+  EnvironmentAuthenticatedPrincipal,
+  EnvironmentHttpForbiddenError,
   EnvironmentHttpConflictError,
   EnvironmentHttpApi,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import { HttpServerRequest } from "effect/unstable/http";
 
 import {
   annotateEnvironmentRequest,
@@ -14,6 +18,7 @@ import {
   failEnvironmentNotFound,
   requireEnvironmentScope,
 } from "../auth/http.ts";
+import { deriveAuthClientMetadata } from "../auth/utils.ts";
 import { WorkbenchPlans, type WorkbenchPlansAdapterError } from "./WorkbenchPlans.ts";
 
 const handleAdapterError = <A>(effect: Effect.Effect<A, WorkbenchPlansAdapterError>) =>
@@ -41,12 +46,84 @@ const handleReadAdapterError = <A>(effect: Effect.Effect<A, WorkbenchPlansAdapte
     Effect.catch((error) =>
       Effect.gen(function* () {
         if (error.reason === "not_found") {
+          return yield* failEnvironmentNotFound("workbench_resource_not_found");
+        }
+        return yield* failEnvironmentInternal("internal_error", error);
+      }),
+    ),
+  );
+
+const handleResourceAdapterError = <A>(effect: Effect.Effect<A, WorkbenchPlansAdapterError>) =>
+  effect.pipe(
+    Effect.catch((error) =>
+      Effect.gen(function* () {
+        if (error.reason === "not_found") {
+          return yield* failEnvironmentNotFound("workbench_resource_not_found");
+        }
+        if (error.reason === "conflict") {
+          return yield* new EnvironmentHttpConflictError({
+            message: "The resource changed after review. Refresh and review it again.",
+          });
+        }
+        if (error.reason === "invalid_request") {
+          return yield* failEnvironmentInvalidRequest("invalid_command");
+        }
+        return yield* failEnvironmentInternal("internal_error", error);
+      }),
+    ),
+  );
+
+const handleResourceSnapshotError = <A>(effect: Effect.Effect<A, WorkbenchPlansAdapterError>) =>
+  effect.pipe(Effect.catch((error) => failEnvironmentInternal("internal_error", error)));
+
+const handleResourceSourceError = <A>(effect: Effect.Effect<A, WorkbenchPlansAdapterError>) =>
+  effect.pipe(
+    Effect.catch((error) =>
+      Effect.gen(function* () {
+        if (error.reason === "not_found") {
           return yield* failEnvironmentNotFound("workbench_plan_not_found");
         }
         return yield* failEnvironmentInternal("internal_error", error);
       }),
     ),
   );
+
+export const directLocalAdministrativeRequest = Effect.fn("workbench.resources.directLocal")(
+  function* () {
+    const principal = yield* EnvironmentAuthenticatedPrincipal;
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const ipAddress = deriveAuthClientMetadata({ request }).ipAddress;
+    const forwardedFor = request.headers["x-forwarded-for"];
+    const forwardedAddresses = forwardedFor
+      ?.split(",")
+      .map((address) => address.trim())
+      .filter(Boolean);
+    const forwardedRequest =
+      request.headers["x-forwarded-host"] !== undefined ||
+      request.headers["x-forwarded-proto"] !== undefined;
+    return (
+      principal.method !== "dpop-access-token" &&
+      isLoopbackAddress(ipAddress) &&
+      (!forwardedRequest || forwardedAddresses !== undefined) &&
+      (forwardedAddresses === undefined ||
+        (forwardedAddresses.length > 0 && forwardedAddresses.every(isLoopbackAddress)))
+    );
+  },
+);
+
+function isLoopbackAddress(address: string | undefined): boolean {
+  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
+}
+
+const requireDirectLocalAdministrativeRequest = Effect.gen(function* () {
+  const principal = yield* requireEnvironmentScope(AuthAccessWriteScope);
+  if (!(yield* directLocalAdministrativeRequest())) {
+    return yield* new EnvironmentHttpForbiddenError({
+      message: "Canonical resource changes require a direct local administrative session.",
+    });
+  }
+  return principal;
+});
 
 export const workbenchPlansHttpApiLayer = HttpApiBuilder.group(
   EnvironmentHttpApi,
@@ -113,6 +190,92 @@ export const workbenchPlansHttpApiLayer = HttpApiBuilder.group(
           Effect.andThen(requireEnvironmentScope(AuthOrchestrationOperateScope)),
           Effect.andThen(handleAdapterError(plans.mutateAnnotations(payload))),
         ),
+      )
+      .handle("resourceLibrary", ({ endpoint, payload }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          yield* requireEnvironmentScope(AuthOrchestrationReadScope);
+          return yield* handleResourceSnapshotError(plans.resourceLibrary(payload));
+        }),
+      )
+      .handle("reviewInbox", ({ endpoint }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          yield* requireEnvironmentScope(AuthOrchestrationReadScope);
+          return yield* handleResourceSnapshotError(plans.reviewInbox);
+        }),
+      )
+      .handle("resourceAuthority", ({ endpoint }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          const principal = yield* requireEnvironmentScope(AuthOrchestrationReadScope);
+          return yield* handleResourceSnapshotError(plans.resourceAuthority(principal.sessionId));
+        }),
+      )
+      .handle("unlockResources", ({ endpoint }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          const principal = yield* requireEnvironmentScope(AuthAccessWriteScope);
+          const directLocal = yield* directLocalAdministrativeRequest();
+          return yield* handleResourceAdapterError(
+            plans.unlockResources(principal.sessionId, directLocal),
+          );
+        }),
+      )
+      .handle("relockResources", ({ endpoint }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          const principal = yield* requireEnvironmentScope(AuthAccessWriteScope);
+          return yield* handleResourceAdapterError(plans.relockResources(principal.sessionId));
+        }),
+      )
+      .handle("resourcePolicy", ({ endpoint }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          const principal = yield* requireEnvironmentScope(AuthOrchestrationReadScope);
+          return yield* handleResourceSnapshotError(plans.resourcePolicy(principal.sessionId));
+        }),
+      )
+      .handle("resourceMutations", ({ endpoint }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          yield* requireEnvironmentScope(AuthOrchestrationReadScope);
+          return yield* handleResourceSnapshotError(plans.resourceMutations);
+        }),
+      )
+      .handle("resourceSource", ({ endpoint, payload }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          yield* requireEnvironmentScope(AuthOrchestrationReadScope);
+          return yield* handleResourceSourceError(plans.resourceSource(payload));
+        }),
+      )
+      .handle("reviewResource", ({ endpoint, payload }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          const principal = yield* requireDirectLocalAdministrativeRequest;
+          return yield* handleResourceAdapterError(
+            plans.reviewResource(principal.sessionId, payload),
+          );
+        }),
+      )
+      .handle("applyResource", ({ endpoint, payload }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          const principal = yield* requireDirectLocalAdministrativeRequest;
+          return yield* handleResourceAdapterError(
+            plans.applyResource(principal.sessionId, payload),
+          );
+        }),
+      )
+      .handle("rollbackResource", ({ endpoint, payload }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          const principal = yield* requireDirectLocalAdministrativeRequest;
+          return yield* handleResourceAdapterError(
+            plans.rollbackResource(principal.sessionId, payload),
+          );
+        }),
       );
   }),
 );

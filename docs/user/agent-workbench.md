@@ -13,10 +13,15 @@ action menu.
   or confirming a rollback.
 - **Skills** groups the skills reported by the environment's providers and keeps the `$name`
   invocation copyable.
+- **Library** groups prompts, skills, rules, hooks, and plans by category and source. Switch between
+  the global inventory and a project's effective view, inspect inert imports, and review previous
+  change receipts. Canonical rule and hook source is editable only after an explicit local-session
+  unlock; review shows the exact diff and validator evidence before Apply becomes available.
 - **Vitals** shows both used and remaining percentages, expected pace when reported, reset time, and
   exhaustion warnings. T3 Code does not estimate missing provider limits from token counts.
 
-Remote sessions with normal scopes can inspect the library but cannot edit governed prompts. A
+Remote sessions with normal scopes can inspect the library but cannot unlock or edit canonical
+rules and hooks. An unlock expires after ten minutes and is cleared when its host lease ends. A
 sidecar outage appears as an unavailable Workbench capability and does not interrupt chat or agent
 sessions.
 
@@ -31,6 +36,7 @@ and Agents.
   Suggestions are advisory and never attach a plan on their own.
 - **Actions** and **Skills** provide compact versions of the shared workflow library. **Insert** adds
   an invocation to the current composer without sending it; **Copy** leaves the composer unchanged.
+  Their **Open library** handoff leads to the full provenance, imports, and change-review surface.
 
 Vitals remains in the full Workbench because it is account-level information rather than chat
 context.

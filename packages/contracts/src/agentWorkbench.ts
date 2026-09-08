@@ -309,3 +309,195 @@ export const AgentWorkbenchPromptRollbackInput = Schema.Struct({
   requestId: TrimmedNonEmptyString,
 });
 export type AgentWorkbenchPromptRollbackInput = typeof AgentWorkbenchPromptRollbackInput.Type;
+
+const AgentWorkbenchResourceTarget = Schema.Struct({
+  kind: Schema.Literals(["workspace", "profile", "skill", "projection", "rule", "hook"]),
+  sourceId: Schema.String,
+  relativePath: Schema.String,
+  project: Schema.optionalKey(Schema.String),
+});
+const AgentWorkbenchResourceProvenance = Schema.Struct({
+  sourceId: Schema.String,
+  sourceType: Schema.Literals(["authority", "filesystem", "github", "zip", "markdown"]),
+  locator: Schema.String,
+  canonical: Schema.Boolean,
+  revision: Schema.optionalKey(Schema.String),
+});
+export const AgentWorkbenchResourceLibrary = Schema.Struct({
+  protocolVersion: AgentWorkbenchProtocolVersion,
+  revision: Schema.String,
+  lens: Schema.Literals(["global", "effective"]),
+  project: Schema.NullOr(Schema.String),
+  entries: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      kind: Schema.Literals(["prompt", "skill", "rule", "hook", "plan"]),
+      name: Schema.String,
+      description: Schema.String,
+      category: Schema.String,
+      group: Schema.String,
+      scope: Schema.Literals(["global", "project"]),
+      project: Schema.NullOr(Schema.String),
+      provenance: AgentWorkbenchResourceProvenance,
+      effective: Schema.Literals(["enabled", "disabled", "replaced", "not-applicable"]),
+      reason: Schema.optionalKey(Schema.String),
+      replacementId: Schema.optionalKey(Schema.String),
+      planPath: Schema.optionalKey(Schema.String),
+      relativePath: Schema.optionalKey(Schema.String),
+    }),
+  ),
+  projects: Schema.Array(Schema.String),
+});
+export type AgentWorkbenchResourceLibrary = typeof AgentWorkbenchResourceLibrary.Type;
+export const AgentWorkbenchReviewInbox = Schema.Struct({
+  protocolVersion: AgentWorkbenchProtocolVersion,
+  revision: Schema.Number,
+  items: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      source: Schema.Struct({
+        type: Schema.Literals(["github", "zip", "markdown"]),
+        locator: Schema.String,
+        revision: Schema.optionalKey(Schema.String),
+      }),
+      proposedKind: Schema.Literals(["prompt", "skill", "rule", "hook", "plan"]),
+      files: Schema.Array(
+        Schema.Struct({
+          path: Schema.String,
+          content: Schema.String,
+          executable: Schema.optionalKey(Schema.Boolean),
+        }),
+      ),
+      digest: Schema.String,
+      state: Schema.Literals(["staged", "discarded", "applied"]),
+      activatable: Schema.Literal(false),
+      createdAt: Schema.String,
+      updatedAt: Schema.String,
+      warnings: Schema.Array(Schema.String),
+      receiptId: Schema.optionalKey(Schema.String),
+    }),
+  ),
+});
+export type AgentWorkbenchReviewInbox = typeof AgentWorkbenchReviewInbox.Type;
+export const AgentWorkbenchResourceAuthority = Schema.Struct({
+  state: Schema.Literals(["locked", "unlocked"]),
+  reason: Schema.NullOr(Schema.String),
+  expiresAt: Schema.NullOr(Schema.String),
+  capabilities: Schema.Struct({
+    review: Schema.Boolean,
+    apply: Schema.Boolean,
+    rollback: Schema.Boolean,
+  }),
+});
+export type AgentWorkbenchResourceAuthority = typeof AgentWorkbenchResourceAuthority.Type;
+export const AgentWorkbenchResourcePolicy = Schema.Struct({
+  protocolVersion: AgentWorkbenchProtocolVersion,
+  revision: Schema.Number,
+  enabledThrough: Schema.Literals(["metadata", "skill", "projection", "rule", "hook"]),
+  stages: Schema.Array(
+    Schema.Struct({
+      id: Schema.Literals(["metadata", "skill", "projection", "rule", "hook"]),
+      state: Schema.Literals(["available", "locked"]),
+      reason: Schema.optionalKey(Schema.String),
+    }),
+  ),
+});
+export type AgentWorkbenchResourcePolicy = typeof AgentWorkbenchResourcePolicy.Type;
+const AgentWorkbenchValidator = Schema.Struct({
+  id: Schema.String,
+  valid: Schema.Boolean,
+  errors: Schema.Array(Schema.String),
+  checks: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        state: Schema.Literals(["passed", "failed"]),
+        detail: Schema.String,
+      }),
+    ),
+  ),
+});
+const AgentWorkbenchGitState = Schema.Struct({
+  root: Schema.NullOr(Schema.String),
+  head: Schema.NullOr(Schema.String),
+  clean: Schema.Boolean,
+  statusDigest: Schema.String,
+  changedPaths: Schema.Array(Schema.String),
+  requiresCheckpoint: Schema.Boolean,
+});
+const AgentWorkbenchMutationClass = Schema.Literals([
+  "metadata",
+  "skill",
+  "projection",
+  "rule",
+  "hook",
+]);
+const AgentWorkbenchResourceProposal = Schema.Struct({
+  id: Schema.String,
+  requestId: Schema.String,
+  revision: Schema.Number,
+  state: Schema.Literals(["prepared", "applying", "applied", "failed"]),
+  operation: Schema.Literals(["upsert", "quarantine", "hard-delete"]),
+  mutationClass: AgentWorkbenchMutationClass,
+  target: AgentWorkbenchResourceTarget,
+  path: Schema.String,
+  scope: Schema.Literals(["global", "project"]),
+  beforeDigest: Schema.NullOr(Schema.String),
+  afterDigest: Schema.NullOr(Schema.String),
+  diff: Schema.String,
+  diffDigest: Schema.String,
+  validator: AgentWorkbenchValidator,
+  git: AgentWorkbenchGitState,
+  dependencies: Schema.Array(Schema.String),
+  sourceReviewId: Schema.optionalKey(Schema.String),
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+});
+const AgentWorkbenchResourceReceipt = Schema.Struct({
+  id: Schema.String,
+  requestId: Schema.String,
+  proposalId: Schema.String,
+  operation: Schema.String,
+  mutationClass: AgentWorkbenchMutationClass,
+  target: AgentWorkbenchResourceTarget,
+  path: Schema.String,
+  scope: Schema.Literals(["global", "project"]),
+  beforeDigest: Schema.NullOr(Schema.String),
+  afterDigest: Schema.NullOr(Schema.String),
+  diffDigest: Schema.String,
+  validatorId: Schema.String,
+  checkpoint: Schema.NullOr(Schema.String),
+  status: Schema.Literals(["applied", "rolled-back"]),
+  undoAvailable: Schema.Boolean,
+  sourceReviewId: Schema.optionalKey(Schema.String),
+  appliedAt: Schema.String,
+  rolledBackAt: Schema.optionalKey(Schema.String),
+});
+export const AgentWorkbenchResourceSource = Schema.Struct({
+  protocolVersion: AgentWorkbenchProtocolVersion,
+  target: AgentWorkbenchResourceTarget,
+  content: Schema.String,
+  digest: Schema.String,
+  scope: Schema.Literals(["global", "project"]),
+});
+export type AgentWorkbenchResourceSource = typeof AgentWorkbenchResourceSource.Type;
+export const AgentWorkbenchResourceMutationReview = Schema.Struct({
+  protocolVersion: AgentWorkbenchProtocolVersion,
+  revision: Schema.Number,
+  proposal: AgentWorkbenchResourceProposal,
+});
+export type AgentWorkbenchResourceMutationReview = typeof AgentWorkbenchResourceMutationReview.Type;
+export const AgentWorkbenchResourceMutationLedger = Schema.Struct({
+  protocolVersion: AgentWorkbenchProtocolVersion,
+  revision: Schema.Number,
+  proposals: Schema.Array(AgentWorkbenchResourceProposal),
+  receipts: Schema.Array(AgentWorkbenchResourceReceipt),
+});
+export type AgentWorkbenchResourceMutationLedger = typeof AgentWorkbenchResourceMutationLedger.Type;
+export const AgentWorkbenchResourceMutationReceipt = Schema.Struct({
+  protocolVersion: AgentWorkbenchProtocolVersion,
+  revision: Schema.Number,
+  receipt: AgentWorkbenchResourceReceipt,
+});
+export type AgentWorkbenchResourceMutationReceipt =
+  typeof AgentWorkbenchResourceMutationReceipt.Type;

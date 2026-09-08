@@ -46,3 +46,20 @@ Run the isolated positive/negative control with:
 ```bash
 vp run test:windows-dev-guard
 ```
+
+## Agent Workbench snapshot activation
+
+The Windows dev launcher refreshes Agent Workbench only after the old T3 client is closed and
+before the new environment backend starts. `refresh-agent-workbench-on-launch.sh` waits for the
+old sidecar to release its final lease, selects a snapshot from the supplied source checkout, and
+verifies it with `doctor`. It never stops the sidecar. If another host still owns a lease, it exits
+`75` and the desktop remains closed rather than launching against a stale snapshot.
+
+Refresh preserves the existing Agent Workbench workspace and secrets files. This makes desktop
+startup the activation boundary without making T3 Code own Agent Workbench source or configuration.
+
+Run its lifecycle control with:
+
+```bash
+vp run test:windows-dev-workbench-refresh
+```

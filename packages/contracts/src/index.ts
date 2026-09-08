@@ -33,4 +33,5 @@ export * from "./resourceTelemetry.ts";
 export * from "./usage.ts";
 export * from "./workflowCatalog.ts";
 export * from "./workbenchPlans.ts";
+export * from "./workbenchResources.ts";
 export * from "./rpc.ts";

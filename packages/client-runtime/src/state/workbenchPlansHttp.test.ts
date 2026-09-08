@@ -16,6 +16,8 @@ import {
   mutateEnvironmentWorkbenchPlan,
   saveEnvironmentWorkbenchPlan,
   suggestEnvironmentWorkbenchPlans,
+  fetchEnvironmentWorkbenchResourceSource,
+  reviewEnvironmentWorkbenchResource,
 } from "./workbenchPlansHttp.ts";
 
 const TARGET = new PrimaryConnectionTarget({
@@ -254,5 +256,83 @@ describe("Workbench plan environment HTTP", () => {
         "Phase 3",
       ]);
     }),
+  );
+
+  it.effect(
+    "serializes registered resource targets and reviewed mutations through environment auth",
+    () =>
+      Effect.gen(function* () {
+        const calls: Array<readonly [RequestInfo | URL, RequestInit]> = [];
+        const target = {
+          kind: "rule" as const,
+          sourceId: "claude-global",
+          relativePath: "rules/testing.md",
+        };
+        const fetchFn = ((request, init) => {
+          calls.push([request, init ?? {}]);
+          if ((init?.method ?? "GET") === "GET") {
+            return Promise.resolve(
+              Response.json({ target, content: "# Testing", digest: "old", scope: "global" }),
+            );
+          }
+          return Promise.resolve(
+            Response.json({
+              revision: 1,
+              proposal: {
+                id: "proposal-1",
+                requestId: "request-1",
+                revision: 1,
+                state: "prepared",
+                operation: "upsert",
+                mutationClass: "rule",
+                target,
+                scope: "global",
+                beforeDigest: "old",
+                afterDigest: "new",
+                diff: "+change",
+                diffDigest: "diff",
+                validator: { id: "rules", valid: true, errors: [] },
+                git: {
+                  head: "abc",
+                  clean: true,
+                  statusDigest: "clean",
+                  changedPaths: [],
+                  requiresCheckpoint: false,
+                },
+                dependencies: [],
+                createdAt: "2026-09-07T00:00:00Z",
+                updatedAt: "2026-09-07T00:00:00Z",
+              },
+            }),
+          );
+        }) satisfies typeof fetch;
+        const layer = remoteHttpClientLayer(fetchFn);
+
+        yield* fetchEnvironmentWorkbenchResourceSource({
+          prepared: PREPARED,
+          signer: Option.none(),
+          target,
+        }).pipe(Effect.provide(layer));
+        yield* reviewEnvironmentWorkbenchResource({
+          prepared: PREPARED,
+          signer: Option.none(),
+          value: {
+            requestId: "request-1",
+            operation: "upsert",
+            target,
+            content: "# Testing\nchange",
+          },
+        }).pipe(Effect.provide(layer));
+
+        expect(String(calls[0]?.[0])).toBe(
+          "https://environment.example.test/api/workbench/resources/source?kind=rule&sourceId=claude-global&relativePath=rules%2Ftesting.md",
+        );
+        expect(requestBody(calls[1]?.[1] ?? {})).toEqual({
+          requestId: "request-1",
+          operation: "upsert",
+          target,
+          content: "# Testing\nchange",
+        });
+      }),
   );
 });

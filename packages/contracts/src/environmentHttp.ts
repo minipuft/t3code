@@ -84,6 +84,20 @@ import {
   WorkbenchPlanSuggestions,
   WorkbenchVitalsSnapshot,
 } from "./workbenchPlans.ts";
+import {
+  WorkbenchResourceApplyInput,
+  WorkbenchResourceAuthority,
+  WorkbenchResourceLibrary,
+  WorkbenchResourceMutationLedger,
+  WorkbenchResourceMutationReceipt,
+  WorkbenchResourceMutationReview,
+  WorkbenchResourcePolicy,
+  WorkbenchResourceReviewInput,
+  WorkbenchResourceRollbackInput,
+  WorkbenchResourceSource,
+  WorkbenchResourceTarget,
+  WorkbenchReviewInbox,
+} from "./workbenchResources.ts";
 
 const OptionalBearerHeaders = Schema.Struct({
   authorization: Schema.optionalKey(Schema.String),
@@ -226,6 +240,7 @@ export const EnvironmentResourceNotFoundReason = Schema.Literals([
   "thread_not_found",
   "workflow_catalog_item_not_found",
   "workbench_plan_not_found",
+  "workbench_resource_not_found",
 ]);
 export type EnvironmentResourceNotFoundReason = typeof EnvironmentResourceNotFoundReason.Type;
 
@@ -714,6 +729,14 @@ const EnvironmentWorkbenchPlanMutationErrors = [
   EnvironmentHttpConflictError,
   EnvironmentInternalError,
 ] as const;
+const EnvironmentWorkbenchResourceMutationErrors = [
+  EnvironmentRequestInvalidError,
+  EnvironmentScopeRequiredError,
+  EnvironmentHttpForbiddenError,
+  EnvironmentResourceNotFoundError,
+  EnvironmentHttpConflictError,
+  EnvironmentInternalError,
+] as const;
 
 export class EnvironmentWorkbenchPlansHttpApi extends HttpApiGroup.make("workbenchPlans")
   .add(
@@ -853,6 +876,113 @@ export class EnvironmentWorkbenchPlansHttpApi extends HttpApiGroup.make("workben
         OpenApi.Description,
         'POST. Adds a comment/removal note or resolves an annotation for one plan. Requires orchestration:operate. Example add request: {"op":"add","path":"t3code/phase.md","kind":"comment","body":"Clarify this","quote":"selected text","heading":"Boundary"}. The response is the same annotation list shape as GET. Missing plans return 404; invalid annotations return 400; authentication/scope failures return 401/403; adapter failures return 500. No endpoint-specific rate limit is applied.',
       ),
+  )
+  .add(
+    HttpApiEndpoint.get("resourceLibrary", "/api/workbench/resources/library", {
+      headers: OptionalBearerHeaders,
+      payload: {
+        lens: Schema.Literals(["global", "effective"]),
+        project: Schema.optionalKey(Schema.String),
+      },
+      success: WorkbenchResourceLibrary,
+      error: EnvironmentOrchestrationSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Read the governed Workbench resource library"),
+  )
+  .add(
+    HttpApiEndpoint.get("reviewInbox", "/api/workbench/resources/review-inbox", {
+      headers: OptionalBearerHeaders,
+      success: WorkbenchReviewInbox,
+      error: EnvironmentOrchestrationSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Read inert Workbench import candidates"),
+  )
+  .add(
+    HttpApiEndpoint.get("resourceAuthority", "/api/workbench/resources/authority", {
+      headers: OptionalBearerHeaders,
+      success: WorkbenchResourceAuthority,
+      error: EnvironmentOrchestrationSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Read this session's canonical mutation authority"),
+  )
+  .add(
+    HttpApiEndpoint.post("unlockResources", "/api/workbench/resources/authority/unlock", {
+      headers: OptionalBearerHeaders,
+      success: WorkbenchResourceAuthority,
+      error: EnvironmentWorkbenchResourceMutationErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Request an ephemeral direct-local administrative unlock"),
+  )
+  .add(
+    HttpApiEndpoint.post("relockResources", "/api/workbench/resources/authority/relock", {
+      headers: OptionalBearerHeaders,
+      success: WorkbenchResourceAuthority,
+      error: EnvironmentWorkbenchResourceMutationErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Relock canonical resource mutation for this session"),
+  )
+  .add(
+    HttpApiEndpoint.get("resourcePolicy", "/api/workbench/resources/policy", {
+      headers: OptionalBearerHeaders,
+      success: WorkbenchResourcePolicy,
+      error: EnvironmentOrchestrationSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Read progressive resource mutation policy"),
+  )
+  .add(
+    HttpApiEndpoint.get("resourceMutations", "/api/workbench/resources/mutations", {
+      headers: OptionalBearerHeaders,
+      success: WorkbenchResourceMutationLedger,
+      error: EnvironmentOrchestrationSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Read canonical mutation proposals and receipts"),
+  )
+  .add(
+    HttpApiEndpoint.get("resourceSource", "/api/workbench/resources/source", {
+      headers: OptionalBearerHeaders,
+      payload: WorkbenchResourceTarget.fields,
+      success: WorkbenchResourceSource,
+      error: EnvironmentOrchestrationThreadSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Read a registered canonical resource source"),
+  )
+  .add(
+    HttpApiEndpoint.post("reviewResource", "/api/workbench/resources/review", {
+      headers: OptionalBearerHeaders,
+      payload: WorkbenchResourceReviewInput,
+      success: WorkbenchResourceMutationReview,
+      error: EnvironmentWorkbenchResourceMutationErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Prepare and validate an exact canonical resource diff"),
+  )
+  .add(
+    HttpApiEndpoint.post("applyResource", "/api/workbench/resources/apply", {
+      headers: OptionalBearerHeaders,
+      payload: WorkbenchResourceApplyInput,
+      success: WorkbenchResourceMutationReceipt,
+      error: EnvironmentWorkbenchResourceMutationErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Apply a reviewed canonical resource diff"),
+  )
+  .add(
+    HttpApiEndpoint.post("rollbackResource", "/api/workbench/resources/rollback", {
+      headers: OptionalBearerHeaders,
+      payload: WorkbenchResourceRollbackInput,
+      success: WorkbenchResourceMutationReceipt,
+      error: EnvironmentWorkbenchResourceMutationErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Roll back one canonical resource receipt"),
   ) {}
 
 export class EnvironmentConnectHttpApi extends HttpApiGroup.make("connect")

@@ -39,9 +39,25 @@ an error/retry state visible when rendering fails. Vitals remains a full-page mo
 | Plans, plan associations/suggestions, vitals, catalog, prompts | `orchestration:read`    |
 | Plan association changes, save/move/rename/create/annotations  | `orchestration:operate` |
 | Prompt review/apply/rollback                                   | `access:write`          |
+| Resource library/source/authority/policy/ledger                | `orchestration:read`    |
+| Resource unlock/relock/review/apply/rollback                   | `access:write`          |
 
 Prompt apply and rollback carry a browser-generated idempotency request id. Agent Workbench forwards
 confirmed mutations to Claude Prompts MCP, which remains the sole writer and revision-history owner.
+
+Canonical rule and hook mutation adds a second, independent authority boundary. The environment
+server derives the authenticated T3 session id and Agent Workbench lease id; neither comes from the
+browser payload. Unlock succeeds only when the HTTP peer is loopback, every address in any forwarded
+chain is also loopback, the credential is not a relay DPoP token, and the principal has
+`access:write`. The dev proxy preserves that chain, so a remote browser does not become local merely
+because Vite connects to the server over loopback. Review, apply, and rollback repeat that
+direct-local check instead of trusting the earlier unlock. The browser-facing
+projection strips canonical absolute paths, repository roots, and provenance locators while keeping
+relative targets, exact diffs, validator evidence, dirty-state requirements, and receipts.
+
+Agent Workbench keeps the resulting session-and-lease authority only in memory for ten minutes and
+revokes it when the lease closes. Target lookup and validator choice remain registry-owned, so an
+HTTP request cannot nominate an arbitrary filesystem path or executable.
 
 ## Host conformance
 

@@ -5,6 +5,7 @@ import {
   BracesIcon,
   CloudIcon,
   FileTextIcon,
+  LibraryIcon,
   MonitorIcon,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
@@ -24,6 +25,7 @@ import { WorkbenchCatalogPanel } from "./WorkbenchCatalogView";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
 import { WorkbenchPlansPanel } from "./WorkbenchPlansPanel";
 import { WorkbenchVitalsPanel } from "./WorkbenchVitalsPanel";
+import { WorkbenchResourceLibraryPanel } from "./WorkbenchResourceLibraryPanel";
 import { ScrollArea } from "../ui/scroll-area";
 import {
   Select,
@@ -44,6 +46,7 @@ const MODULES: ReadonlyArray<{
   { id: "plans", label: "Plans", icon: <FileTextIcon /> },
   { id: "prompts", label: "Prompts", icon: <BracesIcon /> },
   { id: "skills", label: "Skills", icon: <BlocksIcon /> },
+  { id: "library", label: "Library", icon: <LibraryIcon /> },
   { id: "vitals", label: "Vitals", icon: <ActivityIcon /> },
 ];
 
@@ -128,6 +131,19 @@ export function WorkbenchPage(props: {
                 />
               ) : (
                 <WorkbenchVitalsPanel environmentId={effectiveEnvironmentId} />
+              )
+            ) : null}
+            {props.activeModule === "library" ? (
+              effectiveEnvironmentId === null ? (
+                <WorkbenchEmptyState
+                  title="No environment is connected"
+                  description="Connect an environment before browsing governed resources."
+                />
+              ) : (
+                <WorkbenchResourceLibraryPanel
+                  key={`${effectiveEnvironmentId}:library`}
+                  environmentId={effectiveEnvironmentId}
+                />
               )
             ) : null}
           </WorkspacePageContainer>

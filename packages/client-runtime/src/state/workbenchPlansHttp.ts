@@ -14,6 +14,18 @@ import type {
   WorkbenchPlanSuggestionInput,
   WorkbenchPlanSuggestions,
   WorkbenchVitalsSnapshot,
+  WorkbenchResourceApplyInput,
+  WorkbenchResourceAuthority,
+  WorkbenchResourceLibrary,
+  WorkbenchResourceMutationLedger,
+  WorkbenchResourceMutationReceipt,
+  WorkbenchResourceMutationReview,
+  WorkbenchResourcePolicy,
+  WorkbenchResourceReviewInput,
+  WorkbenchResourceRollbackInput,
+  WorkbenchResourceSource,
+  WorkbenchResourceTarget,
+  WorkbenchReviewInbox,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -253,6 +265,173 @@ export const mutateEnvironmentWorkbenchPlanAnnotations = Effect.fn(
   });
 });
 
+export const fetchEnvironmentWorkbenchResourceLibrary = Effect.fn(
+  "clientRuntime.state.fetchEnvironmentWorkbenchResourceLibrary",
+)(function* (
+  input: WorkbenchPlansRequestContext & {
+    readonly lens: "global" | "effective";
+    readonly project?: string;
+  },
+) {
+  const payload =
+    input.project === undefined
+      ? { lens: input.lens }
+      : { lens: input.lens, project: input.project };
+  const requestUrl = environmentQueryUrl(
+    input.prepared.httpBaseUrl,
+    "/api/workbench/resources/library",
+    payload,
+  );
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  return yield* executeRequest({
+    ...input,
+    method: "GET",
+    requestUrl,
+    request: (headers) => client.workbenchPlans.resourceLibrary({ payload, headers }),
+  });
+});
+
+export const fetchEnvironmentWorkbenchReviewInbox = Effect.fn(
+  "clientRuntime.state.fetchEnvironmentWorkbenchReviewInbox",
+)(function* (input: WorkbenchPlansRequestContext) {
+  const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
+  const requestUrl = urlBuilder.workbenchPlans.reviewInbox();
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  return yield* executeRequest({
+    ...input,
+    method: "GET",
+    requestUrl,
+    request: (headers) => client.workbenchPlans.reviewInbox({ headers }),
+  });
+});
+
+export const fetchEnvironmentWorkbenchResourceAuthority = Effect.fn(
+  "clientRuntime.state.fetchEnvironmentWorkbenchResourceAuthority",
+)(function* (input: WorkbenchPlansRequestContext) {
+  const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
+  const requestUrl = urlBuilder.workbenchPlans.resourceAuthority();
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  return yield* executeRequest({
+    ...input,
+    method: "GET",
+    requestUrl,
+    request: (headers) => client.workbenchPlans.resourceAuthority({ headers }),
+  });
+});
+
+const authorityCommand = Effect.fn("clientRuntime.state.workbenchResourceAuthorityCommand")(
+  function* (input: WorkbenchPlansRequestContext & { readonly action: "unlock" | "relock" }) {
+    const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
+    const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+    const requestUrl =
+      input.action === "unlock"
+        ? urlBuilder.workbenchPlans.unlockResources()
+        : urlBuilder.workbenchPlans.relockResources();
+    return yield* executeRequest({
+      ...input,
+      method: "POST",
+      requestUrl,
+      request: (headers) =>
+        input.action === "unlock"
+          ? client.workbenchPlans.unlockResources({ headers })
+          : client.workbenchPlans.relockResources({ headers }),
+    });
+  },
+);
+
+export const fetchEnvironmentWorkbenchResourcePolicy = Effect.fn(
+  "clientRuntime.state.fetchEnvironmentWorkbenchResourcePolicy",
+)(function* (input: WorkbenchPlansRequestContext) {
+  const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
+  const requestUrl = urlBuilder.workbenchPlans.resourcePolicy();
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  return yield* executeRequest({
+    ...input,
+    method: "GET",
+    requestUrl,
+    request: (headers) => client.workbenchPlans.resourcePolicy({ headers }),
+  });
+});
+
+export const fetchEnvironmentWorkbenchResourceMutations = Effect.fn(
+  "clientRuntime.state.fetchEnvironmentWorkbenchResourceMutations",
+)(function* (input: WorkbenchPlansRequestContext) {
+  const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
+  const requestUrl = urlBuilder.workbenchPlans.resourceMutations();
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  return yield* executeRequest({
+    ...input,
+    method: "GET",
+    requestUrl,
+    request: (headers) => client.workbenchPlans.resourceMutations({ headers }),
+  });
+});
+
+export const fetchEnvironmentWorkbenchResourceSource = Effect.fn(
+  "clientRuntime.state.fetchEnvironmentWorkbenchResourceSource",
+)(function* (input: WorkbenchPlansRequestContext & { readonly target: WorkbenchResourceTarget }) {
+  const requestUrl = environmentQueryUrl(
+    input.prepared.httpBaseUrl,
+    "/api/workbench/resources/source",
+    input.target,
+  );
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  return yield* executeRequest({
+    ...input,
+    method: "GET",
+    requestUrl,
+    request: (headers) => client.workbenchPlans.resourceSource({ payload: input.target, headers }),
+  });
+});
+
+export const reviewEnvironmentWorkbenchResource = Effect.fn(
+  "clientRuntime.state.reviewWorkbenchResource",
+)(function* (
+  input: WorkbenchPlansRequestContext & { readonly value: WorkbenchResourceReviewInput },
+) {
+  const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const requestUrl = urlBuilder.workbenchPlans.reviewResource();
+  return yield* executeRequest({
+    ...input,
+    method: "POST",
+    requestUrl,
+    request: (headers) => client.workbenchPlans.reviewResource({ payload: input.value, headers }),
+  });
+});
+
+export const applyEnvironmentWorkbenchResource = Effect.fn(
+  "clientRuntime.state.applyWorkbenchResource",
+)(function* (
+  input: WorkbenchPlansRequestContext & { readonly value: WorkbenchResourceApplyInput },
+) {
+  const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const requestUrl = urlBuilder.workbenchPlans.applyResource();
+  return yield* executeRequest({
+    ...input,
+    method: "POST",
+    requestUrl,
+    request: (headers) => client.workbenchPlans.applyResource({ payload: input.value, headers }),
+  });
+});
+
+export const rollbackEnvironmentWorkbenchResource = Effect.fn(
+  "clientRuntime.state.rollbackWorkbenchResource",
+)(function* (
+  input: WorkbenchPlansRequestContext & { readonly value: WorkbenchResourceRollbackInput },
+) {
+  const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const requestUrl = urlBuilder.workbenchPlans.rollbackResource();
+  return yield* executeRequest({
+    ...input,
+    method: "POST",
+    requestUrl,
+    request: (headers) => client.workbenchPlans.rollbackResource({ payload: input.value, headers }),
+  });
+});
+
 export class WorkbenchPlansLoader extends Context.Service<
   WorkbenchPlansLoader,
   {
@@ -294,6 +473,44 @@ export class WorkbenchPlansLoader extends Context.Service<
       prepared: PreparedConnection,
       input: WorkbenchPlanAnnotationMutationInput,
     ) => Effect.Effect<WorkbenchPlanAnnotations, RemoteEnvironmentRequestError>;
+    readonly resourceLibrary: (
+      prepared: PreparedConnection,
+      input: { readonly lens: "global" | "effective"; readonly project?: string },
+    ) => Effect.Effect<WorkbenchResourceLibrary, RemoteEnvironmentRequestError>;
+    readonly reviewInbox: (
+      prepared: PreparedConnection,
+    ) => Effect.Effect<WorkbenchReviewInbox, RemoteEnvironmentRequestError>;
+    readonly resourceAuthority: (
+      prepared: PreparedConnection,
+    ) => Effect.Effect<WorkbenchResourceAuthority, RemoteEnvironmentRequestError>;
+    readonly unlockResources: (
+      prepared: PreparedConnection,
+    ) => Effect.Effect<WorkbenchResourceAuthority, RemoteEnvironmentRequestError>;
+    readonly relockResources: (
+      prepared: PreparedConnection,
+    ) => Effect.Effect<WorkbenchResourceAuthority, RemoteEnvironmentRequestError>;
+    readonly resourcePolicy: (
+      prepared: PreparedConnection,
+    ) => Effect.Effect<WorkbenchResourcePolicy, RemoteEnvironmentRequestError>;
+    readonly resourceMutations: (
+      prepared: PreparedConnection,
+    ) => Effect.Effect<WorkbenchResourceMutationLedger, RemoteEnvironmentRequestError>;
+    readonly resourceSource: (
+      prepared: PreparedConnection,
+      target: WorkbenchResourceTarget,
+    ) => Effect.Effect<WorkbenchResourceSource, RemoteEnvironmentRequestError>;
+    readonly reviewResource: (
+      prepared: PreparedConnection,
+      input: WorkbenchResourceReviewInput,
+    ) => Effect.Effect<WorkbenchResourceMutationReview, RemoteEnvironmentRequestError>;
+    readonly applyResource: (
+      prepared: PreparedConnection,
+      input: WorkbenchResourceApplyInput,
+    ) => Effect.Effect<WorkbenchResourceMutationReceipt, RemoteEnvironmentRequestError>;
+    readonly rollbackResource: (
+      prepared: PreparedConnection,
+      input: WorkbenchResourceRollbackInput,
+    ) => Effect.Effect<WorkbenchResourceMutationReceipt, RemoteEnvironmentRequestError>;
   }
 >()("@t3tools/client-runtime/state/workbenchPlansHttp/WorkbenchPlansLoader") {}
 
@@ -327,6 +544,28 @@ export const workbenchPlansLoaderLayer: Layer.Layer<
         provideHttp(fetchEnvironmentWorkbenchPlanAnnotations({ prepared, path, signer })),
       annotate: (prepared, value) =>
         provideHttp(mutateEnvironmentWorkbenchPlanAnnotations({ prepared, value, signer })),
+      resourceLibrary: (prepared, input) =>
+        provideHttp(fetchEnvironmentWorkbenchResourceLibrary({ prepared, signer, ...input })),
+      reviewInbox: (prepared) =>
+        provideHttp(fetchEnvironmentWorkbenchReviewInbox({ prepared, signer })),
+      resourceAuthority: (prepared) =>
+        provideHttp(fetchEnvironmentWorkbenchResourceAuthority({ prepared, signer })),
+      unlockResources: (prepared) =>
+        provideHttp(authorityCommand({ prepared, signer, action: "unlock" })),
+      relockResources: (prepared) =>
+        provideHttp(authorityCommand({ prepared, signer, action: "relock" })),
+      resourcePolicy: (prepared) =>
+        provideHttp(fetchEnvironmentWorkbenchResourcePolicy({ prepared, signer })),
+      resourceMutations: (prepared) =>
+        provideHttp(fetchEnvironmentWorkbenchResourceMutations({ prepared, signer })),
+      resourceSource: (prepared, target) =>
+        provideHttp(fetchEnvironmentWorkbenchResourceSource({ prepared, signer, target })),
+      reviewResource: (prepared, value) =>
+        provideHttp(reviewEnvironmentWorkbenchResource({ prepared, signer, value })),
+      applyResource: (prepared, value) =>
+        provideHttp(applyEnvironmentWorkbenchResource({ prepared, signer, value })),
+      rollbackResource: (prepared, value) =>
+        provideHttp(rollbackEnvironmentWorkbenchResource({ prepared, signer, value })),
     });
   }),
 );

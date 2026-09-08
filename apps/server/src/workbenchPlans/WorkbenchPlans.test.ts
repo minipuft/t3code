@@ -10,6 +10,8 @@ import {
   projectPlanList,
   projectSuggestions,
   projectVitals,
+  projectResourceLibrary,
+  projectResourceLedger,
 } from "./WorkbenchPlans.ts";
 
 describe("Agent Workbench plan projection", () => {
@@ -171,5 +173,84 @@ describe("Agent Workbench plan projection", () => {
       capability: { status: "unavailable", reason: "version mismatch" },
       items: [],
     });
+  });
+
+  it("redacts canonical host paths while preserving review evidence", () => {
+    const target = {
+      kind: "rule" as const,
+      sourceId: "claude-global",
+      relativePath: "rules/testing.md",
+    };
+    const common = {
+      id: "proposal-1",
+      requestId: "request-1",
+      revision: 1,
+      state: "prepared" as const,
+      operation: "upsert" as const,
+      mutationClass: "rule" as const,
+      target,
+      path: "/home/minipuft/.claude/rules/testing.md",
+      scope: "global" as const,
+      beforeDigest: "old",
+      afterDigest: "new",
+      diff: "+proof",
+      diffDigest: "diff",
+      validator: {
+        id: "rule-validator",
+        valid: true,
+        errors: [],
+        checks: [{ id: "rules", state: "passed" as const, detail: "ok" }],
+      },
+      git: {
+        root: "/home/minipuft/.claude",
+        head: "abc",
+        clean: true,
+        statusDigest: "clean",
+        changedPaths: [],
+        requiresCheckpoint: false,
+      },
+      dependencies: ["/home/minipuft/.claude/CLAUDE.md"],
+      createdAt: "2026-09-07T00:00:00Z",
+      updatedAt: "2026-09-07T00:00:00Z",
+    };
+    const library = projectResourceLibrary({
+      protocolVersion: "1.0.0",
+      revision: "rev",
+      lens: "global",
+      project: null,
+      projects: [],
+      entries: [
+        {
+          id: "rule:testing",
+          kind: "rule",
+          name: "Testing",
+          description: "tests",
+          category: "rules",
+          group: "global",
+          scope: "global",
+          project: null,
+          provenance: {
+            sourceId: "claude-global",
+            sourceType: "authority",
+            locator: "/home/minipuft/.claude/rules/testing.md",
+            canonical: true,
+          },
+          effective: "enabled",
+          relativePath: "rules/testing.md",
+        },
+      ],
+    });
+    const ledger = projectResourceLedger({
+      protocolVersion: "1.0.0",
+      revision: 1,
+      proposals: [common],
+      receipts: [],
+    });
+
+    expect(library.entries[0]?.provenance).not.toHaveProperty("locator");
+    expect(ledger.proposals[0]).not.toHaveProperty("path");
+    expect(ledger.proposals[0]?.git).not.toHaveProperty("root");
+    expect(ledger.proposals[0]?.dependencies).toEqual(["CLAUDE.md"]);
+    expect(ledger.proposals[0]?.validator.checks?.[0]?.state).toBe("passed");
   });
 });

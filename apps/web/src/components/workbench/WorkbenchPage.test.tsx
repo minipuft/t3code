@@ -11,6 +11,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { groupCatalogItems, WorkbenchCatalogView } from "./WorkbenchCatalogView";
 import { WorkbenchModuleRail } from "./WorkbenchPage";
 import { filterWorkbenchPlans, markdownHeadingBefore, PlanList } from "./WorkbenchPlansPanel";
+import { authorityReason, resourceApplyInput } from "./WorkbenchResourceLibraryPanel";
 
 const catalog: WorkflowCatalogList = {
   capability: { status: "available", sourceKind: "http", reason: null },
@@ -61,13 +62,14 @@ const renderCatalog = (
   );
 
 describe("WorkbenchCatalogView", () => {
-  it("keeps all four modules directly visible with one active item", () => {
+  it("keeps all five modules directly visible with one active item", () => {
     const markup = renderToStaticMarkup(
       <WorkbenchModuleRail activeModule="skills" onChange={() => {}} />,
     );
     expect(markup).toContain("Plans");
     expect(markup).toContain("Prompts");
     expect(markup).toContain("Skills");
+    expect(markup).toContain("Library");
     expect(markup).toContain("Vitals");
     expect(markup).toContain('aria-current="page"');
   });
@@ -194,5 +196,33 @@ describe("WorkbenchCatalogView", () => {
     const markdown = "# Plan\n\nIntro\n\n## Boundary\nSelected text";
     expect(markdownHeadingBefore(markdown, markdown.indexOf("Selected"))).toBe("Boundary");
     expect(markdownHeadingBefore("No heading", 5)).toBe("");
+  });
+
+  it("explains why canonical mutations remain locked", () => {
+    expect(authorityReason("remote_session")).toContain("remote, relay, and tunnel");
+    expect(authorityReason("unlock_expired")).toContain("expired");
+    expect(authorityReason(null)).toContain("direct local administrative session");
+  });
+
+  it("echoes the reviewed git status digest when a dirty checkpoint is required", () => {
+    const review = {
+      proposal: {
+        id: "proposal-1",
+        revision: 7,
+        diffDigest: "diff-digest",
+        git: { requiresCheckpoint: true, statusDigest: "reviewed-status-digest" },
+      },
+    };
+    expect(resourceApplyInput(review as never)).toEqual({
+      proposalId: "proposal-1",
+      expectedRevision: 7,
+      diffDigest: "diff-digest",
+      checkpoint: "reviewed-status-digest",
+    });
+    expect(
+      resourceApplyInput({
+        proposal: { ...review.proposal, git: { requiresCheckpoint: false, statusDigest: "clean" } },
+      } as never),
+    ).not.toHaveProperty("checkpoint");
   });
 });

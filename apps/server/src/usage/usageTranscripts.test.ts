@@ -51,6 +51,8 @@ describe("parseClaudeLine", () => {
       reasoningTokens: 0,
     });
     expect(record?.dedupeKey).toBe("msg_1:");
+    expect(record?.workspacePath).toBe("/home/theo/project");
+    expect(record?.workspaceSource).toBe("claudeCwd");
   });
 
   it("gives every content block of one message the same dedupe key", () => {
@@ -111,6 +113,22 @@ describe("parseCodexLine", () => {
     expect(record?.totals.uncachedInputTokens).toBe(19239 - 11008);
     expect(record?.totals.cachedInputTokens).toBe(11008);
     expect(record?.totals.reasoningTokens).toBe(116);
+  });
+
+  it("carries cwd only from the rollout's own session metadata", () => {
+    const state = initialCodexScanState();
+    parseCodexLine(
+      JSON.stringify({
+        type: "session_meta",
+        timestamp: "2026-08-01T05:17:41.289Z",
+        payload: { type: "session_meta", id: "session-a", cwd: "/work/codex" },
+      }),
+      state,
+    );
+    parseCodexLine(turnContext, state);
+    const record = parseCodexLine(tokenCount(100, 0, 10, 0), state);
+    expect(record?.workspacePath).toBe("/work/codex");
+    expect(record?.workspaceSource).toBe("codexSessionMeta");
   });
 
   it("skips a repeated token_count so deltas are not double counted", () => {

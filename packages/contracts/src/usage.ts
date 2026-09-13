@@ -21,16 +21,16 @@ import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
  * client renders partial coverage when an environment reports an older version
  * rather than failing the whole page.
  */
-export const USAGE_CONTRACT_VERSION = 5 as const;
+export const USAGE_CONTRACT_VERSION = 6 as const;
 
 /**
  * Oldest {@link UsageSummary} version a current client will still merge.
  *
- * v5 only adds `grok` to {@link UsageProviderKind}; v4 Claude/Codex buckets
- * remain valid, so mixed-version environments keep those totals instead of
- * treating every older server as stale.
+ * v6 adds project-attribution fields to every bucket. v4/v5 summaries cannot
+ * decode into that structural shape, so they must stay excluded rather than
+ * being merged as though their totals carried project attribution.
  */
-export const USAGE_MERGE_COMPATIBLE_SINCE = 4 as const;
+export const USAGE_MERGE_COMPATIBLE_SINCE = 6 as const;
 
 export const UsageProviderKind = Schema.Literals(["claude", "codex", "grok"]);
 export type UsageProviderKind = typeof UsageProviderKind.Type;
@@ -79,6 +79,14 @@ export const UsageTokenTotals = Schema.Struct({
 });
 export type UsageTokenTotals = typeof UsageTokenTotals.Type;
 
+export const UsageAttributionStatus = Schema.Literals([
+  "attributed",
+  "missingEvidence",
+  "unknownRoot",
+  "ambiguousRoot",
+]);
+export type UsageAttributionStatus = typeof UsageAttributionStatus.Type;
+
 /**
  * One `(day, hourStart?, provider, model)` cell. `hourStart` is the UTC start
  * instant of a rolling bucket and is present only for hourly requests.
@@ -93,6 +101,9 @@ export const UsageBucket = Schema.Struct({
   hourStart: Schema.optional(TrimmedNonEmptyString),
   provider: UsageProviderKind,
   model: TrimmedNonEmptyString,
+  /** Environment-local project identity, resolved from transcript workspace evidence. */
+  projectId: Schema.NullOr(TrimmedNonEmptyString),
+  attributionStatus: UsageAttributionStatus,
   totals: UsageTokenTotals,
   costUsd: Schema.Number,
   /**

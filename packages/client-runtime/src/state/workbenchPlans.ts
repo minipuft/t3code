@@ -2,6 +2,7 @@ import type {
   WorkbenchConversationInput,
   WorkbenchPlanAnnotationMutationInput,
   WorkbenchPlanAssociationMutationInput,
+  WorkbenchReviewInboxCommand,
   WorkbenchPlanMutationInput,
   WorkbenchPlanPath,
   WorkbenchPlanSaveInput,
@@ -14,6 +15,7 @@ import type {
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import type { WorkbenchRelationshipReviewInput } from "@t3tools/contracts";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { Atom } from "effect/unstable/reactivity";
 
@@ -69,6 +71,20 @@ export function createWorkbenchPlansEnvironmentAtoms<R, E>(
       refreshIntervalMs: 60_000,
       execute: (_input: null) =>
         withPreparedConnection((loader, prepared) => loader.vitals(prepared)),
+    }),
+    topology: createEnvironmentQueryAtomFamily(runtime, {
+      label: "environment-data:workbench-topology",
+      staleTimeMs: 3_000,
+      refreshIntervalMs: 5_000,
+      execute: (_input: null) =>
+        withPreparedConnection((loader, prepared) => loader.topology(prepared)),
+    }),
+    reviewRelationship: createEnvironmentCommand(runtime, {
+      label: "environment-data:workbench-topology:review",
+      execute: (input: WorkbenchRelationshipReviewInput) =>
+        withPreparedConnection((loader, prepared) => loader.reviewRelationship(prepared, input)),
+      scheduler: mutationScheduler,
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
     }),
     associations: createEnvironmentQueryAtomFamily(runtime, {
       label: "environment-data:workbench-plans:associations",
@@ -150,6 +166,40 @@ export function createWorkbenchPlansEnvironmentAtoms<R, E>(
       refreshIntervalMs: 5_000,
       execute: (_input: null) =>
         withPreparedConnection((loader, prepared) => loader.reviewInbox(prepared)),
+    }),
+    reviewInboxCommand: createEnvironmentCommand(runtime, {
+      label: "environment-data:workbench:review-inbox-command",
+      execute: (input: WorkbenchReviewInboxCommand) =>
+        withPreparedConnection((loader, prepared) => loader.reviewInboxCommand(prepared, input)),
+      scheduler: mutationScheduler,
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
+    projectionHealth: createEnvironmentQueryAtomFamily(runtime, {
+      label: "environment-data:workbench:projection-health",
+      staleTimeMs: 3_000,
+      execute: (_input: null) =>
+        withPreparedConnection((loader, prepared) => loader.projectionHealth(prepared)),
+    }),
+    reviewProjection: createEnvironmentCommand(runtime, {
+      label: "environment-data:workbench:projection-review",
+      execute: (input: { requestId: string }) =>
+        withPreparedConnection((loader, prepared) => loader.reviewProjection(prepared, input)),
+      scheduler: mutationScheduler,
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
+    applyProjection: createEnvironmentCommand(runtime, {
+      label: "environment-data:workbench:projection-apply",
+      execute: (input: { reviewId: string; diffDigest: string }) =>
+        withPreparedConnection((loader, prepared) => loader.applyProjection(prepared, input)),
+      scheduler: mutationScheduler,
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
+    rollbackProjection: createEnvironmentCommand(runtime, {
+      label: "environment-data:workbench:projection-rollback",
+      execute: (input: { requestId: string; receiptId: string }) =>
+        withPreparedConnection((loader, prepared) => loader.rollbackProjection(prepared, input)),
+      scheduler: mutationScheduler,
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
     }),
     resourceAuthority: createEnvironmentQueryAtomFamily(runtime, {
       label: "environment-data:workbench-resources:authority",

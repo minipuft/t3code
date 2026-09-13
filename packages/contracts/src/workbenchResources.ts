@@ -78,6 +78,7 @@ export const WorkbenchReviewInbox = Schema.Struct({
   items: Schema.Array(
     Schema.Struct({
       id: Schema.String,
+      kind: Schema.optionalKey(Schema.Literals(["import", "relationship", "audit"])),
       source: Schema.Struct({
         type: Schema.Literals(["github", "zip", "markdown"]),
         locator: Schema.String,
@@ -98,10 +99,79 @@ export const WorkbenchReviewInbox = Schema.Struct({
       updatedAt: Schema.String,
       warnings: Schema.Array(Schema.String),
       receiptId: Schema.optionalKey(Schema.String),
+      audit: Schema.optionalKey(
+        Schema.Struct({
+          identity: Schema.String,
+          family: Schema.Literals(["claude", "codex", "opencode"]),
+          state: Schema.Literals([
+            "current",
+            "stale",
+            "missing",
+            "unsupported",
+            "resolved",
+            "reopened",
+            "dismissed",
+            "restored",
+          ]),
+          sourceHash: Schema.NullOr(Schema.String),
+          targetHash: Schema.NullOr(Schema.String),
+          reason: Schema.String,
+          evidence: Schema.Array(
+            Schema.Struct({ kind: Schema.String, locator: Schema.String, detail: Schema.String }),
+          ),
+          repairReviewId: Schema.optionalKey(Schema.String),
+          updatedAt: Schema.String,
+        }),
+      ),
     }),
   ),
 });
 export type WorkbenchReviewInbox = typeof WorkbenchReviewInbox.Type;
+
+export const WorkbenchReviewInboxCommand = Schema.Struct({
+  op: Schema.Literals(["discard", "restore", "dismiss", "reopen"]),
+  id: Schema.String,
+  expectedRevision: Schema.optionalKey(Schema.Number),
+});
+export type WorkbenchReviewInboxCommand = typeof WorkbenchReviewInboxCommand.Type;
+export const WorkbenchProjectionHealth = Schema.Struct({
+  protocolVersion: Schema.String,
+  capturedAt: Schema.String,
+  state: Schema.Literals(["current", "stale", "partial", "unavailable"]),
+  items: Schema.Array(
+    Schema.Struct({
+      provider: Schema.String,
+      state: Schema.String,
+      sourceDigest: Schema.NullOr(Schema.String),
+      targetDigest: Schema.NullOr(Schema.String),
+      changedArtifacts: Schema.optionalKey(Schema.Array(Schema.String)),
+    }),
+  ),
+});
+export type WorkbenchProjectionHealth = typeof WorkbenchProjectionHealth.Type;
+export const WorkbenchProjectionReview = Schema.Struct({
+  protocolVersion: Schema.String,
+  id: Schema.String,
+  requestId: Schema.String,
+  state: Schema.Literals(["prepared", "current"]),
+  diff: Schema.String,
+  diffDigest: Schema.String,
+  health: WorkbenchProjectionHealth,
+});
+export type WorkbenchProjectionReview = typeof WorkbenchProjectionReview.Type;
+export const WorkbenchProjectionReceipt = Schema.Struct({
+  protocolVersion: Schema.String,
+  id: Schema.String,
+  requestId: Schema.String,
+  reviewId: Schema.String,
+  status: Schema.Literals(["applied", "rolled-back"]),
+  changedArtifacts: Schema.Array(Schema.String),
+  undoAvailable: Schema.Boolean,
+  appliedAt: Schema.String,
+  rolledBackAt: Schema.optionalKey(Schema.String),
+  health: WorkbenchProjectionHealth,
+});
+export type WorkbenchProjectionReceipt = typeof WorkbenchProjectionReceipt.Type;
 
 const WorkbenchValidator = Schema.Struct({
   id: Schema.String,
@@ -215,3 +285,47 @@ export const WorkbenchResourceRollbackInput = Schema.Struct({
   expectedDigest: Schema.NullOr(Schema.String),
 });
 export type WorkbenchResourceRollbackInput = typeof WorkbenchResourceRollbackInput.Type;
+
+export const WorkbenchRelationshipReviewInput = Schema.Struct({
+  requestId: Schema.String,
+  relation: Schema.Struct({ kind: Schema.String, source: Schema.String, target: Schema.String }),
+  evidence: Schema.Unknown,
+});
+export type WorkbenchRelationshipReviewInput = typeof WorkbenchRelationshipReviewInput.Type;
+
+/** Static relationship index. Edges are derived from v3 workspace settings and review state. */
+export const WorkbenchTopology = Schema.Struct({
+  protocolVersion: Schema.Literal("1.0.0"),
+  nodes: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      kind: Schema.String,
+      label: Schema.String,
+      provenance: Schema.NullOr(Schema.String),
+    }),
+  ),
+  approved: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      kind: Schema.Literals([
+        "project_uses_repository",
+        "project_uses_resource_source",
+        "resource_projects_to_target",
+      ]),
+      source: Schema.String,
+      target: Schema.String,
+      state: Schema.Literal("approved"),
+    }),
+  ),
+  proposed: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      kind: Schema.String,
+      source: Schema.String,
+      target: Schema.String,
+      state: Schema.Literal("proposed"),
+      evidence: Schema.Unknown,
+    }),
+  ),
+});
+export type WorkbenchTopology = typeof WorkbenchTopology.Type;

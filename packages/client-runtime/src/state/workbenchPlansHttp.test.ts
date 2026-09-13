@@ -13,7 +13,14 @@ import {
   fetchEnvironmentWorkbenchPlanSource,
   fetchEnvironmentWorkbenchPlans,
   fetchEnvironmentWorkbenchVitals,
+  fetchEnvironmentWorkbenchTopology,
+  applyEnvironmentWorkbenchProjection,
+  executeWorkbenchReviewInboxCommand,
+  fetchEnvironmentWorkbenchProjectionHealth,
   mutateEnvironmentWorkbenchPlan,
+  reviewEnvironmentWorkbenchProjection,
+  reviewEnvironmentWorkbenchRelationship,
+  rollbackEnvironmentWorkbenchProjection,
   saveEnvironmentWorkbenchPlan,
   suggestEnvironmentWorkbenchPlans,
   fetchEnvironmentWorkbenchResourceSource,
@@ -49,6 +56,203 @@ function requestBody(init: RequestInit): unknown {
 }
 
 describe("Workbench plan environment HTTP", () => {
+  it.effect("routes audit lifecycle and reviewed projection repairs through typed endpoints", () =>
+    Effect.gen(function* () {
+      const calls: Array<readonly [RequestInfo | URL, RequestInit]> = [];
+      const health = {
+        protocolVersion: "1.0.0",
+        capturedAt: "2026-09-11T00:00:00.000Z",
+        state: "stale",
+        items: [
+          {
+            provider: "claude",
+            state: "stale",
+            sourceDigest: "source",
+            targetDigest: "target",
+            changedArtifacts: ["AGENTS.md"],
+          },
+        ],
+      } as const;
+      const fetchFn = ((request, init) => {
+        calls.push([request, init ?? {}]);
+        const url = String(request);
+        if (url.endsWith("/resources/review-inbox/commands")) {
+          return Promise.resolve(Response.json({ revision: 2, items: [] }));
+        }
+        if (url.endsWith("/projections/review")) {
+          return Promise.resolve(
+            Response.json({
+              protocolVersion: "1.0.0",
+              id: "review-1",
+              requestId: "request-1",
+              state: "prepared",
+              diff: "+ AGENTS.md",
+              diffDigest: "diff",
+              health,
+            }),
+          );
+        }
+        if (url.endsWith("/projections/apply")) {
+          return Promise.resolve(
+            Response.json({
+              protocolVersion: "1.0.0",
+              id: "receipt-1",
+              requestId: "request-1",
+              reviewId: "review-1",
+              status: "applied",
+              changedArtifacts: ["AGENTS.md"],
+              undoAvailable: true,
+              appliedAt: "2026-09-11T00:00:01.000Z",
+              health,
+            }),
+          );
+        }
+        if (url.endsWith("/projections/rollback")) {
+          return Promise.resolve(
+            Response.json({
+              protocolVersion: "1.0.0",
+              id: "receipt-1",
+              requestId: "rollback-1",
+              reviewId: "review-1",
+              status: "rolled-back",
+              changedArtifacts: ["AGENTS.md"],
+              undoAvailable: false,
+              appliedAt: "2026-09-11T00:00:01.000Z",
+              rolledBackAt: "2026-09-11T00:00:02.000Z",
+              health,
+            }),
+          );
+        }
+        return Promise.resolve(Response.json(health));
+      }) satisfies typeof fetch;
+      const layer = remoteHttpClientLayer(fetchFn);
+      const context = { prepared: PREPARED, signer: Option.none() };
+
+      yield* fetchEnvironmentWorkbenchProjectionHealth(context).pipe(Effect.provide(layer));
+      yield* executeWorkbenchReviewInboxCommand({
+        ...context,
+        value: { op: "dismiss", id: "audit:claude", expectedRevision: 1 },
+      }).pipe(Effect.provide(layer));
+      yield* reviewEnvironmentWorkbenchProjection({
+        ...context,
+        value: { requestId: "request-1" },
+      }).pipe(Effect.provide(layer));
+      yield* applyEnvironmentWorkbenchProjection({
+        ...context,
+        value: { reviewId: "review-1", diffDigest: "diff" },
+      }).pipe(Effect.provide(layer));
+      yield* rollbackEnvironmentWorkbenchProjection({
+        ...context,
+        value: { requestId: "rollback-1", receiptId: "receipt-1" },
+      }).pipe(Effect.provide(layer));
+
+      expect(calls.map(([request]) => String(request))).toEqual([
+        "https://environment.example.test/api/workbench/projections",
+        "https://environment.example.test/api/workbench/resources/review-inbox/commands",
+        "https://environment.example.test/api/workbench/projections/review",
+        "https://environment.example.test/api/workbench/projections/apply",
+        "https://environment.example.test/api/workbench/projections/rollback",
+      ]);
+      expect(requestBody(calls[1]?.[1] ?? {})).toEqual({
+        op: "dismiss",
+        id: "audit:claude",
+        expectedRevision: 1,
+      });
+      expect(requestBody(calls[3]?.[1] ?? {})).toEqual({
+        reviewId: "review-1",
+        diffDigest: "diff",
+      });
+      expect(requestBody(calls[4]?.[1] ?? {})).toEqual({
+        requestId: "rollback-1",
+        receiptId: "receipt-1",
+      });
+    }),
+  );
+
+  it.effect("reads topology and prepares relationship review through environment auth", () =>
+    Effect.gen(function* () {
+      const calls: Array<readonly [RequestInfo | URL, RequestInit]> = [];
+      const fetchFn = ((request, init) => {
+        calls.push([request, init ?? {}]);
+        if ((init?.method ?? "GET") === "GET") {
+          return Promise.resolve(
+            Response.json({
+              protocolVersion: "1.0.0",
+              nodes: [],
+              approved: [],
+              proposed: [],
+            }),
+          );
+        }
+        return Promise.resolve(
+          Response.json({
+            revision: 1,
+            proposal: {
+              id: "proposal-1",
+              requestId: "request-1",
+              revision: 1,
+              state: "prepared",
+              operation: "upsert",
+              mutationClass: "metadata",
+              target: {
+                kind: "workspace",
+                sourceId: "workspace",
+                relativePath: "workspace.yaml",
+              },
+              scope: "global",
+              beforeDigest: "old",
+              afterDigest: "new",
+              diff: "+relation",
+              diffDigest: "diff",
+              validator: { id: "workspace", valid: true, errors: [] },
+              git: {
+                head: "abc",
+                clean: true,
+                statusDigest: "clean",
+                changedPaths: [],
+                requiresCheckpoint: false,
+              },
+              dependencies: [],
+              sourceReviewId: "review-1",
+              createdAt: "2026-09-11T00:00:00Z",
+              updatedAt: "2026-09-11T00:00:00Z",
+            },
+          }),
+        );
+      }) satisfies typeof fetch;
+      const layer = remoteHttpClientLayer(fetchFn);
+
+      yield* fetchEnvironmentWorkbenchTopology({
+        prepared: PREPARED,
+        signer: Option.none(),
+      }).pipe(Effect.provide(layer));
+      yield* reviewEnvironmentWorkbenchRelationship({
+        prepared: PREPARED,
+        signer: Option.none(),
+        value: {
+          requestId: "request-1",
+          relation: {
+            kind: "project_uses_repository",
+            source: "project:a",
+            target: "repository:b",
+          },
+          evidence: { type: "git", locator: "/work/b" },
+        },
+      }).pipe(Effect.provide(layer));
+
+      expect(String(calls[0]?.[0])).toBe("https://environment.example.test/api/workbench/topology");
+      expect(calls[0]?.[1].method).toBe("GET");
+      expect(String(calls[1]?.[0])).toBe(
+        "https://environment.example.test/api/workbench/topology/review",
+      );
+      expect(calls[1]?.[1].method).toBe("POST");
+      expect(requestBody(calls[1]?.[1] ?? {})).toMatchObject({
+        requestId: "request-1",
+        relation: { kind: "project_uses_repository" },
+      });
+    }),
+  );
+
   it.effect("lists plans from the prepared environment with browser credentials", () =>
     Effect.gen(function* () {
       const calls: Array<readonly [RequestInfo | URL, RequestInit]> = [];
@@ -78,9 +282,23 @@ describe("Workbench plan environment HTTP", () => {
         calls.push([request, init ?? {}]);
         return Promise.resolve(
           Response.json({
-            capability: { status: "available", reason: null },
-            binding: null,
-            windows: [],
+            capturedAt: "2026-08-27T00:00:00.000Z",
+            capability: { status: "partial", reason: "One window is stale." },
+            windows: [
+              {
+                id: "codex-work:weekly",
+                provider: "codex",
+                providerInstanceId: "codex-work",
+                providerLabel: "Codex · codex-work",
+                label: "Weekly",
+                usedPercent: null,
+                remainingPercent: null,
+                resetsAt: "2026-08-31T05:43:21.000Z",
+                observedAt: "2026-08-26T23:58:00.000Z",
+                source: "codex-app-server",
+                state: "stale",
+              },
+            ],
           }),
         );
       }) satisfies typeof fetch;
@@ -90,7 +308,14 @@ describe("Workbench plan environment HTTP", () => {
         signer: Option.none(),
       }).pipe(Effect.provide(remoteHttpClientLayer(fetchFn)));
 
-      expect(result.windows).toEqual([]);
+      expect(result.capability.status).toBe("partial");
+      expect(result.windows[0]).toMatchObject({
+        providerInstanceId: "codex-work",
+        usedPercent: null,
+        resetsAt: "2026-08-31T05:43:21.000Z",
+        source: "codex-app-server",
+        state: "stale",
+      });
       expect(String(calls[0]?.[0])).toBe("https://environment.example.test/api/workbench/vitals");
       expect(calls[0]?.[1].credentials).toBe("include");
     }),

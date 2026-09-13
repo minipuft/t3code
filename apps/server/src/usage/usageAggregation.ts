@@ -12,7 +12,14 @@
  *
  * @module usageAggregation
  */
-import type { UsageBucket, UsageDay, UsageResolution, UsageTokenTotals } from "@t3tools/contracts";
+import type {
+  ProjectId,
+  UsageAttributionStatus,
+  UsageBucket,
+  UsageDay,
+  UsageResolution,
+  UsageTokenTotals,
+} from "@t3tools/contracts";
 
 import { addTotals, EMPTY_TOTALS, type UsageRecord } from "./usageTranscripts.ts";
 import { cacheSavingsUsd, priceUsage, type RateTable } from "./usagePricing.ts";
@@ -64,6 +71,47 @@ export interface AggregateOptions {
   readonly resolution?: UsageResolution;
   readonly sinceTimeMs?: number;
   readonly untilTimeMs?: number;
+  readonly projectRoots?: readonly UsageProjectRoot[];
+}
+
+export interface UsageProjectRoot {
+  readonly projectId: ProjectId;
+  readonly path: string;
+}
+
+export interface UsageAttribution {
+  readonly projectId: ProjectId | null;
+  readonly status: UsageAttributionStatus;
+}
+
+function normalizeRoot(value: string): string {
+  const normalized = value.trim().replaceAll("\\", "/").replace(/\/+$/, "");
+  return /^[A-Za-z]:\//.test(normalized) ? normalized.toLowerCase() : normalized;
+}
+
+/** Resolve only provider-supplied paths. Equal claims stay explicitly ambiguous. */
+export function resolveUsageAttribution(
+  workspacePath: string | null,
+  roots: readonly UsageProjectRoot[],
+): UsageAttribution {
+  if (workspacePath === null || workspacePath.trim().length === 0) {
+    return { projectId: null, status: "missingEvidence" };
+  }
+  const candidate = normalizeRoot(workspacePath);
+  const matches = roots
+    .map((root) => ({ ...root, normalized: normalizeRoot(root.path) }))
+    .filter(
+      (root) =>
+        root.normalized.length > 0 &&
+        (candidate === root.normalized || candidate.startsWith(`${root.normalized}/`)),
+    );
+  if (matches.length === 0) return { projectId: null, status: "unknownRoot" };
+  const longest = Math.max(...matches.map((match) => match.normalized.length));
+  const winners = new Set(
+    matches.filter((match) => match.normalized.length === longest).map((match) => match.projectId),
+  );
+  if (winners.size !== 1) return { projectId: null, status: "ambiguousRoot" };
+  return { projectId: [...winners][0] ?? null, status: "attributed" };
 }
 
 export interface AggregateResult {
@@ -145,7 +193,12 @@ export class UsageAggregator {
             this.#hourlyWindow.sinceTimeMs +
               Math.floor((record.timestampMs - this.#hourlyWindow.sinceTimeMs) / HOUR_MS) * HOUR_MS,
           ).toISOString();
-    const key = `${day}\u0000${hourStart}\u0000${record.provider}\u0000${record.model}`;
+    const attribution = resolveUsageAttribution(
+      record.workspacePath,
+      this.#options.projectRoots ?? [],
+    );
+    const projectKey = attribution.projectId ?? "";
+    const key = `${day}\u0000${hourStart}\u0000${record.provider}\u0000${record.model}\u0000${projectKey}\u0000${attribution.status}`;
     let bucket = this.#buckets.get(key);
     if (bucket === undefined) {
       bucket = {
@@ -180,12 +233,21 @@ export class UsageAggregator {
   finish(): AggregateResult {
     const buckets: UsageBucket[] = [];
     for (const [key, bucket] of this.#buckets) {
-      const [day = "", hourStart = "", provider = "", model = ""] = key.split("\u0000");
+      const [
+        day = "",
+        hourStart = "",
+        provider = "",
+        model = "",
+        projectId = "",
+        attributionStatus = "missingEvidence",
+      ] = key.split("\u0000");
       buckets.push({
         day: day as UsageDay,
         ...(hourStart === "" ? {} : { hourStart }),
         provider: provider as UsageBucket["provider"],
         model,
+        projectId: projectId === "" ? null : (projectId as ProjectId),
+        attributionStatus: attributionStatus as UsageAttributionStatus,
         totals: bucket.totals,
         costUsd: bucket.costUsd,
         cacheSavingsUsd: bucket.cacheSavingsUsd,

@@ -9,6 +9,8 @@
 import {
   USAGE_MERGE_COMPATIBLE_SINCE,
   type EnvironmentId,
+  type ProjectId,
+  type UsageAttributionStatus,
   type UsageBucket,
   type UsageProviderKind,
   type UsageSourceFingerprint,
@@ -62,6 +64,22 @@ export interface CostQuality {
   readonly cacheSavingsUsd: number;
 }
 
+export interface ProjectUsageTotals {
+  readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId;
+  readonly costUsd: number;
+  readonly totalTokens: number;
+  readonly records: number;
+}
+
+export interface UnattributedUsageTotals {
+  readonly environmentId: EnvironmentId;
+  readonly status: Exclude<UsageAttributionStatus, "attributed">;
+  readonly costUsd: number;
+  readonly totalTokens: number;
+  readonly records: number;
+}
+
 export interface MergedUsage {
   readonly costUsd: number;
   readonly uncachedInputTokens: number;
@@ -81,6 +99,8 @@ export interface MergedUsage {
   readonly duplicateSources: readonly string[];
   readonly contributingEnvironments: readonly EnvironmentId[];
   readonly staleEnvironments: readonly EnvironmentId[];
+  readonly projects: readonly ProjectUsageTotals[];
+  readonly unattributed: readonly UnattributedUsageTotals[];
 }
 
 /**
@@ -109,14 +129,21 @@ function fingerprintKey(fingerprint: UsageSourceFingerprint): string {
  * provider's buckets dropped. Environments are sorted by id so the winner does
  * not change between renders.
  */
-function claimSources(environments: readonly EnvironmentUsage[]): {
+function claimSources(
+  environments: readonly EnvironmentUsage[],
+  preferredEnvironmentId?: EnvironmentId,
+): {
   readonly ownerByFingerprint: ReadonlyMap<string, EnvironmentId>;
   readonly duplicates: readonly string[];
 } {
   const ownerByFingerprint = new Map<string, EnvironmentId>();
   const duplicates: string[] = [];
 
-  const ordered = [...environments].sort((a, b) => a.environmentId.localeCompare(b.environmentId));
+  const ordered = [...environments].sort((a, b) => {
+    if (a.environmentId === preferredEnvironmentId) return -1;
+    if (b.environmentId === preferredEnvironmentId) return 1;
+    return a.environmentId.localeCompare(b.environmentId);
+  });
 
   for (const environment of ordered) {
     for (const source of environment.summary.sources) {
@@ -200,6 +227,8 @@ const EMPTY_MERGED: MergedUsage = {
   duplicateSources: [],
   contributingEnvironments: [],
   staleEnvironments: [],
+  projects: [],
+  unattributed: [],
 };
 
 /**
@@ -214,6 +243,7 @@ const EMPTY_MERGED: MergedUsage = {
 export function mergeUsage(
   environments: readonly EnvironmentUsage[],
   expectedContractVersion: number,
+  scope?: { readonly environmentId: EnvironmentId; readonly projectId: ProjectId | null },
 ): MergedUsage {
   if (environments.length === 0) return EMPTY_MERGED;
 
@@ -227,7 +257,7 @@ export function mergeUsage(
     }
   }
 
-  const { ownerByFingerprint, duplicates } = claimSources(current);
+  const { ownerByFingerprint, duplicates } = claimSources(current, scope?.environmentId);
 
   let costUsd = 0;
   let uncachedInputTokens = 0;
@@ -268,9 +298,19 @@ export function mergeUsage(
     }
   >();
   const contributingEnvironments: EnvironmentId[] = [];
+  const projectAccumulator = new Map<string, ProjectUsageTotals>();
+  const unattributedAccumulator = new Map<string, UnattributedUsageTotals>();
 
   for (const environment of current) {
-    const { buckets, sessionsByProvider } = ownedContribution(environment, ownerByFingerprint);
+    const contribution = ownedContribution(environment, ownerByFingerprint);
+    const buckets = contribution.buckets.filter((bucket) => {
+      if (scope === undefined) return true;
+      if (environment.environmentId !== scope.environmentId) return false;
+      return scope.projectId === null
+        ? bucket.projectId === null
+        : bucket.projectId === scope.projectId && bucket.attributionStatus === "attributed";
+    });
+    const sessionsByProvider = contribution.sessionsByProvider;
     if (buckets.length > 0) contributingEnvironments.push(environment.environmentId);
 
     for (const [providerKind, providerSessions] of sessionsByProvider) {
@@ -288,6 +328,40 @@ export function mergeUsage(
 
     for (const bucket of buckets) {
       const tokens = bucketTokens(bucket);
+
+      if (bucket.projectId !== null && bucket.attributionStatus === "attributed") {
+        const key = `${environment.environmentId}\u0000${bucket.projectId}`;
+        const project = projectAccumulator.get(key) ?? {
+          environmentId: environment.environmentId,
+          projectId: bucket.projectId as ProjectId,
+          costUsd: 0,
+          totalTokens: 0,
+          records: 0,
+        };
+        projectAccumulator.set(key, {
+          ...project,
+          costUsd: project.costUsd + bucket.costUsd,
+          totalTokens: project.totalTokens + tokens,
+          records: project.records + bucket.records,
+        });
+      } else {
+        const status =
+          bucket.attributionStatus === "attributed" ? "unknownRoot" : bucket.attributionStatus;
+        const key = `${environment.environmentId}\u0000${status}`;
+        const unattributed = unattributedAccumulator.get(key) ?? {
+          environmentId: environment.environmentId,
+          status,
+          costUsd: 0,
+          totalTokens: 0,
+          records: 0,
+        };
+        unattributedAccumulator.set(key, {
+          ...unattributed,
+          costUsd: unattributed.costUsd + bucket.costUsd,
+          totalTokens: unattributed.totalTokens + tokens,
+          records: unattributed.records + bucket.records,
+        });
+      }
 
       costUsd += bucket.costUsd;
       cacheSavingsUsd += bucket.cacheSavingsUsd;
@@ -420,5 +494,12 @@ export function mergeUsage(
     duplicateSources: duplicates,
     contributingEnvironments,
     staleEnvironments,
+    projects: [...projectAccumulator.values()].sort(
+      (a, b) =>
+        a.environmentId.localeCompare(b.environmentId) || a.projectId.localeCompare(b.projectId),
+    ),
+    unattributed: [...unattributedAccumulator.values()].sort(
+      (a, b) => a.environmentId.localeCompare(b.environmentId) || a.status.localeCompare(b.status),
+    ),
   };
 }

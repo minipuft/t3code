@@ -2,11 +2,13 @@ import {
   WorkbenchPlanPath,
   type AgentWorkbenchPlanAssociations,
   type AgentWorkbenchPlanSuggestions,
+  type AgentWorkbenchTopology,
   type WorkbenchConversationInput,
   type WorkbenchPlanAssociationMutationInput,
   type WorkbenchPlanAssociations,
   type AgentWorkbenchPlanList,
   type AgentWorkbenchVitals,
+  type AgentWorkbenchReviewInbox as RawReviewInbox,
   type AgentWorkbenchResourceLibrary as RawResourceLibrary,
   type AgentWorkbenchResourceMutationLedger as RawResourceMutationLedger,
   type AgentWorkbenchResourceMutationReceipt as RawResourceMutationReceipt,
@@ -24,7 +26,6 @@ import {
   type WorkbenchPlanSuggestions,
   type WorkbenchPlanSummary,
   type WorkbenchQuotaWindow,
-  type WorkbenchQuotaBinding,
   type WorkbenchVitalsSnapshot,
   type WorkbenchResourceApplyInput,
   type WorkbenchResourceAuthority,
@@ -38,9 +39,14 @@ import {
   type WorkbenchResourceSource,
   type WorkbenchResourceTarget,
   type WorkbenchReviewInbox,
+  type WorkbenchReviewInboxCommand,
+  type WorkbenchProjectionHealth,
+  type WorkbenchProjectionReview,
+  type WorkbenchProjectionReceipt,
+  type WorkbenchTopology,
+  type WorkbenchRelationshipReviewInput,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -55,6 +61,7 @@ export class WorkbenchPlansAdapterError extends Data.TaggedError("WorkbenchPlans
   readonly reason:
     | "request_failed"
     | "invalid_response"
+    | "unsupported_version"
     | "invalid_request"
     | "not_found"
     | "conflict";
@@ -92,6 +99,25 @@ export interface WorkbenchPlansShape {
     readonly project?: string;
   }) => Effect.Effect<WorkbenchResourceLibrary, WorkbenchPlansAdapterError>;
   readonly reviewInbox: Effect.Effect<WorkbenchReviewInbox, WorkbenchPlansAdapterError>;
+  readonly reviewInboxCommand: (
+    input: WorkbenchReviewInboxCommand,
+  ) => Effect.Effect<WorkbenchReviewInbox, WorkbenchPlansAdapterError>;
+  readonly projectionHealth: Effect.Effect<WorkbenchProjectionHealth, WorkbenchPlansAdapterError>;
+  readonly reviewProjection: (input: {
+    readonly requestId: string;
+  }) => Effect.Effect<WorkbenchProjectionReview, WorkbenchPlansAdapterError>;
+  readonly applyProjection: (input: {
+    readonly reviewId: string;
+    readonly diffDigest: string;
+  }) => Effect.Effect<WorkbenchProjectionReceipt, WorkbenchPlansAdapterError>;
+  readonly rollbackProjection: (input: {
+    readonly requestId: string;
+    readonly receiptId: string;
+  }) => Effect.Effect<WorkbenchProjectionReceipt, WorkbenchPlansAdapterError>;
+  readonly topology: Effect.Effect<WorkbenchTopology, WorkbenchPlansAdapterError>;
+  readonly reviewRelationship: (
+    input: WorkbenchRelationshipReviewInput,
+  ) => Effect.Effect<WorkbenchResourceMutationReview, WorkbenchPlansAdapterError>;
   readonly resourceAuthority: (
     sessionId: string,
   ) => Effect.Effect<WorkbenchResourceAuthority, WorkbenchPlansAdapterError>;
@@ -136,16 +162,14 @@ export function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPla
       Effect.map(projectPlanList),
       Effect.orElseSucceed(() => unavailable("Agent Workbench plans are unavailable.")),
     ),
-    vitals: Effect.gen(function* () {
-      const [value, now] = yield* Effect.all([workbench.vitals, Clock.currentTimeMillis]);
-      return projectVitals(value, now);
-    }).pipe(
+    vitals: workbench.vitals.pipe(
+      Effect.map(projectVitals),
       Effect.orElseSucceed(() => ({
+        capturedAt: null,
         capability: {
           status: "unavailable" as const,
           reason: "Agent Workbench vitals are unavailable.",
         },
-        binding: null,
         windows: [],
       })),
     ),
@@ -199,10 +223,33 @@ export function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPla
       workbench
         .resourceLibrary(input)
         .pipe(Effect.map(projectResourceLibrary), Effect.mapError(mapAdapterError)),
-    reviewInbox: workbench.reviewInbox.pipe(
-      Effect.map((value) => ({ revision: value.revision, items: value.items })),
+    topology: workbench.topology.pipe(
+      Effect.map(projectTopology),
       Effect.mapError(mapAdapterError),
     ),
+    reviewRelationship: (input) =>
+      workbench.reviewRelationship(input).pipe(
+        Effect.map((value) => ({
+          revision: value.revision,
+          proposal: projectResourceProposal(value.proposal),
+        })),
+        Effect.mapError(mapAdapterError),
+      ),
+    reviewInbox: workbench.audit.pipe(
+      Effect.map(projectReviewInbox),
+      Effect.mapError(mapAdapterError),
+    ),
+    reviewInboxCommand: (input) =>
+      workbench
+        .reviewInboxCommand(input)
+        .pipe(Effect.map(projectReviewInbox), Effect.mapError(mapAdapterError)),
+    projectionHealth: workbench.projectionHealth.pipe(Effect.mapError(mapAdapterError)),
+    reviewProjection: (input) =>
+      workbench.reviewProjection(input).pipe(Effect.mapError(mapAdapterError)),
+    applyProjection: (input) =>
+      workbench.applyProjection(input).pipe(Effect.mapError(mapAdapterError)),
+    rollbackProjection: (input) =>
+      workbench.rollbackProjection(input).pipe(Effect.mapError(mapAdapterError)),
     resourceAuthority: (sessionId) =>
       workbench.resourceAuthority(sessionId).pipe(Effect.mapError(mapAdapterError)),
     unlockResources: (sessionId, directLocal) =>
@@ -281,6 +328,129 @@ export function projectResourceLibrary(value: RawResourceLibrary): WorkbenchReso
     })),
     projects: [...value.projects],
   };
+}
+
+export function projectTopology(value: AgentWorkbenchTopology): WorkbenchTopology {
+  return {
+    protocolVersion: value.protocolVersion,
+    nodes: value.nodes.map((node) => ({
+      ...node,
+      provenance: redactTopologyProvenance(node.provenance),
+    })),
+    approved: value.approved,
+    proposed: value.proposed.map((edge) => ({
+      ...edge,
+      evidence: redactTopologyEvidence(edge.evidence),
+    })),
+  };
+}
+
+/**
+ * The agent workbench is a host-local authority. Its audit findings may name
+ * files or include diagnostics copied from provider configuration, so project
+ * the small browser-safe finding shape here rather than teaching the UI about
+ * host data.
+ */
+export function projectReviewInbox(value: RawReviewInbox): WorkbenchReviewInbox {
+  return {
+    revision: value.revision,
+    items: value.items.map(projectReviewInboxItem),
+  };
+}
+
+function projectReviewInboxItem(
+  item: RawReviewInbox["items"][number],
+): WorkbenchReviewInbox["items"][number] {
+  return {
+    id: item.id,
+    ...(item.kind === undefined ? {} : { kind: item.kind }),
+    source: {
+      type: item.source.type,
+      locator: redactAuditText(item.source.locator),
+      ...(item.source.revision === undefined
+        ? {}
+        : { revision: redactAuditText(item.source.revision) }),
+    },
+    proposedKind: item.proposedKind,
+    files: item.files.map((file) => ({
+      path: redactAuditText(file.path),
+      content: redactAuditText(file.content),
+      ...(file.executable === undefined ? {} : { executable: file.executable }),
+    })),
+    digest: item.digest,
+    state: item.state,
+    activatable: false,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    warnings: item.warnings.map(redactAuditText),
+    ...(item.receiptId === undefined ? {} : { receiptId: item.receiptId }),
+    ...(item.audit === undefined ? {} : { audit: projectAuditFinding(item.audit) }),
+  };
+}
+
+function projectAuditFinding(audit: NonNullable<RawReviewInbox["items"][number]["audit"]>) {
+  return {
+    identity: audit.identity,
+    family: audit.family,
+    state: audit.state,
+    sourceHash: audit.sourceHash,
+    targetHash: audit.targetHash,
+    reason: redactAuditText(audit.reason),
+    evidence: audit.evidence.map((evidence) => ({
+      kind: redactAuditText(evidence.kind),
+      locator: redactAuditText(evidence.locator),
+      detail: redactAuditText(evidence.detail),
+    })),
+    ...(audit.repairReviewId === undefined ? {} : { repairReviewId: audit.repairReviewId }),
+    updatedAt: audit.updatedAt,
+  };
+}
+
+const ABSOLUTE_PATH_PATTERNS = [
+  /file:(?:\/\/)?[^\s'"`)}\],;]+/gi,
+  /(?:^|[\s("'=,{])~[\\/][^\s'"`)}\],;]*/g,
+  /(?:^|[\s("'=,{])[a-z]:[\\/][^\s'"`)}\],;]*/gi,
+  /(?:^|[\s("'=,{])\\\\[^\s'"`)}\],;]*/g,
+  /(?:^|[\s("'=,{])\/(?:[^\s'"`)}\],;]*)/g,
+] as const;
+
+const CREDENTIAL_VALUE_PATTERN =
+  /(?:bearer\s+\S+|(?:authorization|token|secret|password|credential|api[_-]?key|access[_-]?key|private[_-]?key)\s*(?:=|:)\s*(?:bearer\s+)?\S+)/gi;
+
+function redactAuditText(value: string): string {
+  const withoutPaths = ABSOLUTE_PATH_PATTERNS.reduce((text, pattern) => {
+    return text.replace(pattern, (match) => {
+      const prefix = /^[\s("'=,{]/.test(match) ? match[0] : "";
+      return `${prefix}[path redacted]`;
+    });
+  }, value);
+  return withoutPaths.replace(CREDENTIAL_VALUE_PATTERN, "[redacted]");
+}
+
+function redactTopologyProvenance(value: string | null) {
+  if (value === null) return null;
+  return /^(?:\/|\\\\|[a-z]:[\\/]|file:|~[\\/])/i.test(value.trim()) ? null : value;
+}
+
+function redactTopologyEvidence(value: unknown, key = ""): unknown {
+  if (/(?:authorization|token|secret|password|api[_-]?key)/i.test(key)) return "[redacted]";
+  if (typeof value === "string") {
+    if (/^(?:\/|\\\\|[a-z]:[\\/]|file:|~[\\/])/i.test(value.trim())) return "[path redacted]";
+    if (/(?:bearer\s+\S+|(?:token|secret|password|api[_-]?key)=\S+)/i.test(value)) {
+      return "[redacted]";
+    }
+    return value;
+  }
+  if (Array.isArray(value)) return value.map((item) => redactTopologyEvidence(item));
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, item]) => [
+        entryKey,
+        redactTopologyEvidence(item, entryKey),
+      ]),
+    );
+  }
+  return value;
 }
 
 function projectResourcePolicy(value: RawResourcePolicy): WorkbenchResourcePolicy {
@@ -388,33 +558,44 @@ export function projectPlanList(value: AgentWorkbenchPlanList): WorkbenchPlanLis
   };
 }
 
-export function projectVitals(value: AgentWorkbenchVitals, now: number): WorkbenchVitalsSnapshot {
+export function projectVitals(value: AgentWorkbenchVitals): WorkbenchVitalsSnapshot {
   const windows = value.windows.flatMap((window): ReadonlyArray<WorkbenchQuotaWindow> => {
     if (window.provider !== "claude" && window.provider !== "codex") return [];
     return [
       {
+        id: window.id,
         provider: window.provider,
+        providerInstanceId: window.providerInstanceId ?? window.provider,
         providerLabel: window.providerLabel ?? window.provider,
         label: window.label,
-        usedPct: window.usedPercent ?? 0,
-        expectedPct: window.expectedPercent ?? window.usedPercent ?? 0,
-        secondsToReset:
-          window.resetsAt === null ? 0 : Math.max(0, (Date.parse(window.resetsAt) - now) / 1_000),
-        exhaustsBeforeReset: window.exhaustsBeforeReset ?? false,
-        secondsToExhaustion: window.secondsToExhaustion ?? null,
+        usedPercent: window.usedPercent,
+        remainingPercent: window.remainingPercent,
+        resetsAt: window.resetsAt,
+        observedAt: window.observedAt,
+        source: window.source,
+        state: window.state,
       },
     ];
   });
+  const partial =
+    value.state === "partial" || windows.some((window) => window.state !== "available");
   return {
+    capturedAt: value.capturedAt,
     capability: {
       status:
         value.state === "unavailable" || value.state === "unsupported"
           ? "unavailable"
-          : "available",
+          : partial
+            ? "partial"
+            : "available",
       reason:
-        value.reason ?? (windows.length === 0 ? "No provider quota is currently reported." : null),
+        value.reason ??
+        (windows.length === 0
+          ? "No provider quota is currently reported."
+          : partial
+            ? "One or more provider quota observations are stale or unavailable."
+            : null),
     },
-    binding: projectQuotaBinding(value.binding),
     windows,
   };
 }
@@ -492,37 +673,12 @@ function mapAdapterError(error: AgentWorkbenchAdapterError) {
       return new WorkbenchPlansAdapterError({ reason: "conflict" });
     case "invalid_response":
       return new WorkbenchPlansAdapterError({ reason: "invalid_response" });
+    case "unsupported_version":
+      return new WorkbenchPlansAdapterError({ reason: "unsupported_version" });
     case "forbidden":
     case "unauthorized":
       return new WorkbenchPlansAdapterError({ reason: "invalid_request" });
     default:
       return new WorkbenchPlansAdapterError({ reason: "request_failed" });
   }
-}
-
-function projectQuotaBinding(value: unknown): WorkbenchQuotaBinding | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-  const binding = value as Record<string, unknown>;
-  const provider = binding["provider"];
-  if (provider !== "claude" && provider !== "codex") return null;
-  if (
-    typeof binding["providerLabel"] !== "string" ||
-    typeof binding["label"] !== "string" ||
-    typeof binding["remainingPct"] !== "number" ||
-    typeof binding["usedPct"] !== "number" ||
-    typeof binding["secondsToReset"] !== "number"
-  ) {
-    return null;
-  }
-  return {
-    provider,
-    providerLabel: binding["providerLabel"],
-    label: binding["label"],
-    remainingPct: binding["remainingPct"],
-    usedPct: binding["usedPct"],
-    secondsToReset: binding["secondsToReset"],
-    exhaustsBeforeReset: binding["exhaustsBeforeReset"] === true,
-    secondsToExhaustion:
-      typeof binding["secondsToExhaustion"] === "number" ? binding["secondsToExhaustion"] : null,
-  };
 }

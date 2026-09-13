@@ -1620,7 +1620,18 @@ function OpenCommandPaletteDialog(props: {
     title: "Open Agent Workbench",
     icon: <PanelsTopLeftIcon className={ITEM_ICON_CLASS} />,
     run: async () => {
-      await navigate({ to: "/workbench", search: { module: "plans" } });
+      await navigate({
+        to: "/workbench",
+        search: {
+          module: "plans",
+          ...(contextualProjectRef === null
+            ? {}
+            : {
+                environmentId: contextualProjectRef.environmentId,
+                projectId: contextualProjectRef.projectId,
+              }),
+        },
+      });
     },
   });
 

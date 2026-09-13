@@ -12,6 +12,7 @@ import {
   type EnvironmentId,
   type UsageSummary,
   type UsageSummaryInput,
+  type ProjectId,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
@@ -71,7 +72,13 @@ export interface UsageView {
   readonly refresh: () => void;
 }
 
-export function useUsage(input: UsageSummaryInput): UsageView {
+export interface UsageProjectScope {
+  readonly environmentId: EnvironmentId;
+  /** `undefined` means all projects; `null` means the explicit unattributed bucket. */
+  readonly projectId?: ProjectId | null;
+}
+
+export function useUsage(input: UsageSummaryInput, scope?: UsageProjectScope): UsageView {
   const windowKey = useMemo(
     () =>
       JSON.stringify({
@@ -118,8 +125,14 @@ export function useUsage(input: UsageSummaryInput): UsageView {
             },
           ],
     );
-    return mergeUsage(answered, USAGE_CONTRACT_VERSION);
-  }, [environments]);
+    return mergeUsage(
+      answered,
+      USAGE_CONTRACT_VERSION,
+      scope?.projectId === undefined
+        ? undefined
+        : { environmentId: scope.environmentId, projectId: scope.projectId },
+    );
+  }, [environments, scope?.environmentId, scope?.projectId]);
 
   const answeredCount = environments.filter((environment) => environment.summary !== null).length;
   const stillReporting = environments.filter(

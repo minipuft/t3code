@@ -26,6 +26,12 @@ import type {
   WorkbenchResourceSource,
   WorkbenchResourceTarget,
   WorkbenchReviewInbox,
+  WorkbenchTopology,
+  WorkbenchRelationshipReviewInput,
+  WorkbenchReviewInboxCommand,
+  WorkbenchProjectionHealth,
+  WorkbenchProjectionReview,
+  WorkbenchProjectionReceipt,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -170,6 +176,37 @@ export const fetchEnvironmentWorkbenchVitals = Effect.fn(
     method: "GET",
     requestUrl,
     request: (headers) => client.workbenchPlans.vitals({ headers }),
+  });
+});
+
+export const fetchEnvironmentWorkbenchTopology = Effect.fn(
+  "clientRuntime.state.fetchEnvironmentWorkbenchTopology",
+)(function* (input: WorkbenchPlansRequestContext) {
+  const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
+  const requestUrl = urlBuilder.workbenchPlans.topology();
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  return yield* executeRequest({
+    ...input,
+    method: "GET",
+    requestUrl,
+    request: (headers) => client.workbenchPlans.topology({ headers }),
+  });
+});
+
+export const reviewEnvironmentWorkbenchRelationship = Effect.fn(
+  "clientRuntime.state.reviewEnvironmentWorkbenchRelationship",
+)(function* (
+  input: WorkbenchPlansRequestContext & { readonly value: WorkbenchRelationshipReviewInput },
+) {
+  const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
+  const requestUrl = urlBuilder.workbenchPlans.reviewRelationship();
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  return yield* executeRequest({
+    ...input,
+    method: "POST",
+    requestUrl,
+    request: (headers) =>
+      client.workbenchPlans.reviewRelationship({ payload: input.value, headers }),
   });
 });
 
@@ -432,6 +469,83 @@ export const rollbackEnvironmentWorkbenchResource = Effect.fn(
   });
 });
 
+export const executeWorkbenchReviewInboxCommand = Effect.fn(
+  "clientRuntime.state.reviewInboxCommand",
+)(function* (
+  input: WorkbenchPlansRequestContext & { readonly value: WorkbenchReviewInboxCommand },
+) {
+  const c = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const u = c.workbenchPlans.reviewInboxCommand;
+  return yield* executeRequest({
+    ...input,
+    method: "POST",
+    requestUrl: makeEnvironmentHttpApiUrlBuilder(
+      input.prepared.httpBaseUrl,
+    ).workbenchPlans.reviewInboxCommand(),
+    request: (headers) => u({ payload: input.value, headers }),
+  });
+});
+export const fetchEnvironmentWorkbenchProjectionHealth = Effect.fn(
+  "clientRuntime.state.projectionHealth",
+)(function* (input: WorkbenchPlansRequestContext) {
+  const c = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  return yield* executeRequest({
+    ...input,
+    method: "GET",
+    requestUrl: makeEnvironmentHttpApiUrlBuilder(
+      input.prepared.httpBaseUrl,
+    ).workbenchPlans.projectionHealth(),
+    request: (headers) => c.workbenchPlans.projectionHealth({ headers }),
+  });
+});
+export const reviewEnvironmentWorkbenchProjection = Effect.fn(
+  "clientRuntime.state.reviewProjection",
+)(function* (input: WorkbenchPlansRequestContext & { readonly value: { requestId: string } }) {
+  const c = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  return yield* executeRequest({
+    ...input,
+    method: "POST",
+    requestUrl: makeEnvironmentHttpApiUrlBuilder(
+      input.prepared.httpBaseUrl,
+    ).workbenchPlans.reviewProjection(),
+    request: (headers) => c.workbenchPlans.reviewProjection({ payload: input.value, headers }),
+  });
+});
+export const applyEnvironmentWorkbenchProjection = Effect.fn("clientRuntime.state.applyProjection")(
+  function* (
+    input: WorkbenchPlansRequestContext & {
+      readonly value: { reviewId: string; diffDigest: string };
+    },
+  ) {
+    const c = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+    return yield* executeRequest({
+      ...input,
+      method: "POST",
+      requestUrl: makeEnvironmentHttpApiUrlBuilder(
+        input.prepared.httpBaseUrl,
+      ).workbenchPlans.applyProjection(),
+      request: (headers) => c.workbenchPlans.applyProjection({ payload: input.value, headers }),
+    });
+  },
+);
+export const rollbackEnvironmentWorkbenchProjection = Effect.fn(
+  "clientRuntime.state.rollbackProjection",
+)(function* (
+  input: WorkbenchPlansRequestContext & {
+    readonly value: { requestId: string; receiptId: string };
+  },
+) {
+  const c = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  return yield* executeRequest({
+    ...input,
+    method: "POST",
+    requestUrl: makeEnvironmentHttpApiUrlBuilder(
+      input.prepared.httpBaseUrl,
+    ).workbenchPlans.rollbackProjection(),
+    request: (headers) => c.workbenchPlans.rollbackProjection({ payload: input.value, headers }),
+  });
+});
+
 export class WorkbenchPlansLoader extends Context.Service<
   WorkbenchPlansLoader,
   {
@@ -441,6 +555,13 @@ export class WorkbenchPlansLoader extends Context.Service<
     readonly vitals: (
       prepared: PreparedConnection,
     ) => Effect.Effect<WorkbenchVitalsSnapshot, RemoteEnvironmentRequestError>;
+    readonly topology: (
+      prepared: PreparedConnection,
+    ) => Effect.Effect<WorkbenchTopology, RemoteEnvironmentRequestError>;
+    readonly reviewRelationship: (
+      prepared: PreparedConnection,
+      input: WorkbenchRelationshipReviewInput,
+    ) => Effect.Effect<WorkbenchResourceMutationReview, RemoteEnvironmentRequestError>;
     readonly associations: (
       prepared: PreparedConnection,
       input: WorkbenchConversationInput,
@@ -480,6 +601,25 @@ export class WorkbenchPlansLoader extends Context.Service<
     readonly reviewInbox: (
       prepared: PreparedConnection,
     ) => Effect.Effect<WorkbenchReviewInbox, RemoteEnvironmentRequestError>;
+    readonly reviewInboxCommand: (
+      prepared: PreparedConnection,
+      input: WorkbenchReviewInboxCommand,
+    ) => Effect.Effect<WorkbenchReviewInbox, RemoteEnvironmentRequestError>;
+    readonly projectionHealth: (
+      prepared: PreparedConnection,
+    ) => Effect.Effect<WorkbenchProjectionHealth, RemoteEnvironmentRequestError>;
+    readonly reviewProjection: (
+      prepared: PreparedConnection,
+      input: { requestId: string },
+    ) => Effect.Effect<WorkbenchProjectionReview, RemoteEnvironmentRequestError>;
+    readonly applyProjection: (
+      prepared: PreparedConnection,
+      input: { reviewId: string; diffDigest: string },
+    ) => Effect.Effect<WorkbenchProjectionReceipt, RemoteEnvironmentRequestError>;
+    readonly rollbackProjection: (
+      prepared: PreparedConnection,
+      input: { requestId: string; receiptId: string },
+    ) => Effect.Effect<WorkbenchProjectionReceipt, RemoteEnvironmentRequestError>;
     readonly resourceAuthority: (
       prepared: PreparedConnection,
     ) => Effect.Effect<WorkbenchResourceAuthority, RemoteEnvironmentRequestError>;
@@ -528,6 +668,9 @@ export const workbenchPlansLoaderLayer: Layer.Layer<
     return WorkbenchPlansLoader.of({
       list: (prepared) => provideHttp(fetchEnvironmentWorkbenchPlans({ prepared, signer })),
       vitals: (prepared) => provideHttp(fetchEnvironmentWorkbenchVitals({ prepared, signer })),
+      topology: (prepared) => provideHttp(fetchEnvironmentWorkbenchTopology({ prepared, signer })),
+      reviewRelationship: (prepared, value) =>
+        provideHttp(reviewEnvironmentWorkbenchRelationship({ prepared, value, signer })),
       associations: (prepared, value) =>
         provideHttp(fetchEnvironmentWorkbenchPlanAssociations({ prepared, value, signer })),
       associate: (prepared, value) =>
@@ -548,6 +691,16 @@ export const workbenchPlansLoaderLayer: Layer.Layer<
         provideHttp(fetchEnvironmentWorkbenchResourceLibrary({ prepared, signer, ...input })),
       reviewInbox: (prepared) =>
         provideHttp(fetchEnvironmentWorkbenchReviewInbox({ prepared, signer })),
+      reviewInboxCommand: (prepared, value) =>
+        provideHttp(executeWorkbenchReviewInboxCommand({ prepared, signer, value })),
+      projectionHealth: (prepared) =>
+        provideHttp(fetchEnvironmentWorkbenchProjectionHealth({ prepared, signer })),
+      reviewProjection: (prepared, value) =>
+        provideHttp(reviewEnvironmentWorkbenchProjection({ prepared, signer, value })),
+      applyProjection: (prepared, value) =>
+        provideHttp(applyEnvironmentWorkbenchProjection({ prepared, signer, value })),
+      rollbackProjection: (prepared, value) =>
+        provideHttp(rollbackEnvironmentWorkbenchProjection({ prepared, signer, value })),
       resourceAuthority: (prepared) =>
         provideHttp(fetchEnvironmentWorkbenchResourceAuthority({ prepared, signer })),
       unlockResources: (prepared) =>

@@ -21,8 +21,14 @@ import {
   AgentWorkbenchResourcePolicy,
   AgentWorkbenchResourceSource,
   AgentWorkbenchReviewInbox,
+  AgentWorkbenchReviewInboxCommand,
+  AgentWorkbenchProjectionHealth,
+  AgentWorkbenchProjectionReview,
+  AgentWorkbenchProjectionReceipt,
   AgentWorkbenchVitals,
+  AgentWorkbenchTopology,
   ThreadId,
+  type UsageSummary,
   type ServerProvider,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -34,6 +40,8 @@ import * as Schema from "effect/Schema";
 import { ServerEnvironment } from "../environment/ServerEnvironment.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { ProviderSessionDirectory } from "../provider/Services/ProviderSessionDirectory.ts";
+import { UsageService } from "../usage/UsageService.ts";
+import { makeCurrentWeekWindow } from "@t3tools/shared/usageFormat";
 import {
   AgentWorkbenchConnection,
   AgentWorkbenchConnectionError,
@@ -119,6 +127,29 @@ export interface AgentWorkbenchShape {
     readonly project?: string;
   }) => Effect.Effect<AgentWorkbenchResourceLibrary, AgentWorkbenchAdapterError>;
   readonly reviewInbox: Effect.Effect<AgentWorkbenchReviewInbox, AgentWorkbenchAdapterError>;
+  readonly reviewInboxCommand: (
+    input: AgentWorkbenchReviewInboxCommand,
+  ) => Effect.Effect<AgentWorkbenchReviewInbox, AgentWorkbenchAdapterError>;
+  readonly projectionHealth: Effect.Effect<
+    AgentWorkbenchProjectionHealth,
+    AgentWorkbenchAdapterError
+  >;
+  readonly reviewProjection: (input: {
+    readonly requestId: string;
+  }) => Effect.Effect<AgentWorkbenchProjectionReview, AgentWorkbenchAdapterError>;
+  readonly applyProjection: (input: {
+    readonly reviewId: string;
+    readonly diffDigest: string;
+  }) => Effect.Effect<AgentWorkbenchProjectionReceipt, AgentWorkbenchAdapterError>;
+  readonly rollbackProjection: (input: {
+    readonly requestId: string;
+    readonly receiptId: string;
+  }) => Effect.Effect<AgentWorkbenchProjectionReceipt, AgentWorkbenchAdapterError>;
+  readonly topology: Effect.Effect<typeof AgentWorkbenchTopology.Type, AgentWorkbenchAdapterError>;
+  readonly audit: Effect.Effect<AgentWorkbenchReviewInbox, AgentWorkbenchAdapterError>;
+  readonly reviewRelationship: (
+    input: unknown,
+  ) => Effect.Effect<AgentWorkbenchResourceMutationReview, AgentWorkbenchAdapterError>;
   readonly resourceAuthority: (
     sessionId: string,
   ) => Effect.Effect<AgentWorkbenchResourceAuthority, AgentWorkbenchAdapterError>;
@@ -163,6 +194,7 @@ interface AgentWorkbenchContextDependencies {
   readonly getHarnessAliases?: (
     threadId: string,
   ) => Effect.Effect<ReadonlyArray<{ readonly provider: string; readonly sessionId: string }>>;
+  readonly getUsageAttribution?: Effect.Effect<unknown>;
 }
 
 interface T3ConversationInput {
@@ -262,9 +294,24 @@ export function makeAgentWorkbench(
       Effect.map((leaseId) => ({ sessionId, leaseId })),
     );
 
+  const vitals = Effect.gen(function* () {
+    if (context.getUsageAttribution !== undefined) {
+      const [leaseId, usage] = yield* Effect.all([
+        Effect.tryPromise({ try: () => connection.leaseId(), catch: mapConnectionError }),
+        context.getUsageAttribution,
+      ]);
+      yield* request(Schema.Unknown, "/v1/usage-attribution", {
+        method: "PUT",
+        admin: true,
+        body: { protocolVersion: "1.0.0", leaseId, usage },
+      });
+    }
+    return yield* request(AgentWorkbenchVitals, "/v1/vitals");
+  });
+
   return AgentWorkbench.of({
     listPlans: request(AgentWorkbenchPlanList, "/v1/plans"),
-    vitals: request(AgentWorkbenchVitals, "/v1/vitals"),
+    vitals,
     planAssociations: (input) =>
       conversation(input).pipe(
         Effect.flatMap((value) =>
@@ -364,6 +411,43 @@ export function makeAgentWorkbench(
         }),
       ),
     reviewInbox: request(AgentWorkbenchReviewInbox, "/v1/review-inbox"),
+    reviewInboxCommand: (input) =>
+      request(AgentWorkbenchReviewInbox, "/v1/review-inbox/commands", {
+        method: "POST",
+        admin: true,
+        body: input,
+      }),
+    projectionHealth: request(AgentWorkbenchProjectionHealth, "/v1/projections"),
+    reviewProjection: (input) =>
+      request(AgentWorkbenchProjectionReview, "/v1/projections/review", {
+        method: "POST",
+        admin: true,
+        body: input,
+      }),
+    applyProjection: (input) =>
+      request(AgentWorkbenchProjectionReceipt, "/v1/projections/apply", {
+        method: "POST",
+        admin: true,
+        body: input,
+      }),
+    rollbackProjection: (input) =>
+      request(AgentWorkbenchProjectionReceipt, "/v1/projections/rollback", {
+        method: "POST",
+        admin: true,
+        body: input,
+      }),
+    topology: request(AgentWorkbenchTopology, "/v1/topology"),
+    audit: request(AgentWorkbenchReviewInbox, "/v1/audit", {
+      method: "POST",
+      admin: true,
+      body: { targetId: "t3code" },
+    }),
+    reviewRelationship: (input) =>
+      request(AgentWorkbenchResourceMutationReview, "/v1/relationships/review", {
+        method: "POST",
+        admin: true,
+        body: input,
+      }),
     resourceAuthority: (sessionId) =>
       authorityContext(sessionId).pipe(
         Effect.flatMap((authority) =>
@@ -442,11 +526,33 @@ const make = Effect.gen(function* () {
   const environment = yield* ServerEnvironment;
   const providers = yield* ProviderRegistry;
   const sessions = yield* Effect.serviceOption(ProviderSessionDirectory);
+  const usage = yield* UsageService;
   const connection = new AgentWorkbenchConnection(makeAgentWorkbenchConnectionDependencies());
   yield* Effect.addFinalizer(() => Effect.promise(() => connection.close()));
   return makeAgentWorkbench(connection, {
     getEnvironmentId: environment.getEnvironmentId,
     getProviders: providers.getProviders,
+    getUsageAttribution: environment.getEnvironmentId.pipe(
+      Effect.flatMap((environmentId) =>
+        usage.readSummary(makeCurrentWeekWindow()).pipe(
+          Effect.match({
+            onFailure: () => ({
+              environmentId,
+              label: environmentId,
+              capturedAt: "",
+              usageContractVersion: 6,
+              source: "host-transcript-usage" as const,
+              state: "unavailable" as const,
+              reason: "Transcript usage could not be read from this environment.",
+              totals: { costUsd: 0, totalTokens: 0, records: 0 },
+              projects: [],
+              unattributed: [],
+            }),
+            onSuccess: (summary) => usageAttributionPayload(environmentId, summary),
+          }),
+        ),
+      ),
+    ),
     getHarnessAliases: (threadId) =>
       Option.match(sessions, {
         onNone: () => Effect.succeed([]),
@@ -461,6 +567,68 @@ const make = Effect.gen(function* () {
 });
 
 export const layer = Layer.effect(AgentWorkbench, make);
+
+export function usageAttributionPayload(environmentId: string, summary: UsageSummary) {
+  const projects = new Map<string, { costUsd: number; totalTokens: number; records: number }>();
+  const unattributed = new Map<string, { costUsd: number; totalTokens: number; records: number }>();
+  const add = (
+    target: Map<string, { costUsd: number; totalTokens: number; records: number }>,
+    key: string,
+    bucket: UsageSummary["buckets"][number],
+  ) => {
+    const current = target.get(key) ?? { costUsd: 0, totalTokens: 0, records: 0 };
+    target.set(key, {
+      costUsd: current.costUsd + bucket.costUsd,
+      totalTokens:
+        current.totalTokens +
+        bucket.totals.uncachedInputTokens +
+        bucket.totals.cachedInputTokens +
+        bucket.totals.cacheCreationTokens +
+        bucket.totals.outputTokens,
+      records: current.records + bucket.records,
+    });
+  };
+  for (const bucket of summary.buckets) {
+    if (bucket.projectId !== null && bucket.attributionStatus === "attributed") {
+      add(projects, bucket.projectId, bucket);
+    } else {
+      add(
+        unattributed,
+        bucket.attributionStatus === "attributed" ? "unknownRoot" : bucket.attributionStatus,
+        bucket,
+      );
+    }
+  }
+  const projectRows = [...projects].map(([projectId, totals]) => ({
+    environmentId,
+    projectId,
+    ...totals,
+  }));
+  const unattributedRows = [...unattributed].map(([status, totals]) => ({
+    environmentId,
+    status,
+    ...totals,
+  }));
+  const totals = [...projectRows, ...unattributedRows].reduce(
+    (result, item) => ({
+      costUsd: result.costUsd + item.costUsd,
+      totalTokens: result.totalTokens + item.totalTokens,
+      records: result.records + item.records,
+    }),
+    { costUsd: 0, totalTokens: 0, records: 0 },
+  );
+  return {
+    environmentId,
+    label: environmentId,
+    capturedAt: summary.readAt,
+    usageContractVersion: summary.contractVersion,
+    source: "host-transcript-usage" as const,
+    state: "available" as const,
+    totals,
+    projects: projectRows,
+    unattributed: unattributedRows,
+  };
+}
 
 function providerSkills(providers: ReadonlyArray<ServerProvider>) {
   const skills = new Map<

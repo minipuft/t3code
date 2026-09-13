@@ -15,6 +15,9 @@ import type {
   WorkbenchPlanSuggestionInput,
   WorkbenchPlanSuggestions,
   WorkbenchVitalsSnapshot,
+  WorkbenchTopology,
+  WorkbenchRelationshipReviewInput,
+  WorkbenchResourceMutationReview,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { AsyncResult } from "effect/unstable/reactivity";
@@ -63,6 +66,45 @@ export function useWorkbenchVitals(environmentId: EnvironmentId): {
     error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
     isPending: result.waiting,
     refresh,
+  };
+}
+
+export function useWorkbenchTopology(environmentId: EnvironmentId): {
+  readonly data: WorkbenchTopology | null;
+  readonly error: string | null;
+  readonly isPending: boolean;
+  readonly refresh: () => void;
+  readonly review: (
+    input: WorkbenchRelationshipReviewInput,
+  ) => Promise<
+    import("@t3tools/client-runtime/state/runtime").AtomCommandResult<
+      WorkbenchResourceMutationReview,
+      unknown
+    >
+  >;
+} {
+  const atom = workbenchPlansEnvironment.topology({ environmentId, input: null });
+  const result = useAtomValue(atom);
+  const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
+  const reviewCommand = useAtomCommand(workbenchPlansEnvironment.reviewRelationship, {
+    reportFailure: false,
+  });
+  return {
+    data: queryValue(result),
+    error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
+    isPending: result.waiting,
+    refresh,
+    review: useCallback(
+      (input) => reviewCommand({ environmentId, input }),
+      [environmentId, reviewCommand],
+    ) as (
+      input: WorkbenchRelationshipReviewInput,
+    ) => Promise<
+      import("@t3tools/client-runtime/state/runtime").AtomCommandResult<
+        WorkbenchResourceMutationReview,
+        unknown
+      >
+    >,
   };
 }
 

@@ -15,6 +15,8 @@ function record(overrides: Partial<UsageRecord> = {}): UsageRecord {
     timestampMs: 1_786_000_000_000,
     model: "claude-fable-5",
     sessionId: "session-a",
+    workspacePath: "/workspace/a",
+    workspaceSource: "claudeCwd",
     totals: {
       uncachedInputTokens: 2,
       cachedInputTokens: 1000,
@@ -73,6 +75,7 @@ describe("scan cache round trip", () => {
     expect(decodeScanCache(null).size).toBe(0);
     expect(decodeScanCache("nonsense").size).toBe(0);
     expect(decodeScanCache({ version: 999, models: [], sessions: [], files: {} }).size).toBe(0);
+    expect(decodeScanCache({ version: 2, models: [], sessions: [], files: {} }).size).toBe(0);
   });
 
   it("skips malformed file entries but keeps good ones", () => {

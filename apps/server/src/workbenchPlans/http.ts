@@ -36,6 +36,9 @@ const handleAdapterError = <A>(effect: Effect.Effect<A, WorkbenchPlansAdapterErr
             message: "The plan changed after it was opened. Refresh before saving again.",
           });
         }
+        if (error.reason === "unsupported_version") {
+          return yield* failEnvironmentInternal("incompatible_workbench_version", error);
+        }
         return yield* failEnvironmentInternal("internal_error", error);
       }),
     ),
@@ -75,6 +78,18 @@ const handleResourceAdapterError = <A>(effect: Effect.Effect<A, WorkbenchPlansAd
 
 const handleResourceSnapshotError = <A>(effect: Effect.Effect<A, WorkbenchPlansAdapterError>) =>
   effect.pipe(Effect.catch((error) => failEnvironmentInternal("internal_error", error)));
+
+const handleTopologyError = <A>(effect: Effect.Effect<A, WorkbenchPlansAdapterError>) =>
+  effect.pipe(
+    Effect.catch((error) =>
+      failEnvironmentInternal(
+        error.reason === "unsupported_version" || error.reason === "invalid_response"
+          ? "incompatible_workbench_version"
+          : "internal_error",
+        error,
+      ),
+    ),
+  );
 
 const handleResourceSourceError = <A>(effect: Effect.Effect<A, WorkbenchPlansAdapterError>) =>
   effect.pipe(
@@ -191,6 +206,20 @@ export const workbenchPlansHttpApiLayer = HttpApiBuilder.group(
           Effect.andThen(handleAdapterError(plans.mutateAnnotations(payload))),
         ),
       )
+      .handle("topology", ({ endpoint }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          yield* requireEnvironmentScope(AuthOrchestrationReadScope);
+          return yield* handleTopologyError(plans.topology);
+        }),
+      )
+      .handle("reviewRelationship", ({ endpoint, payload }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          yield* requireDirectLocalAdministrativeRequest;
+          return yield* handleResourceAdapterError(plans.reviewRelationship(payload));
+        }),
+      )
       .handle("resourceLibrary", ({ endpoint, payload }) =>
         Effect.gen(function* () {
           yield* annotateEnvironmentRequest(endpoint.name);
@@ -203,6 +232,41 @@ export const workbenchPlansHttpApiLayer = HttpApiBuilder.group(
           yield* annotateEnvironmentRequest(endpoint.name);
           yield* requireEnvironmentScope(AuthOrchestrationReadScope);
           return yield* handleResourceSnapshotError(plans.reviewInbox);
+        }),
+      )
+      .handle("reviewInboxCommand", ({ endpoint, payload }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          yield* requireDirectLocalAdministrativeRequest;
+          return yield* handleResourceAdapterError(plans.reviewInboxCommand(payload));
+        }),
+      )
+      .handle("projectionHealth", ({ endpoint }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          yield* requireEnvironmentScope(AuthOrchestrationReadScope);
+          return yield* handleResourceSnapshotError(plans.projectionHealth);
+        }),
+      )
+      .handle("reviewProjection", ({ endpoint, payload }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          yield* requireDirectLocalAdministrativeRequest;
+          return yield* handleResourceAdapterError(plans.reviewProjection(payload));
+        }),
+      )
+      .handle("applyProjection", ({ endpoint, payload }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          yield* requireDirectLocalAdministrativeRequest;
+          return yield* handleResourceAdapterError(plans.applyProjection(payload));
+        }),
+      )
+      .handle("rollbackProjection", ({ endpoint, payload }) =>
+        Effect.gen(function* () {
+          yield* annotateEnvironmentRequest(endpoint.name);
+          yield* requireDirectLocalAdministrativeRequest;
+          return yield* handleResourceAdapterError(plans.rollbackProjection(payload));
         }),
       )
       .handle("resourceAuthority", ({ endpoint }) =>

@@ -3,7 +3,15 @@ import type { EnvironmentId, WorkflowCatalogItem } from "@t3tools/contracts";
 import type { EnvironmentPresentation } from "./state/environments";
 import { searchWorkflowCatalog } from "./workflowInvocation";
 
-export const WORKBENCH_MODULES = ["plans", "prompts", "skills", "library", "vitals"] as const;
+export const WORKBENCH_MODULES = [
+  "plans",
+  "prompts",
+  "skills",
+  "library",
+  "vitals",
+  "topology",
+  "audit",
+] as const;
 export type WorkbenchModule = (typeof WORKBENCH_MODULES)[number];
 
 export function parseWorkbenchModule(value: unknown): WorkbenchModule {

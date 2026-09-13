@@ -162,19 +162,18 @@ export const AgentWorkbenchVitals = Schema.Struct({
   capturedAt: Schema.String,
   state: AgentWorkbenchCapabilityState,
   reason: Schema.optionalKey(Schema.String),
-  binding: Schema.optionalKey(Schema.NullOr(Schema.Unknown)),
   windows: Schema.Array(
     Schema.Struct({
       id: TrimmedNonEmptyString,
       label: TrimmedNonEmptyString,
       provider: Schema.optionalKey(Schema.String),
+      providerInstanceId: Schema.optionalKey(Schema.String),
       providerLabel: Schema.optionalKey(Schema.String),
       usedPercent: Schema.NullOr(Schema.Number),
       remainingPercent: Schema.NullOr(Schema.Number),
-      expectedPercent: Schema.optionalKey(Schema.NullOr(Schema.Number)),
       resetsAt: Schema.NullOr(Schema.String),
-      exhaustsBeforeReset: Schema.optionalKey(Schema.Boolean),
-      secondsToExhaustion: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+      observedAt: Schema.NullOr(Schema.String),
+      source: Schema.Literals(["claude-oauth", "codex-app-server", "statusline-capture"]),
       state: Schema.Literals(["available", "stale", "unavailable"]),
     }),
   ),
@@ -355,6 +354,7 @@ export const AgentWorkbenchReviewInbox = Schema.Struct({
   items: Schema.Array(
     Schema.Struct({
       id: Schema.String,
+      kind: Schema.optionalKey(Schema.Literals(["import", "relationship", "audit"])),
       source: Schema.Struct({
         type: Schema.Literals(["github", "zip", "markdown"]),
         locator: Schema.String,
@@ -375,10 +375,123 @@ export const AgentWorkbenchReviewInbox = Schema.Struct({
       updatedAt: Schema.String,
       warnings: Schema.Array(Schema.String),
       receiptId: Schema.optionalKey(Schema.String),
+      audit: Schema.optionalKey(
+        Schema.Struct({
+          identity: Schema.String,
+          family: Schema.Literals(["claude", "codex", "opencode"]),
+          state: Schema.Literals([
+            "current",
+            "stale",
+            "missing",
+            "unsupported",
+            "resolved",
+            "reopened",
+            "dismissed",
+            "restored",
+          ]),
+          sourceHash: Schema.NullOr(Schema.String),
+          targetHash: Schema.NullOr(Schema.String),
+          reason: Schema.String,
+          evidence: Schema.Array(
+            Schema.Struct({ kind: Schema.String, locator: Schema.String, detail: Schema.String }),
+          ),
+          repairReviewId: Schema.optionalKey(Schema.String),
+          updatedAt: Schema.String,
+        }),
+      ),
     }),
   ),
 });
 export type AgentWorkbenchReviewInbox = typeof AgentWorkbenchReviewInbox.Type;
+
+export const AgentWorkbenchReviewInboxCommand = Schema.Struct({
+  op: Schema.Literals(["discard", "restore", "dismiss", "reopen"]),
+  id: Schema.String,
+  expectedRevision: Schema.optionalKey(Schema.Number),
+});
+export type AgentWorkbenchReviewInboxCommand = typeof AgentWorkbenchReviewInboxCommand.Type;
+
+const AgentWorkbenchProjectionItem = Schema.Struct({
+  provider: Schema.String,
+  state: Schema.String,
+  sourceDigest: Schema.NullOr(Schema.String),
+  targetDigest: Schema.NullOr(Schema.String),
+  changedArtifacts: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+export const AgentWorkbenchProjectionHealth = Schema.Struct({
+  protocolVersion: AgentWorkbenchProtocolVersion,
+  capturedAt: Schema.String,
+  state: Schema.Literals(["current", "stale", "partial", "unavailable"]),
+  items: Schema.Array(AgentWorkbenchProjectionItem),
+});
+export type AgentWorkbenchProjectionHealth = typeof AgentWorkbenchProjectionHealth.Type;
+export const AgentWorkbenchProjectionReviewInput = Schema.Struct({ requestId: Schema.String });
+export const AgentWorkbenchProjectionApplyInput = Schema.Struct({
+  reviewId: Schema.String,
+  diffDigest: Schema.String,
+});
+export const AgentWorkbenchProjectionRollbackInput = Schema.Struct({
+  requestId: Schema.String,
+  receiptId: Schema.String,
+});
+export const AgentWorkbenchProjectionReview = Schema.Struct({
+  protocolVersion: AgentWorkbenchProtocolVersion,
+  id: Schema.String,
+  requestId: Schema.String,
+  state: Schema.Literals(["prepared", "current"]),
+  diff: Schema.String,
+  diffDigest: Schema.String,
+  health: AgentWorkbenchProjectionHealth,
+});
+export const AgentWorkbenchProjectionReceipt = Schema.Struct({
+  protocolVersion: AgentWorkbenchProtocolVersion,
+  id: Schema.String,
+  requestId: Schema.String,
+  reviewId: Schema.String,
+  status: Schema.Literals(["applied", "rolled-back"]),
+  changedArtifacts: Schema.Array(Schema.String),
+  undoAvailable: Schema.Boolean,
+  appliedAt: Schema.String,
+  rolledBackAt: Schema.optionalKey(Schema.String),
+  health: AgentWorkbenchProjectionHealth,
+});
+export type AgentWorkbenchProjectionReview = typeof AgentWorkbenchProjectionReview.Type;
+export type AgentWorkbenchProjectionReceipt = typeof AgentWorkbenchProjectionReceipt.Type;
+export const AgentWorkbenchTopology = Schema.Struct({
+  protocolVersion: AgentWorkbenchProtocolVersion,
+  nodes: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      kind: Schema.String,
+      label: Schema.String,
+      provenance: Schema.NullOr(Schema.String),
+    }),
+  ),
+  approved: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      kind: Schema.Literals([
+        "project_uses_repository",
+        "project_uses_resource_source",
+        "resource_projects_to_target",
+      ]),
+      source: Schema.String,
+      target: Schema.String,
+      state: Schema.Literal("approved"),
+    }),
+  ),
+  proposed: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      kind: Schema.String,
+      source: Schema.String,
+      target: Schema.String,
+      state: Schema.Literal("proposed"),
+      evidence: Schema.Unknown,
+    }),
+  ),
+});
+export type AgentWorkbenchTopology = typeof AgentWorkbenchTopology.Type;
 export const AgentWorkbenchResourceAuthority = Schema.Struct({
   state: Schema.Literals(["locked", "unlocked"]),
   reason: Schema.NullOr(Schema.String),

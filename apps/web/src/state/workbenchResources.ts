@@ -11,6 +11,7 @@ import type {
   WorkbenchResourceSource,
   WorkbenchResourceTarget,
   WorkbenchReviewInbox,
+  WorkbenchReviewInboxCommand,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { AsyncResult } from "effect/unstable/reactivity";
@@ -51,6 +52,46 @@ export function useWorkbenchReviewInbox(
     result,
     useCallback(() => appAtomRegistry.refresh(atom), [atom]),
   );
+}
+
+export function useWorkbenchProjectionHealth(environmentId: EnvironmentId) {
+  const atom = workbenchPlansEnvironment.projectionHealth({ environmentId, input: null });
+  const result = useAtomValue(atom);
+  return view(
+    result,
+    useCallback(() => appAtomRegistry.refresh(atom), [atom]),
+  );
+}
+
+export function useWorkbenchAuditActions(environmentId: EnvironmentId) {
+  const command = useAtomCommand(workbenchPlansEnvironment.reviewInboxCommand, {
+    reportFailure: false,
+  });
+  const review = useAtomCommand(workbenchPlansEnvironment.reviewProjection, {
+    reportFailure: false,
+  });
+  const apply = useAtomCommand(workbenchPlansEnvironment.applyProjection, { reportFailure: false });
+  const rollback = useAtomCommand(workbenchPlansEnvironment.rollbackProjection, {
+    reportFailure: false,
+  });
+  return {
+    command: useCallback(
+      (input: WorkbenchReviewInboxCommand) => command({ environmentId, input }),
+      [command, environmentId],
+    ),
+    review: useCallback(
+      (input: { requestId: string }) => review({ environmentId, input }),
+      [review, environmentId],
+    ),
+    apply: useCallback(
+      (input: { reviewId: string; diffDigest: string }) => apply({ environmentId, input }),
+      [apply, environmentId],
+    ),
+    rollback: useCallback(
+      (input: { requestId: string; receiptId: string }) => rollback({ environmentId, input }),
+      [rollback, environmentId],
+    ),
+  };
 }
 
 export function useWorkbenchResourceAuthority(

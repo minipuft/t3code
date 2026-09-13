@@ -12,26 +12,34 @@ const decodePromptDetail = Schema.decodeUnknownSync(AgentWorkbenchPromptDetail);
 const decodeResourceReview = Schema.decodeUnknownSync(AgentWorkbenchResourceMutationReview);
 
 describe("Agent Workbench contracts", () => {
-  it("decodes provider vitals with used and remaining values plus thread binding", () => {
+  it("decodes provider-reported quota with provenance and no forecast fields", () => {
     const decoded = decodeVitals({
       protocolVersion: "1.0.0",
       capturedAt: "2026-08-27T00:00:00.000Z",
       state: "available",
-      binding: { threadId: "thread-1", windowId: "claude-weekly" },
       windows: [
         {
           id: "claude-weekly",
+          provider: "claude",
+          providerInstanceId: "claude",
+          providerLabel: "Claude",
           label: "7-day",
           usedPercent: 35,
           remainingPercent: 65,
           resetsAt: null,
+          observedAt: "2026-08-26T23:58:00.000Z",
+          source: "claude-oauth",
           state: "available",
         },
       ],
     });
 
-    expect(decoded.binding).toEqual({ threadId: "thread-1", windowId: "claude-weekly" });
-    expect(decoded.windows[0]?.remainingPercent).toBe(65);
+    expect(decoded.windows[0]).toMatchObject({
+      remainingPercent: 65,
+      observedAt: "2026-08-26T23:58:00.000Z",
+      source: "claude-oauth",
+    });
+    expect("binding" in decoded).toBe(false);
   });
 
   it("preserves nullable prompt content from the authority", () => {

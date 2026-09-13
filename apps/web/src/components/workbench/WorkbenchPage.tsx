@@ -1,4 +1,4 @@
-import type { EnvironmentId } from "@t3tools/contracts";
+import { ProjectId, type EnvironmentId } from "@t3tools/contracts";
 import {
   ActivityIcon,
   BlocksIcon,
@@ -7,11 +7,14 @@ import {
   FileTextIcon,
   LibraryIcon,
   MonitorIcon,
+  NetworkIcon,
+  ShieldCheckIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
+import { useProjects } from "../../state/entities";
 import {
   useEnvironments,
   usePrimaryEnvironmentId,
@@ -26,6 +29,8 @@ import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
 import { WorkbenchPlansPanel } from "./WorkbenchPlansPanel";
 import { WorkbenchVitalsPanel } from "./WorkbenchVitalsPanel";
 import { WorkbenchResourceLibraryPanel } from "./WorkbenchResourceLibraryPanel";
+import { WorkbenchTopologyPanel } from "./WorkbenchTopologyPanel";
+import { WorkbenchAuditPanel } from "./WorkbenchAuditPanel";
 import { ScrollArea } from "../ui/scroll-area";
 import {
   Select,
@@ -48,15 +53,22 @@ const MODULES: ReadonlyArray<{
   { id: "skills", label: "Skills", icon: <BlocksIcon /> },
   { id: "library", label: "Library", icon: <LibraryIcon /> },
   { id: "vitals", label: "Vitals", icon: <ActivityIcon /> },
+  { id: "topology", label: "Topology", icon: <NetworkIcon /> },
+  { id: "audit", label: "Audit", icon: <ShieldCheckIcon /> },
 ];
 
 export function WorkbenchPage(props: {
   readonly activeModule: WorkbenchModule;
   readonly onModuleChange: (module: WorkbenchModule) => void;
+  readonly highlightedEnvironmentId?: EnvironmentId | undefined;
+  readonly highlightedProjectId?: ProjectId | undefined;
 }) {
   const { environments } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<EnvironmentId | null>(null);
+  const projects = useProjects();
+  const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<EnvironmentId | null>(
+    props.highlightedEnvironmentId ?? null,
+  );
   const effectiveEnvironmentId = selectWorkbenchEnvironment({
     selectedEnvironmentId,
     primaryEnvironmentId,
@@ -72,6 +84,74 @@ export function WorkbenchPage(props: {
   const selectedEnvironment =
     environments.find((environment) => environment.environmentId === effectiveEnvironmentId) ??
     null;
+  const environmentProjects = useMemo(
+    () => projects.filter((project) => project.environmentId === effectiveEnvironmentId),
+    [effectiveEnvironmentId, projects],
+  );
+  const preferenceKey =
+    effectiveEnvironmentId === null ? null : `t3code:workbench-project:${effectiveEnvironmentId}`;
+  const [selectedProjectId, setSelectedProjectId] = useState<ProjectId | null | undefined>(
+    props.highlightedProjectId,
+  );
+  const [pinnedProjectIds, setPinnedProjectIds] = useState<readonly ProjectId[]>([]);
+
+  useEffect(() => {
+    if (preferenceKey === null || props.highlightedProjectId !== undefined) return;
+    try {
+      const saved = window.localStorage.getItem(preferenceKey);
+      setSelectedProjectId(
+        saved === null || saved === "all"
+          ? undefined
+          : saved === "unattributed"
+            ? null
+            : ProjectId.make(saved),
+      );
+      const pins = JSON.parse(window.localStorage.getItem(`${preferenceKey}:pins`) ?? "[]");
+      setPinnedProjectIds(
+        Array.isArray(pins)
+          ? pins
+              .filter((value): value is ProjectId => typeof value === "string")
+              .map((value) => ProjectId.make(value))
+          : [],
+      );
+    } catch {
+      setSelectedProjectId(undefined);
+      setPinnedProjectIds([]);
+    }
+  }, [preferenceKey, props.highlightedProjectId]);
+
+  const effectiveProjectId = resolveWorkbenchProjectSelection({
+    ...(props.highlightedProjectId === undefined
+      ? {}
+      : { highlightedProjectId: props.highlightedProjectId }),
+    ...(selectedProjectId === undefined ? {} : { selectedProjectId }),
+    availableProjectIds: environmentProjects.map((project) => project.id),
+  });
+
+  const selectProject = (projectId: ProjectId | null | undefined) => {
+    setSelectedProjectId(projectId);
+    if (preferenceKey === null) return;
+    try {
+      window.localStorage.setItem(
+        preferenceKey,
+        projectId === undefined ? "all" : projectId === null ? "unattributed" : projectId,
+      );
+    } catch {
+      // Local preferences remain usable for this session when storage is blocked.
+    }
+  };
+
+  const togglePin = (projectId: ProjectId) => {
+    const next = pinnedProjectIds.includes(projectId)
+      ? pinnedProjectIds.filter((id) => id !== projectId)
+      : [...pinnedProjectIds, projectId];
+    setPinnedProjectIds(next);
+    if (preferenceKey !== null) {
+      try {
+        window.localStorage.setItem(`${preferenceKey}:pins`, JSON.stringify(next));
+      } catch {}
+    }
+  };
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground isolate">
@@ -89,6 +169,15 @@ export function WorkbenchPage(props: {
               selectedEnvironment={selectedEnvironment}
               onChange={setSelectedEnvironmentId}
             />
+            {effectiveEnvironmentId !== null ? (
+              <ProjectLensSelector
+                projects={environmentProjects}
+                selectedProjectId={effectiveProjectId}
+                pinnedProjectIds={pinnedProjectIds}
+                onChange={selectProject}
+                onTogglePin={togglePin}
+              />
+            ) : null}
           </div>
         </WorkspacePageHeader>
 
@@ -130,7 +219,10 @@ export function WorkbenchPage(props: {
                   description="Connect an environment before reading usage and quota."
                 />
               ) : (
-                <WorkbenchVitalsPanel environmentId={effectiveEnvironmentId} />
+                <WorkbenchVitalsPanel
+                  environmentId={effectiveEnvironmentId}
+                  {...(effectiveProjectId === undefined ? {} : { projectId: effectiveProjectId })}
+                />
               )
             ) : null}
             {props.activeModule === "library" ? (
@@ -146,10 +238,129 @@ export function WorkbenchPage(props: {
                 />
               )
             ) : null}
+            {props.activeModule === "audit" ? (
+              effectiveEnvironmentId === null ? (
+                <WorkbenchEmptyState
+                  title="No environment is connected"
+                  description="Connect an environment before reviewing provider audits."
+                />
+              ) : (
+                <WorkbenchAuditPanel
+                  environmentId={effectiveEnvironmentId}
+                  directLocal={selectedEnvironment?.entry.target._tag === "PrimaryConnectionTarget"}
+                />
+              )
+            ) : null}
+            {props.activeModule === "topology" ? (
+              effectiveEnvironmentId === null ? (
+                <WorkbenchEmptyState
+                  title="No environment is connected"
+                  description="Connect an environment before reading topology."
+                />
+              ) : (
+                <WorkbenchTopologyPanel
+                  environmentId={effectiveEnvironmentId}
+                  directLocal={selectedEnvironment?.entry.target._tag === "PrimaryConnectionTarget"}
+                  onOpenLibrary={() => props.onModuleChange("library")}
+                />
+              )
+            ) : null}
           </WorkspacePageContainer>
         </ScrollArea>
       </div>
     </SidebarInset>
+  );
+}
+
+export function resolveWorkbenchProjectSelection(input: {
+  readonly highlightedProjectId?: ProjectId;
+  readonly selectedProjectId?: ProjectId | null;
+  readonly availableProjectIds: readonly ProjectId[];
+}): ProjectId | null | undefined {
+  if (
+    input.highlightedProjectId !== undefined &&
+    input.availableProjectIds.includes(input.highlightedProjectId)
+  )
+    return input.highlightedProjectId;
+  if (input.selectedProjectId === null) return null;
+  if (
+    input.selectedProjectId !== undefined &&
+    input.availableProjectIds.includes(input.selectedProjectId)
+  )
+    return input.selectedProjectId;
+  return undefined;
+}
+
+function ProjectLensSelector(props: {
+  readonly projects: ReturnType<typeof useProjects>;
+  readonly selectedProjectId: ProjectId | null | undefined;
+  readonly pinnedProjectIds: readonly ProjectId[];
+  readonly onChange: (projectId: ProjectId | null | undefined) => void;
+  readonly onTogglePin: (projectId: ProjectId) => void;
+}) {
+  const ordered = [...props.projects].sort(
+    (a, b) =>
+      Number(props.pinnedProjectIds.includes(b.id)) -
+        Number(props.pinnedProjectIds.includes(a.id)) || a.title.localeCompare(b.title),
+  );
+  const value =
+    props.selectedProjectId === undefined
+      ? "all"
+      : props.selectedProjectId === null
+        ? "unattributed"
+        : props.selectedProjectId;
+  return (
+    <div className="flex items-center gap-1">
+      <Select
+        value={value}
+        onValueChange={(next) =>
+          props.onChange(
+            next === null || next === "all"
+              ? undefined
+              : next === "unattributed"
+                ? null
+                : ProjectId.make(next),
+          )
+        }
+      >
+        <SelectTrigger
+          aria-label="Workbench project lens"
+          className="min-w-0 max-w-56"
+          size="compact"
+          variant="ghost"
+        >
+          <SelectValue>
+            {value === "all"
+              ? "All Projects"
+              : value === "unattributed"
+                ? "Unattributed"
+                : (props.projects.find((project) => project.id === value)?.title ?? "All Projects")}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectPopup align="end">
+          <SelectGroup>
+            <SelectGroupLabel>Project lens</SelectGroupLabel>
+            <SelectItem value="all">All Projects</SelectItem>
+            <SelectItem value="unattributed">Unattributed</SelectItem>
+            {ordered.map((project) => (
+              <SelectItem key={project.id} value={project.id}>
+                {props.pinnedProjectIds.includes(project.id) ? "★ " : ""}
+                {project.title}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectPopup>
+      </Select>
+      {props.selectedProjectId !== undefined && props.selectedProjectId !== null ? (
+        <button
+          type="button"
+          className="rounded px-2 text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => props.onTogglePin(props.selectedProjectId!)}
+        >
+          {props.pinnedProjectIds.includes(props.selectedProjectId) ? "Unpin" : "Pin"}
+        </button>
+      ) : null}
+    </div>
   );
 }
 

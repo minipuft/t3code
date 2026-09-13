@@ -1,4 +1,5 @@
 import {
+  ProjectId,
   ProviderDriverKind,
   WorkbenchPlanPath,
   WorkflowCatalogItemId,
@@ -9,7 +10,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import { groupCatalogItems, WorkbenchCatalogView } from "./WorkbenchCatalogView";
-import { WorkbenchModuleRail } from "./WorkbenchPage";
+import { resolveWorkbenchProjectSelection, WorkbenchModuleRail } from "./WorkbenchPage";
 import { filterWorkbenchPlans, markdownHeadingBefore, PlanList } from "./WorkbenchPlansPanel";
 import { authorityReason, resourceApplyInput } from "./WorkbenchResourceLibraryPanel";
 
@@ -62,6 +63,31 @@ const renderCatalog = (
   );
 
 describe("WorkbenchCatalogView", () => {
+  it("uses explicit project, then local selection, then All Projects without first-project inference", () => {
+    const available = [ProjectId.make("a"), ProjectId.make("b")];
+    expect(
+      resolveWorkbenchProjectSelection({
+        highlightedProjectId: ProjectId.make("b"),
+        selectedProjectId: ProjectId.make("a"),
+        availableProjectIds: available,
+      }),
+    ).toBe("b");
+    expect(
+      resolveWorkbenchProjectSelection({
+        selectedProjectId: ProjectId.make("a"),
+        availableProjectIds: available,
+      }),
+    ).toBe("a");
+    expect(
+      resolveWorkbenchProjectSelection({
+        selectedProjectId: ProjectId.make("deleted"),
+        availableProjectIds: available,
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveWorkbenchProjectSelection({ selectedProjectId: null, availableProjectIds: available }),
+    ).toBeNull();
+  });
   it("keeps all five modules directly visible with one active item", () => {
     const markup = renderToStaticMarkup(
       <WorkbenchModuleRail activeModule="skills" onChange={() => {}} />,

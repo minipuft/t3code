@@ -1,5 +1,5 @@
 import { formatTokens, formatUsd, makeCurrentWeekWindow } from "@t3tools/shared/usageFormat";
-import type { EnvironmentId, WorkbenchQuotaWindow } from "@t3tools/contracts";
+import type { EnvironmentId, ProjectId, WorkbenchQuotaWindow } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
 import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -8,9 +8,15 @@ import { useUsage } from "../../state/usage";
 import { useWorkbenchVitals } from "../../state/workbenchPlans";
 import { Button } from "../ui/button";
 
-export function WorkbenchVitalsPanel(props: { readonly environmentId: EnvironmentId }) {
+export function WorkbenchVitalsPanel(props: {
+  readonly environmentId: EnvironmentId;
+  readonly projectId?: ProjectId | null | undefined;
+}) {
   const [window, setWindow] = useState(() => makeCurrentWeekWindow());
-  const usage = useUsage(window);
+  const usage = useUsage(window, {
+    environmentId: props.environmentId,
+    ...(props.projectId === undefined ? {} : { projectId: props.projectId }),
+  });
   const quota = useWorkbenchVitals(props.environmentId);
   const unavailable = usage.environments.filter((environment) => environment.error !== null).length;
   const claudeModels = useMemo(
@@ -36,6 +42,10 @@ export function WorkbenchVitalsPanel(props: { readonly environmentId: Environmen
   const uncachedPct =
     inputTokens === 0 ? null : (usage.merged.uncachedInputTokens / inputTokens) * 100;
   const settling = usage.isPending || usage.isPartial;
+  const unattributedTokens = (usage.merged.unattributed ?? []).reduce(
+    (total, item) => total + item.totalTokens,
+    0,
+  );
   const refresh = () => {
     setWindow(makeCurrentWeekWindow());
     usage.refresh();
@@ -88,7 +98,13 @@ export function WorkbenchVitalsPanel(props: { readonly environmentId: Environmen
                 ? `${unavailable} unavailable`
                 : `${usage.environments.length} environment${usage.environments.length === 1 ? "" : "s"}`
           }
-          detail="Duplicate transcript sources are counted once"
+          detail={
+            props.projectId === null
+              ? "Usage with missing, unknown, or ambiguous project evidence"
+              : props.projectId === undefined
+                ? `${formatTokens(unattributedTokens)} unattributed · duplicate sources counted once`
+                : "Transcript-derived project usage; account quota remains account-scoped"
+          }
         />
       </div>
 
@@ -110,7 +126,7 @@ export function WorkbenchVitalsPanel(props: { readonly environmentId: Environmen
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {quota.data?.windows.map((item) => (
-              <QuotaCard key={`${item.provider}:${item.label}`} window={item} />
+              <QuotaCard key={item.id} window={item} />
             ))}
           </div>
         )}
@@ -141,15 +157,43 @@ export function WorkbenchVitalsPanel(props: { readonly environmentId: Environmen
 }
 
 function QuotaCard({ window }: { readonly window: WorkbenchQuotaWindow }) {
-  const remainingPct = Math.max(0, 100 - window.usedPct);
-  const resetAt = new Date(Date.now() + Math.max(0, window.secondsToReset) * 1_000);
-  const resetLabel = new Intl.DateTimeFormat(undefined, {
-    weekday: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(resetAt);
+  const resetMs = window.resetsAt === null ? null : Date.parse(window.resetsAt);
+  const secondsToReset =
+    resetMs === null || !Number.isFinite(resetMs)
+      ? null
+      : Math.max(0, (resetMs - Date.now()) / 1_000);
+  const resetLabel =
+    resetMs === null || !Number.isFinite(resetMs)
+      ? null
+      : new Intl.DateTimeFormat(undefined, {
+          weekday: "short",
+          hour: "numeric",
+          minute: "2-digit",
+          timeZoneName: "short",
+        }).format(new Date(resetMs));
+  const used = window.usedPercent === null ? null : Math.max(0, Math.min(100, window.usedPercent));
+  const remaining =
+    window.remainingPercent === null
+      ? used === null
+        ? null
+        : 100 - used
+      : Math.max(0, Math.min(100, window.remainingPercent));
+  const source = sourceLabel(window.source);
+  const observed = window.observedAt === null ? null : new Date(window.observedAt);
+  const observedLabel =
+    observed === null || !Number.isFinite(observed.getTime())
+      ? null
+      : new Intl.DateTimeFormat(undefined, {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(observed);
   return (
-    <div className="grid gap-3 rounded-2xl border border-border/60 bg-card p-5">
+    <div
+      className="grid gap-3 rounded-2xl border border-border/60 bg-card p-5"
+      data-state={window.state}
+    >
       <div className="flex items-baseline justify-between gap-3">
         <div>
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -157,22 +201,44 @@ function QuotaCard({ window }: { readonly window: WorkbenchQuotaWindow }) {
           </p>
           <p className="mt-1 font-medium text-sm">{window.label}</p>
         </div>
-        <p className="font-semibold text-xl tabular-nums">{Math.round(remainingPct)}% left</p>
+        <p className="font-semibold text-xl tabular-nums">
+          {formatPercent(used)} used · {formatPercent(remaining)} left
+        </p>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full bg-primary"
-          style={{ width: `${Math.max(0, Math.min(100, window.usedPct))}%` }}
-        />
+      <div
+        className="h-2 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-label={`${window.providerLabel} ${window.label} quota used`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={used ?? undefined}
+      >
+        <div className="h-full rounded-full bg-primary" style={{ width: `${used ?? 0}%` }} />
       </div>
       <p className="text-muted-foreground text-xs">
-        Resets in {formatDuration(window.secondsToReset)} · {resetLabel}
-        {window.exhaustsBeforeReset && window.secondsToExhaustion !== null
-          ? ` · projected empty in ${formatDuration(window.secondsToExhaustion)}`
-          : ""}
+        {secondsToReset === null || resetLabel === null
+          ? "Reset time unavailable"
+          : `Resets in ${formatDuration(secondsToReset)} · ${resetLabel}`}
+        {` · ${source}`}
+        {observedLabel === null ? "" : ` · observed ${observedLabel}`}
+        {window.state === "stale"
+          ? " · stale"
+          : window.state === "unavailable"
+            ? " · unavailable"
+            : ""}
       </p>
     </div>
   );
+}
+
+function formatPercent(value: number | null): string {
+  return value === null ? "—" : `${Math.round(value)}%`;
+}
+
+function sourceLabel(source: WorkbenchQuotaWindow["source"]): string {
+  if (source === "claude-oauth") return "Claude OAuth";
+  if (source === "codex-app-server") return "Codex app-server";
+  return "statusline capture";
 }
 
 function formatDuration(seconds: number): string {

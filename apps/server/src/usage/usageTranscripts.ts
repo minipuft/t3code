@@ -13,6 +13,9 @@ export interface UsageRecord {
   readonly timestampMs: number;
   readonly model: string;
   readonly sessionId: string;
+  /** Provider-supplied workspace evidence. Never inferred from the scanning environment. */
+  readonly workspacePath: string | null;
+  readonly workspaceSource: "claudeCwd" | "codexSessionMeta" | "none";
   readonly totals: UsageTokenTotals;
   readonly reportedCostUsd: number | null;
   /**
@@ -136,6 +139,9 @@ export function parseClaudeLine(line: string): UsageRecord | null {
     timestampMs,
     model,
     sessionId: typeof record["sessionId"] === "string" ? record["sessionId"] : "",
+    workspacePath:
+      typeof record["cwd"] === "string" && record["cwd"].trim().length > 0 ? record["cwd"] : null,
+    workspaceSource: "claudeCwd",
     totals: {
       uncachedInputTokens: int(usageRecord["input_tokens"]),
       cachedInputTokens: int(usageRecord["cache_read_input_tokens"]),
@@ -163,6 +169,7 @@ export function parseClaudeLine(line: string): UsageRecord | null {
 export interface CodexScanState {
   model: string;
   sessionId: string;
+  workspacePath: string | null;
   lastUsageSignature: string | null;
   sawSessionMeta: boolean;
   /** While true, leading usage events are re-stamped copies of parent history. */
@@ -174,6 +181,7 @@ export function initialCodexScanState(): CodexScanState {
   return {
     model: "",
     sessionId: "",
+    workspacePath: null,
     lastUsageSignature: null,
     sawSessionMeta: false,
     suppressingForkCopies: false,
@@ -233,6 +241,8 @@ export function parseCodexLine(line: string, state: CodexScanState): UsageRecord
     state.sawSessionMeta = true;
     const id = payloadRecord["id"] ?? payloadRecord["session_id"];
     if (typeof id === "string") state.sessionId = id;
+    const cwd = payloadRecord["cwd"];
+    if (typeof cwd === "string" && cwd.trim().length > 0) state.workspacePath = cwd;
     const metaTimestampMs = parseTimestampMs(record["timestamp"]);
     if (metaTimestampMs !== null && isForkedSessionMeta(payloadRecord)) {
       state.suppressingForkCopies = true;
@@ -301,6 +311,8 @@ export function parseCodexLine(line: string, state: CodexScanState): UsageRecord
     timestampMs,
     model: state.model,
     sessionId: state.sessionId,
+    workspacePath: state.workspacePath,
+    workspaceSource: state.workspacePath === null ? "none" : "codexSessionMeta",
     totals,
     // Codex does not report cost in the rollout.
     reportedCostUsd: null,
@@ -431,6 +443,8 @@ export function parseGrokLine(line: string): readonly UsageRecord[] {
         timestampMs,
         model: "grok",
         sessionId,
+        workspacePath: null,
+        workspaceSource: "none",
         totals: grokTotalsToUsage(topLevel),
         reportedCostUsd: grokCostTicksToUsd(topLevel.costUsdTicks),
         // No prompt id means we cannot tell two same-second updates apart.
@@ -477,6 +491,8 @@ export function parseGrokLine(line: string): readonly UsageRecord[] {
       timestampMs,
       model: entry.model,
       sessionId,
+      workspacePath: null,
+      workspaceSource: "none",
       totals,
       reportedCostUsd,
       dedupeKey: promptId === null ? null : `${sessionId}:${promptId}:${entry.model}`,

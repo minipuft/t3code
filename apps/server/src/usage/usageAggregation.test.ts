@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
+import { ProjectId } from "@t3tools/contracts";
 
-import { UsageAggregator } from "./usageAggregation.ts";
+import { resolveUsageAttribution, UsageAggregator } from "./usageAggregation.ts";
 import type { RateTable } from "./usagePricing.ts";
 import type { UsageRecord } from "./usageTranscripts.ts";
 
@@ -23,6 +24,8 @@ function record(overrides: Partial<UsageRecord> = {}): UsageRecord {
     timestampMs: Date.parse("2026-08-07T04:05:13.944Z"),
     model: "claude-fable-5",
     sessionId: "session-a",
+    workspacePath: null,
+    workspaceSource: "none",
     totals: {
       uncachedInputTokens: 100,
       cachedInputTokens: 1000,
@@ -61,6 +64,52 @@ function aggregate(
 }
 
 describe("UsageAggregator", () => {
+  it("resolves exact, contained, worktree, ambiguous, and missing evidence without inference", () => {
+    const roots = [
+      { projectId: ProjectId.make("project-a"), path: "/work/a" },
+      { projectId: ProjectId.make("project-b"), path: "/work/a/nested" },
+      { projectId: ProjectId.make("project-a"), path: "/tmp/worktree-a" },
+    ];
+    expect(resolveUsageAttribution("/work/a", roots)).toEqual({
+      projectId: "project-a",
+      status: "attributed",
+    });
+    expect(resolveUsageAttribution("/work/a/nested/src", roots)).toEqual({
+      projectId: "project-b",
+      status: "attributed",
+    });
+    expect(resolveUsageAttribution("/tmp/worktree-a/src", roots)).toEqual({
+      projectId: "project-a",
+      status: "attributed",
+    });
+    expect(resolveUsageAttribution(null, roots).status).toBe("missingEvidence");
+    expect(resolveUsageAttribution("/deleted/root", roots).status).toBe("unknownRoot");
+    expect(
+      resolveUsageAttribution("/work/a", [
+        ...roots,
+        { projectId: ProjectId.make("project-c"), path: "/work/a" },
+      ]).status,
+    ).toBe("ambiguousRoot");
+  });
+
+  it("keeps attributed and unattributed usage in separate reconciling buckets", () => {
+    const aggregator = new UsageAggregator({
+      timeZone: "UTC",
+      sinceDay: "2026-08-01",
+      untilDay: "2026-08-31",
+      rates,
+      projectRoots: [{ projectId: ProjectId.make("project-a"), path: "/work/a" }],
+    });
+    aggregator.add(record({ workspacePath: "/work/a/src" }));
+    aggregator.add(record({ workspacePath: null }));
+    const result = aggregator.finish();
+    expect(
+      result.buckets.map((bucket) => [bucket.projectId, bucket.attributionStatus, bucket.records]),
+    ).toEqual([
+      ["project-a", "attributed", 1],
+      [null, "missingEvidence", 1],
+    ]);
+  });
   it("requires exact bounds for hourly aggregation", () => {
     expect(
       () =>

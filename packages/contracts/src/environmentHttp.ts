@@ -97,6 +97,12 @@ import {
   WorkbenchResourceSource,
   WorkbenchResourceTarget,
   WorkbenchReviewInbox,
+  WorkbenchTopology,
+  WorkbenchRelationshipReviewInput,
+  WorkbenchReviewInboxCommand,
+  WorkbenchProjectionHealth,
+  WorkbenchProjectionReview,
+  WorkbenchProjectionReceipt,
 } from "./workbenchResources.ts";
 
 const OptionalBearerHeaders = Schema.Struct({
@@ -140,6 +146,7 @@ export const EnvironmentInternalErrorReason = Schema.Literals([
   "orchestration_snapshot_failed",
   "orchestration_thread_snapshot_failed",
   "orchestration_dispatch_failed",
+  "incompatible_workbench_version",
   "internal_error",
 ]);
 export type EnvironmentInternalErrorReason = typeof EnvironmentInternalErrorReason.Type;
@@ -878,6 +885,25 @@ export class EnvironmentWorkbenchPlansHttpApi extends HttpApiGroup.make("workben
       ),
   )
   .add(
+    HttpApiEndpoint.get("topology", "/api/workbench/topology", {
+      headers: OptionalBearerHeaders,
+      success: WorkbenchTopology,
+      error: EnvironmentOrchestrationSnapshotErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Read Workbench topology and relationship evidence"),
+  )
+  .add(
+    HttpApiEndpoint.post("reviewRelationship", "/api/workbench/topology/review", {
+      headers: OptionalBearerHeaders,
+      payload: WorkbenchRelationshipReviewInput,
+      success: WorkbenchResourceMutationReview,
+      error: EnvironmentWorkbenchResourceMutationErrors,
+    })
+      .middleware(EnvironmentAuthenticatedAuth)
+      .annotate(OpenApi.Summary, "Review a proposed Workbench relationship"),
+  )
+  .add(
     HttpApiEndpoint.get("resourceLibrary", "/api/workbench/resources/library", {
       headers: OptionalBearerHeaders,
       payload: {
@@ -898,6 +924,45 @@ export class EnvironmentWorkbenchPlansHttpApi extends HttpApiGroup.make("workben
     })
       .middleware(EnvironmentAuthenticatedAuth)
       .annotate(OpenApi.Summary, "Read inert Workbench import candidates"),
+  )
+  .add(
+    HttpApiEndpoint.post("reviewInboxCommand", "/api/workbench/resources/review-inbox/commands", {
+      headers: OptionalBearerHeaders,
+      payload: WorkbenchReviewInboxCommand,
+      success: WorkbenchReviewInbox,
+      error: EnvironmentWorkbenchResourceMutationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.get("projectionHealth", "/api/workbench/projections", {
+      headers: OptionalBearerHeaders,
+      success: WorkbenchProjectionHealth,
+      error: EnvironmentOrchestrationSnapshotErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("reviewProjection", "/api/workbench/projections/review", {
+      headers: OptionalBearerHeaders,
+      payload: Schema.Struct({ requestId: Schema.String }),
+      success: WorkbenchProjectionReview,
+      error: EnvironmentWorkbenchResourceMutationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("applyProjection", "/api/workbench/projections/apply", {
+      headers: OptionalBearerHeaders,
+      payload: Schema.Struct({ reviewId: Schema.String, diffDigest: Schema.String }),
+      success: WorkbenchProjectionReceipt,
+      error: EnvironmentWorkbenchResourceMutationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("rollbackProjection", "/api/workbench/projections/rollback", {
+      headers: OptionalBearerHeaders,
+      payload: Schema.Struct({ requestId: Schema.String, receiptId: Schema.String }),
+      success: WorkbenchProjectionReceipt,
+      error: EnvironmentWorkbenchResourceMutationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.get("resourceAuthority", "/api/workbench/resources/authority", {

@@ -39,7 +39,8 @@ import { expandHomePath } from "../pathExpansion.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { resolveClaudeHomePath } from "../provider/Drivers/ClaudeHome.ts";
 import { resolveCodexHomeLayout } from "../provider/Drivers/CodexHomeLayout.ts";
-import { UsageAggregator } from "./usageAggregation.ts";
+import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import { UsageAggregator, type UsageProjectRoot } from "./usageAggregation.ts";
 import { parseRateTable, type RateTable } from "./usagePricing.ts";
 import {
   listTranscriptFiles,
@@ -341,6 +342,32 @@ export const make = Effect.gen(function* () {
     yield* ensureRates();
     yield* ensureScanCacheLoaded;
 
+    const snapshotQuery = yield* Effect.serviceOption(ProjectionSnapshotQuery);
+    const projectRoots: UsageProjectRoot[] = [];
+    if (Option.isSome(snapshotQuery)) {
+      const shell = yield* snapshotQuery.value.getShellSnapshot().pipe(
+        Effect.mapError(
+          (cause) =>
+            new UsageReadError({
+              reason: "scanFailed",
+              detail: "Project roots could not be read for usage attribution.",
+              cause,
+            }),
+        ),
+      );
+      projectRoots.push(
+        ...shell.projects.map((project) => ({
+          projectId: project.id,
+          path: project.workspaceRoot,
+        })),
+      );
+      for (const thread of shell.threads) {
+        if (thread.worktreePath !== null) {
+          projectRoots.push({ projectId: thread.projectId, path: thread.worktreePath });
+        }
+      }
+    }
+
     const hostId = NodeOS.hostname();
     // The home resolvers ask for `Path` themselves; satisfy them from the
     // instance we already hold so `readSummary` stays context-free.
@@ -362,6 +389,7 @@ export const make = Effect.gen(function* () {
       resolution: input.resolution ?? "day",
       ...hourlyWindow,
       rates,
+      projectRoots,
     });
 
     const sources: UsageSource[] = [];

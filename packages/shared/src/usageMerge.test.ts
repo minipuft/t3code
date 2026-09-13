@@ -1,4 +1,5 @@
 import {
+  ProjectId,
   USAGE_CONTRACT_VERSION,
   type EnvironmentId,
   type UsageBucket,
@@ -15,6 +16,8 @@ function bucket(overrides: Partial<UsageBucket> = {}): UsageBucket {
     day: "2026-08-07" as UsageDay,
     provider: "claude",
     model: "claude-fable-5",
+    projectId: null,
+    attributionStatus: "missingEvidence",
     totals: {
       uncachedInputTokens: 100,
       cachedInputTokens: 1000,
@@ -74,6 +77,62 @@ function environment(id: string, usageSummary: UsageSummary): EnvironmentUsage {
 }
 
 describe("mergeUsage", () => {
+  it("keeps same-named project ids environment-qualified and reconciles unattributed usage", () => {
+    const sharedProjectId = ProjectId.make("project-main");
+    const merged = mergeUsage(
+      [
+        environment(
+          "env-a",
+          summary(
+            [
+              bucket({ projectId: sharedProjectId, attributionStatus: "attributed", costUsd: 3 }),
+              bucket({ projectId: null, attributionStatus: "unknownRoot", costUsd: 2 }),
+            ],
+            [{ provider: "claude", hostId: "mac-a", homePath: "/a" }],
+          ),
+        ),
+        environment(
+          "env-b",
+          summary(
+            [bucket({ projectId: sharedProjectId, attributionStatus: "attributed", costUsd: 5 })],
+            [{ provider: "claude", hostId: "mac-b", homePath: "/b" }],
+          ),
+        ),
+      ],
+      USAGE_CONTRACT_VERSION,
+    );
+    expect(
+      merged.projects.map((project) => [project.environmentId, project.projectId, project.costUsd]),
+    ).toEqual([
+      ["env-a", "project-main", 3],
+      ["env-b", "project-main", 5],
+    ]);
+    expect(
+      merged.projects.reduce((sum, project) => sum + project.costUsd, 0) +
+        merged.unattributed.reduce((sum, item) => sum + item.costUsd, 0),
+    ).toBe(merged.costUsd);
+  });
+
+  it("filters after source ownership and prefers the scoped environment for a shared source", () => {
+    const shared = { provider: "claude" as const, hostId: "mac", homePath: "/shared" };
+    const projectId = ProjectId.make("project-a");
+    const merged = mergeUsage(
+      [
+        environment(
+          "env-a",
+          summary([bucket({ projectId, attributionStatus: "attributed", costUsd: 3 })], [shared]),
+        ),
+        environment(
+          "env-b",
+          summary([bucket({ projectId, attributionStatus: "attributed", costUsd: 7 })], [shared]),
+        ),
+      ],
+      USAGE_CONTRACT_VERSION,
+      { environmentId: "env-b" as EnvironmentId, projectId },
+    );
+    expect(merged.costUsd).toBe(7);
+    expect(merged.contributingEnvironments).toEqual(["env-b"]);
+  });
   it("sums environments that read different transcript directories", () => {
     const merged = mergeUsage(
       [
@@ -169,7 +228,7 @@ describe("mergeUsage", () => {
     expect(merged.staleEnvironments).toEqual(["env-b"]);
   });
 
-  it("keeps the previous compatible contract version so additive provider expansions still merge", () => {
+  it("excludes the previous contract because its buckets have no attribution dimension", () => {
     const merged = mergeUsage(
       [
         environment(
@@ -191,8 +250,8 @@ describe("mergeUsage", () => {
       USAGE_CONTRACT_VERSION,
     );
 
-    expect(merged.costUsd).toBe(14);
-    expect(merged.staleEnvironments).toEqual([]);
+    expect(merged.costUsd).toBe(10);
+    expect(merged.staleEnvironments).toEqual(["env-b"]);
   });
 
   it("derives provider shares and cost quality", () => {

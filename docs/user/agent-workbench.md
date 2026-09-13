@@ -17,13 +17,39 @@ action menu.
   the global inventory and a project's effective view, inspect inert imports, and review previous
   change receipts. Canonical rule and hook source is editable only after an explicit local-session
   unlock; review shows the exact diff and validator evidence before Apply becomes available.
-- **Vitals** shows both used and remaining percentages, expected pace when reported, reset time, and
-  exhaustion warnings. T3 Code does not estimate missing provider limits from token counts.
+- **Topology** shows projects, repositories, resource sources, and projection targets as a grouped
+  relationship index. Approved relationships and proposed discoveries remain separate. A discovery
+  can become workspace configuration only after you review and apply its exact diff.
+- **Audit** compares the configured Claude, Codex, and OpenCode projections with their sources.
+  Findings state whether each family is current, stale, missing, or unsupported and include the
+  evidence used for that result. You can dismiss and restore a finding without changing its source.
+  Repair remains a separate review, apply, and rollback workflow.
+- **Vitals** shows provider-reported used and remaining percentages, reset time, observation
+  freshness, and source. Missing provider facts stay unavailable; T3 Code does not estimate limits
+  or exhaustion from token counts.
+
+Project usage and Vitals answer different questions. Vitals reports account-level quota observed
+from a provider. Project usage attributes completed transcript records to environment-qualified
+projects and keeps unmatched records under **Unattributed**. Project totals do not consume or
+reconstruct the quota bar, and account quota is not divided among projects.
 
 Remote sessions with normal scopes can inspect the library but cannot unlock or edit canonical
 rules and hooks. An unlock expires after ten minutes and is cleared when its host lease ends. A
 sidecar outage appears as an unavailable Workbench capability and does not interrupt chat or agent
 sessions.
+
+## Provider support
+
+| Provider    | Workbench projection and audit |
+| ----------- | ------------------------------ |
+| Claude Code | Native                         |
+| Codex       | Native                         |
+| OpenCode    | Native                         |
+| Cursor      | Unsupported                    |
+| Grok        | Unsupported                    |
+
+Unsupported means the Workbench does not claim a projection or repair path for that provider. It
+does not prevent T3 Code from running the provider for chat when the provider itself is configured.
 
 ## Keep Workbench beside a chat
 

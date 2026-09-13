@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 source_root=${1:?usage: refresh-agent-workbench-on-launch.sh <agent-workbench-source> [wait-seconds]}
 wait_seconds=${2:-20}
 runtime_file=${AGENT_WORKBENCH_RUNTIME_FILE:-"$HOME/.local/state/agent-workbench/runtime.json"}
+workspace_file=${AGENT_WORKBENCH_WORKSPACE_FILE:-"$HOME/.config/agent-workbench/workspace.yaml"}
+receipt_dir=${AGENT_WORKBENCH_RECEIPT_DIR:-"$HOME/.local/state/agent-workbench"}
 node_binary=${NODE_BINARY:-}
 
 if [[ -z $node_binary && -x $HOME/.local/bin/agent-workbench ]]; then
@@ -52,7 +55,43 @@ while [[ -f $runtime_file ]]; do
   sleep 0.25
 done
 
-"$node_binary" "$source_root/bin/agent-workbench.js" refresh
+if [[ ! -f $workspace_file ]]; then
+  printf 'Agent Workbench workspace configuration is unavailable: %s\n' "$workspace_file" >&2
+  exit 68
+fi
+workspace_version=$(
+  "$node_binary" -e '
+    const fs = require("node:fs");
+    const file = process.argv[1];
+    const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
+    const versions = lines.flatMap((line) => {
+      const match = /^version\s*:\s*([0-9]+)\s*(?:#.*)?$/.exec(line);
+      return match ? [Number(match[1])] : [];
+    });
+    if (versions.length !== 1 || !Number.isInteger(versions[0])) process.exit(1);
+    process.stdout.write(String(versions[0]));
+  ' "$workspace_file"
+) || {
+  printf 'Agent Workbench workspace configuration has no unambiguous version: %s\n' "$workspace_file" >&2
+  exit 68
+}
+
+case "$workspace_version" in
+  1|2)
+    mkdir -p "$receipt_dir"
+    chmod 700 "$receipt_dir"
+    receipt_path="$receipt_dir/workspace-migration-$(date -u +%Y%m%dT%H%M%SZ)-$$.json"
+    "$node_binary" "$source_root/bin/agent-workbench.js" workspace migrate-v3 --receipt "$receipt_path"
+    ;;
+  3)
+    "$node_binary" "$source_root/bin/agent-workbench.js" refresh
+    ;;
+  *)
+    printf 'Unsupported Agent Workbench workspace version: %s\n' "$workspace_version" >&2
+    exit 68
+    ;;
+esac
+
 doctor_json=$("$HOME/.local/bin/agent-workbench" doctor)
 "$node_binary" -e '
   const fs = require("node:fs");
@@ -60,3 +99,6 @@ doctor_json=$("$HOME/.local/bin/agent-workbench" doctor)
   if (value.ok !== true) process.exit(1);
   process.stdout.write(`Agent Workbench ready: ${value.snapshotId}\n`);
 ' <<<"$doctor_json"
+if [[ -n ${receipt_path:-} ]]; then
+  printf 'Agent Workbench migration receipt: %s\n' "$receipt_path"
+fi

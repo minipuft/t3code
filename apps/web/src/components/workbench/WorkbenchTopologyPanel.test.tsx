@@ -1,7 +1,28 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { nextTopologyNodeIndex, TopologyCards } from "./WorkbenchTopologyPanel";
+const topologyState = vi.hoisted(() => ({ data: null as unknown }));
+
+vi.mock("../../state/workbenchPlans", () => ({
+  useWorkbenchTopology: () => ({
+    data: topologyState.data,
+    error: null,
+    isPending: false,
+    refresh: vi.fn(),
+    review: vi.fn(),
+  }),
+}));
+
+vi.mock("../../state/workbenchResources", () => ({
+  useWorkbenchResourceActions: () => ({ apply: vi.fn() }),
+}));
+
+import {
+  nextTopologyNodeIndex,
+  TopologyCards,
+  WorkbenchRelationshipSummary,
+  WorkbenchTopologyPanel,
+} from "./WorkbenchTopologyPanel";
 
 const topology = {
   protocolVersion: "1.0.0",
@@ -34,8 +55,42 @@ const baseProps = {
   onCheckpoint: vi.fn(),
   onReview: vi.fn(),
   onApply: vi.fn(),
-  onOpenLibrary: vi.fn(),
+  onOpenChanges: vi.fn(),
 };
+
+const nodeOnlyTopology = {
+  protocolVersion: "1.0.0",
+  nodes: [{ id: "project:a", kind: "project", label: "Alpha", provenance: "/work/alpha" }],
+  approved: [],
+  proposed: [],
+} as const;
+
+const resourceRelationshipTopology = {
+  protocolVersion: "1.0.0",
+  nodes: [
+    { id: "resource:rule", kind: "resource", label: "Rule", provenance: "source:claude" },
+    { id: "project:a", kind: "project", label: "Alpha", provenance: "/work/alpha" },
+  ],
+  approved: [
+    {
+      id: "approved-1",
+      kind: "resource_projects_to_target",
+      source: "resource:rule",
+      target: "project:a",
+      state: "approved",
+    },
+  ],
+  proposed: [
+    {
+      id: "proposed-1",
+      kind: "project_uses_resource_source",
+      source: "project:a",
+      target: "resource:rule",
+      state: "proposed",
+      evidence: { type: "workspace", locator: "workspace.yaml" },
+    },
+  ],
+} as const;
 
 describe("Workbench topology", () => {
   it("keeps remote topology readable while disabling relationship review", () => {
@@ -97,5 +152,60 @@ describe("Workbench topology", () => {
     expect(nextTopologyNodeIndex(1, 1, 2)).toBe(0);
     expect(nextTopologyNodeIndex(0, -1, 2)).toBe(1);
     expect(nextTopologyNodeIndex(0, 1, 0)).toBe(-1);
+  });
+
+  it("renders the full index only when approved or proposed edges exist", () => {
+    topologyState.data = nodeOnlyTopology;
+    const nodeOnlyMarkup = renderToStaticMarkup(
+      <WorkbenchTopologyPanel
+        environmentId={"environment-1" as never}
+        directLocal
+        onOpenChanges={vi.fn()}
+      />,
+    );
+    expect(nodeOnlyMarkup).toContain("No relationship index");
+    expect(nodeOnlyMarkup).not.toContain("Topology nodes");
+
+    topologyState.data = topology;
+    const edgeMarkup = renderToStaticMarkup(
+      <WorkbenchTopologyPanel
+        environmentId={"environment-1" as never}
+        directLocal
+        onOpenChanges={vi.fn()}
+      />,
+    );
+    expect(edgeMarkup).toContain("Relationship Index");
+    expect(edgeMarkup).toContain("Topology nodes");
+    topologyState.data = null;
+  });
+
+  it("shows the selected resource relationship summary only for incident edges", () => {
+    topologyState.data = resourceRelationshipTopology;
+    const edgeMarkup = renderToStaticMarkup(
+      <WorkbenchRelationshipSummary
+        environmentId={"environment-1" as never}
+        directLocal
+        subjectLabel="Rule"
+        candidateIds={["resource:rule"]}
+        onOpenChanges={vi.fn()}
+      />,
+    );
+    expect(edgeMarkup).toContain("Relationships");
+    expect(edgeMarkup).toContain("Rule · 2 approved or proposed");
+    expect(edgeMarkup).toContain("Open Relationship Index");
+
+    topologyState.data = nodeOnlyTopology;
+    const nodeOnlyMarkup = renderToStaticMarkup(
+      <WorkbenchRelationshipSummary
+        environmentId={"environment-1" as never}
+        directLocal
+        subjectLabel="Rule"
+        candidateIds={["resource:rule"]}
+        onOpenChanges={vi.fn()}
+      />,
+    );
+    expect(nodeOnlyMarkup).not.toContain("Relationships");
+    expect(nodeOnlyMarkup).not.toContain("Relationship Index");
+    topologyState.data = null;
   });
 });

@@ -12,12 +12,12 @@ import { useWorkbenchTopology } from "../../state/workbenchPlans";
 import { useWorkbenchResourceActions } from "../../state/workbenchResources";
 import { Button } from "../ui/button";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
-import { resourceApplyInput } from "./WorkbenchResourceLibraryPanel";
+import { resourceApplyInput } from "./WorkbenchResourceMutation";
 
 export function WorkbenchTopologyPanel(props: {
   readonly environmentId: EnvironmentId;
   readonly directLocal: boolean;
-  readonly onOpenLibrary: () => void;
+  readonly onOpenChanges: () => void;
 }) {
   const { data, error, isPending, refresh, review } = useWorkbenchTopology(props.environmentId);
   const actions = useWorkbenchResourceActions(props.environmentId);
@@ -39,6 +39,13 @@ export function WorkbenchTopologyPanel(props: {
       <WorkbenchEmptyState
         title="Topology unavailable"
         description="No topology response was returned."
+      />
+    );
+  if (!hasRelationshipEdges(data))
+    return (
+      <WorkbenchEmptyState
+        title="No relationship index"
+        description="Approved or proposed relationships appear from their resource or project context."
       />
     );
 
@@ -64,7 +71,7 @@ export function WorkbenchTopologyPanel(props: {
     if (result._tag === "Success") {
       setMutationReview(null);
       setCheckpoint(false);
-      setNotice("Relationship approved. Its rollback receipt is available in Library → Changes.");
+      setNotice("Relationship approved. Its rollback receipt is available in System → Changes.");
       refresh();
       return;
     }
@@ -91,8 +98,65 @@ export function WorkbenchTopologyPanel(props: {
         })
       }
       onApply={() => void apply()}
-      onOpenLibrary={props.onOpenLibrary}
+      onOpenChanges={props.onOpenChanges}
     />
+  );
+}
+
+/** Contextual relationship affordance for System resources; node-only inventories stay hidden. */
+export function WorkbenchRelationshipSummary(props: {
+  readonly environmentId: EnvironmentId;
+  readonly directLocal: boolean;
+  readonly subjectLabel: string;
+  readonly candidateIds: readonly string[];
+  readonly onOpenChanges: () => void;
+}) {
+  const { data, error, isPending } = useWorkbenchTopology(props.environmentId);
+  const [showIndex, setShowIndex] = useState(false);
+  if (error || (isPending && data === null) || data === null || !hasRelationshipEdges(data))
+    return null;
+
+  const selected = findRelationshipNode(data, props.candidateIds);
+  const relationships = selected
+    ? allRelationshipEdges(data).filter(
+        (edge) => edge.source === selected.id || edge.target === selected.id,
+      )
+    : [];
+  if (!selected || relationships.length === 0) return null;
+
+  return (
+    <section
+      className="mt-5 grid gap-2 border-t border-border/60 pt-4"
+      aria-label="Relationship summary"
+    >
+      <div>
+        <h4 className="font-semibold text-sm">Relationships</h4>
+        <p className="text-muted-foreground text-xs">
+          {props.subjectLabel} · {relationships.length} approved or proposed
+        </p>
+      </div>
+      <RelationshipList title="Connected relationships" items={relationships} />
+      <Button
+        size="sm"
+        variant="outline"
+        aria-expanded={showIndex}
+        onClick={() => setShowIndex((current) => !current)}
+      >
+        {showIndex ? "Close Relationship Index" : "Open Relationship Index"}
+      </Button>
+      {!props.directLocal ? (
+        <p className="text-muted-foreground text-xs">
+          Relationship review remains read-only for remote connections.
+        </p>
+      ) : null}
+      {showIndex ? (
+        <WorkbenchTopologyPanel
+          environmentId={props.environmentId}
+          directLocal={props.directLocal}
+          onOpenChanges={props.onOpenChanges}
+        />
+      ) : null}
+    </section>
   );
 }
 
@@ -111,7 +175,7 @@ export function TopologyCards(props: {
   readonly onCheckpoint: (checked: boolean) => void;
   readonly onReview: (edge: ProposedEdge) => void;
   readonly onApply: () => void;
-  readonly onOpenLibrary: () => void;
+  readonly onOpenChanges: () => void;
 }) {
   const nodeRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selected =
@@ -245,13 +309,30 @@ export function TopologyCards(props: {
             >
               Apply reviewed relationship
             </Button>
-            <Button variant="outline" onClick={props.onOpenLibrary}>
+            <Button variant="outline" onClick={props.onOpenChanges}>
               Open changes &amp; rollback
             </Button>
           </div>
         </section>
       ) : null}
     </section>
+  );
+}
+
+function hasRelationshipEdges(topology: WorkbenchTopology) {
+  return topology.approved.length > 0 || topology.proposed.length > 0;
+}
+
+function allRelationshipEdges(topology: WorkbenchTopology) {
+  return [...topology.approved, ...topology.proposed];
+}
+
+function findRelationshipNode(topology: WorkbenchTopology, candidateIds: readonly string[]) {
+  return topology.nodes.find(
+    (node) =>
+      candidateIds.includes(node.id) ||
+      candidateIds.includes(node.label) ||
+      (node.provenance !== null && candidateIds.includes(node.provenance)),
   );
 }
 

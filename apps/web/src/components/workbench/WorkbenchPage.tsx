@@ -5,10 +5,8 @@ import {
   BracesIcon,
   CloudIcon,
   FileTextIcon,
-  LibraryIcon,
   MonitorIcon,
-  NetworkIcon,
-  ShieldCheckIcon,
+  Settings2Icon,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
@@ -28,9 +26,7 @@ import { WorkbenchCatalogPanel } from "./WorkbenchCatalogView";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
 import { WorkbenchPlansPanel } from "./WorkbenchPlansPanel";
 import { WorkbenchVitalsPanel } from "./WorkbenchVitalsPanel";
-import { WorkbenchResourceLibraryPanel } from "./WorkbenchResourceLibraryPanel";
-import { WorkbenchTopologyPanel } from "./WorkbenchTopologyPanel";
-import { WorkbenchAuditPanel } from "./WorkbenchAuditPanel";
+import { WorkbenchSystemPanel } from "./WorkbenchResourceLibraryPanel";
 import { ScrollArea } from "../ui/scroll-area";
 import {
   Select,
@@ -51,10 +47,8 @@ const MODULES: ReadonlyArray<{
   { id: "plans", label: "Plans", icon: <FileTextIcon /> },
   { id: "prompts", label: "Prompts", icon: <BracesIcon /> },
   { id: "skills", label: "Skills", icon: <BlocksIcon /> },
-  { id: "library", label: "Library", icon: <LibraryIcon /> },
   { id: "vitals", label: "Vitals", icon: <ActivityIcon /> },
-  { id: "topology", label: "Topology", icon: <NetworkIcon /> },
-  { id: "audit", label: "Audit", icon: <ShieldCheckIcon /> },
+  { id: "system", label: "System", icon: <Settings2Icon /> },
 ];
 
 export function WorkbenchPage(props: {
@@ -225,43 +219,17 @@ export function WorkbenchPage(props: {
                 />
               )
             ) : null}
-            {props.activeModule === "library" ? (
+            {props.activeModule === "system" ? (
               effectiveEnvironmentId === null ? (
                 <WorkbenchEmptyState
                   title="No environment is connected"
-                  description="Connect an environment before browsing governed resources."
+                  description="Connect an environment before browsing system resources."
                 />
               ) : (
-                <WorkbenchResourceLibraryPanel
-                  key={`${effectiveEnvironmentId}:library`}
-                  environmentId={effectiveEnvironmentId}
-                />
-              )
-            ) : null}
-            {props.activeModule === "audit" ? (
-              effectiveEnvironmentId === null ? (
-                <WorkbenchEmptyState
-                  title="No environment is connected"
-                  description="Connect an environment before reviewing provider audits."
-                />
-              ) : (
-                <WorkbenchAuditPanel
+                <WorkbenchSystemPanel
+                  key={`${effectiveEnvironmentId}:system`}
                   environmentId={effectiveEnvironmentId}
                   directLocal={selectedEnvironment?.entry.target._tag === "PrimaryConnectionTarget"}
-                />
-              )
-            ) : null}
-            {props.activeModule === "topology" ? (
-              effectiveEnvironmentId === null ? (
-                <WorkbenchEmptyState
-                  title="No environment is connected"
-                  description="Connect an environment before reading topology."
-                />
-              ) : (
-                <WorkbenchTopologyPanel
-                  environmentId={effectiveEnvironmentId}
-                  directLocal={selectedEnvironment?.entry.target._tag === "PrimaryConnectionTarget"}
-                  onOpenLibrary={() => props.onModuleChange("library")}
                 />
               )
             ) : null}

@@ -1,6 +1,5 @@
 import type {
   EnvironmentId,
-  WorkbenchResourceApplyInput,
   WorkbenchResourceLibrary,
   WorkbenchResourceMutationReview,
   WorkbenchResourceTarget,
@@ -24,20 +23,27 @@ import {
   useWorkbenchResourceMutations,
   useWorkbenchResourcePolicy,
   useWorkbenchResourceSource,
+  useWorkbenchProjectionHealth,
   useWorkbenchReviewInbox,
 } from "../../state/workbenchResources";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
+import { resourceApplyInput } from "./WorkbenchResourceMutation";
+import { WorkbenchAuditPanel } from "./WorkbenchAuditPanel";
+import { WorkbenchRelationshipSummary } from "./WorkbenchTopologyPanel";
 
 type ResourceEntry = WorkbenchResourceLibrary["entries"][number];
-type View = "library" | "review" | "changes";
+type View = "resources" | "inbox" | "changes";
 
-export function WorkbenchResourceLibraryPanel(props: { readonly environmentId: EnvironmentId }) {
+export function WorkbenchSystemPanel(props: {
+  readonly environmentId: EnvironmentId;
+  readonly directLocal: boolean;
+}) {
   const [lens, setLens] = useState<"global" | "effective">("global");
   const [project, setProject] = useState<string | undefined>();
-  const [view, setView] = useState<View>("library");
+  const [view, setView] = useState<View>("resources");
   const [selected, setSelected] = useState<ResourceEntry | null>(null);
   const [authorityNotice, setAuthorityNotice] = useState<string | null>(null);
   const library = useWorkbenchResourceLibrary(
@@ -47,6 +53,7 @@ export function WorkbenchResourceLibraryPanel(props: { readonly environmentId: E
   const authority = useWorkbenchResourceAuthority(props.environmentId);
   const policy = useWorkbenchResourcePolicy(props.environmentId);
   const inbox = useWorkbenchReviewInbox(props.environmentId);
+  const projectionHealth = useWorkbenchProjectionHealth(props.environmentId);
   const ledger = useWorkbenchResourceMutations(props.environmentId);
   const actions = useWorkbenchResourceActions(props.environmentId);
   const editable = selected?.kind === "rule" || selected?.kind === "hook";
@@ -66,17 +73,18 @@ export function WorkbenchResourceLibraryPanel(props: { readonly environmentId: E
     authority.refresh();
     policy.refresh();
     inbox.refresh();
+    projectionHealth.refresh();
     ledger.refresh();
   };
 
   return (
-    <section className="grid gap-5" aria-label="Governed resource library">
+    <section className="grid gap-5" aria-label="System resources">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold text-xl tracking-tight">Resource library</h2>
+          <h2 className="font-semibold text-xl tracking-tight">System</h2>
           <p className="mt-1 max-w-2xl text-muted-foreground text-sm">
-            Inspect every layer here. Canonical rule and hook edits stay locked until this direct
-            local session is explicitly unlocked.
+            Resources, projection health, and governed changes for this environment. Canonical rule
+            and hook edits stay locked until this direct local session is explicitly unlocked.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -117,12 +125,7 @@ export function WorkbenchResourceLibraryPanel(props: { readonly environmentId: E
               Unlock local session
             </Button>
           )}
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label="Refresh resource library"
-            onClick={refreshAll}
-          >
+          <Button size="icon-sm" variant="ghost" aria-label="Refresh System" onClick={refreshAll}>
             <RefreshCwIcon />
           </Button>
         </div>
@@ -138,21 +141,27 @@ export function WorkbenchResourceLibraryPanel(props: { readonly environmentId: E
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2 border-b border-border/60 pb-3">
-        {(["library", "review", "changes"] as const).map((id) => (
+        {(["resources", "inbox", "changes"] as const).map((id) => (
           <Button
             key={id}
             size="sm"
             variant={view === id ? "secondary" : "ghost"}
             onClick={() => setView(id)}
           >
-            {id === "library"
-              ? "Library"
-              : id === "review"
-                ? `Review inbox${inbox.data?.items.length ? ` (${inbox.data.items.length})` : ""}`
+            {id === "resources"
+              ? "Resources"
+              : id === "inbox"
+                ? `Inbox${inbox.data?.items.length ? ` (${inbox.data.items.length})` : ""}`
                 : `Changes${ledger.data?.receipts.length ? ` (${ledger.data.receipts.length})` : ""}`}
           </Button>
         ))}
-        {view === "library" ? (
+        <Badge
+          className="ms-auto"
+          variant={projectionHealth.data?.state === "current" ? "success" : "outline"}
+        >
+          Projection {projectionHealth.data?.state ?? "unavailable"}
+        </Badge>
+        {view === "resources" ? (
           <div className="ms-auto flex items-center gap-2">
             <Button
               size="sm"
@@ -187,7 +196,7 @@ export function WorkbenchResourceLibraryPanel(props: { readonly environmentId: E
         ) : null}
       </div>
 
-      {view === "library" ? (
+      {view === "resources" ? (
         library.error ? (
           <WorkbenchEmptyState title="Resource library unavailable" description={library.error} />
         ) : library.isPending && library.data === null ? (
@@ -234,14 +243,23 @@ export function WorkbenchResourceLibraryPanel(props: { readonly environmentId: E
               ))}
             </div>
             {target ? (
-              <ResourceEditor
-                key={`${target.sourceId}:${target.relativePath}`}
-                environmentId={props.environmentId}
-                entry={selected!}
-                target={target}
-                authorityState={authority.data?.state ?? "locked"}
-                onChanged={refreshAll}
-              />
+              <div className="grid content-start gap-4">
+                <ResourceEditor
+                  key={`${target.sourceId}:${target.relativePath}`}
+                  environmentId={props.environmentId}
+                  entry={selected!}
+                  target={target}
+                  authorityState={authority.data?.state ?? "locked"}
+                  onChanged={refreshAll}
+                />
+                <WorkbenchRelationshipSummary
+                  environmentId={props.environmentId}
+                  directLocal={props.directLocal}
+                  subjectLabel={selected!.name}
+                  candidateIds={relationshipCandidateIds(selected!)}
+                  onOpenChanges={() => setView("changes")}
+                />
+              </div>
             ) : selected ? (
               <div className="rounded-xl border border-border/60 bg-card p-5">
                 <h3 className="font-semibold">{selected.name}</h3>
@@ -255,48 +273,82 @@ export function WorkbenchResourceLibraryPanel(props: { readonly environmentId: E
                 <Badge className="mt-3" variant="outline">
                   Read-only in this surface
                 </Badge>
+                <WorkbenchRelationshipSummary
+                  environmentId={props.environmentId}
+                  directLocal={props.directLocal}
+                  subjectLabel={selected.name}
+                  candidateIds={relationshipCandidateIds(selected)}
+                  onOpenChanges={() => setView("changes")}
+                />
               </div>
             ) : (
-              <WorkbenchEmptyState
-                title="Select a resource"
-                description="Canonical source, provenance, and editing controls appear here."
-              />
+              <div className="grid gap-4">
+                <WorkbenchEmptyState
+                  title="Select a resource"
+                  description="Canonical source, provenance, and editing controls appear here."
+                />
+                {project ? (
+                  <WorkbenchRelationshipSummary
+                    environmentId={props.environmentId}
+                    directLocal={props.directLocal}
+                    subjectLabel={`effective project ${project}`}
+                    candidateIds={[project, `project:${project}`]}
+                    onOpenChanges={() => setView("changes")}
+                  />
+                ) : null}
+              </div>
             )}
           </div>
         )
       ) : null}
 
-      {view === "review" ? (
+      {view === "inbox" ? (
         inbox.error ? (
-          <WorkbenchEmptyState title="Review inbox unavailable" description={inbox.error} />
+          <WorkbenchEmptyState title="Inbox unavailable" description={inbox.error} />
         ) : inbox.isPending && inbox.data === null ? (
           <WorkbenchEmptyState
-            title="Loading review inbox"
+            title="Loading inbox"
             description="Reading staged imports from the selected environment…"
           />
-        ) : inbox.data?.items.length ? (
-          <div className="grid gap-3">
-            {inbox.data.items.map((item) => (
-              <article key={item.id} className="rounded-xl border border-border/60 bg-card p-4">
-                <div className="flex items-center gap-2">
-                  <strong>{item.proposedKind}</strong>
-                  <Badge variant="outline">{item.state}</Badge>
-                </div>
-                <p className="mt-2 text-muted-foreground text-sm">
-                  {item.source.type} · {item.source.locator}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {item.files.length} files · staged content remains inert until reviewed through
-                  its canonical writer.
-                </p>
-              </article>
-            ))}
-          </div>
         ) : (
-          <WorkbenchEmptyState
-            title="Review inbox is empty"
-            description="Imported GitHub, ZIP, and Markdown candidates appear here before activation."
-          />
+          <div className="grid gap-5">
+            <WorkbenchAuditPanel
+              environmentId={props.environmentId}
+              directLocal={props.directLocal}
+              embedded
+              onOpenChanges={() => setView("changes")}
+            />
+            {inbox.data?.items.filter((item) => item.audit === undefined).length ? (
+              <div className="grid gap-3">
+                <h3 className="font-semibold">Review items</h3>
+                {inbox.data.items.map((item) =>
+                  item.audit === undefined ? (
+                    <article
+                      key={item.id}
+                      className="rounded-xl border border-border/60 bg-card p-4"
+                    >
+                      <div className="flex items-center gap-2">
+                        <strong>
+                          {item.kind === "relationship"
+                            ? "Relationship proposal"
+                            : item.proposedKind}
+                        </strong>
+                        <Badge variant="outline">{item.state}</Badge>
+                      </div>
+                      <p className="mt-2 text-muted-foreground text-sm">
+                        {item.source.type} · {item.source.locator}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {item.kind === "relationship"
+                          ? "Relationship evidence remains inert until reviewed through its canonical writer."
+                          : `${item.files.length} staged files · content remains inert until reviewed through its canonical writer.`}
+                      </p>
+                    </article>
+                  ) : null,
+                )}
+              </div>
+            ) : null}
+          </div>
         )
       ) : null}
 
@@ -490,19 +542,6 @@ function ResourceEditor(props: {
   );
 }
 
-export function resourceApplyInput(
-  review: WorkbenchResourceMutationReview,
-): WorkbenchResourceApplyInput {
-  return {
-    proposalId: review.proposal.id,
-    expectedRevision: review.proposal.revision,
-    diffDigest: review.proposal.diffDigest,
-    ...(review.proposal.git.requiresCheckpoint
-      ? { checkpoint: review.proposal.git.statusDigest }
-      : {}),
-  };
-}
-
 export function authorityReason(reason: string | null): string {
   switch (reason) {
     case "remote_session":
@@ -543,4 +582,8 @@ function groupResources(entries: ReadonlyArray<ResourceEntry>) {
     groups.set(label, items);
   }
   return [...groups].map(([label, items]) => ({ label, items }));
+}
+
+function relationshipCandidateIds(entry: ResourceEntry) {
+  return [`resource:${entry.id}`, entry.id, entry.name, entry.provenance.sourceId];
 }

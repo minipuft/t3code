@@ -23,12 +23,21 @@ type ReviewState = WorkbenchProjectionReview & {
 export function WorkbenchAuditPanel(props: {
   readonly environmentId: EnvironmentId;
   readonly directLocal: boolean;
+  readonly embedded?: boolean;
+  readonly onOpenChanges?: () => void;
 }) {
   const inbox = useWorkbenchReviewInbox(props.environmentId);
   const actions = useWorkbenchAuditActions(props.environmentId);
   const [message, setMessage] = useState<string | null>(null);
   const [reviews, setReviews] = useState<Record<string, ReviewState>>({});
+  const [filter, setFilter] = useState<"attention" | "current" | "all">("attention");
   const findings = (inbox.data?.items ?? []).filter((item) => item.audit !== undefined);
+  const filteredFindings = findings.filter((item) => {
+    const state = item.audit!.state;
+    if (filter === "all") return true;
+    const current = state === "current" || state === "resolved";
+    return filter === "current" ? current : !current;
+  });
 
   const settle = async (effect: Promise<AtomCommandResult<unknown, unknown>>) => {
     const result = await effect;
@@ -90,10 +99,12 @@ export function WorkbenchAuditPanel(props: {
   };
 
   return (
-    <section className="grid gap-4" aria-label="Workbench audit">
+    <section className="grid gap-4" aria-label="Projection health">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-semibold text-xl">Provider audits</h2>
+          <h2 className={props.embedded ? "font-semibold" : "font-semibold text-xl"}>
+            Projection health
+          </h2>
           <p className="text-muted-foreground text-sm">
             Per-environment source and target health. Repairs require review.
           </p>
@@ -103,7 +114,12 @@ export function WorkbenchAuditPanel(props: {
             </p>
           ) : null}
         </div>
-        <Button size="icon-sm" variant="ghost" aria-label="Refresh audit" onClick={inbox.refresh}>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          aria-label="Refresh projection health"
+          onClick={inbox.refresh}
+        >
           <RefreshCwIcon />
         </Button>
       </div>
@@ -114,15 +130,28 @@ export function WorkbenchAuditPanel(props: {
         </p>
       ) : null}
 
+      <div className="flex flex-wrap gap-2" aria-label="Projection health filter">
+        {(["attention", "current", "all"] as const).map((id) => (
+          <Button
+            key={id}
+            size="sm"
+            variant={filter === id ? "secondary" : "ghost"}
+            onClick={() => setFilter(id)}
+          >
+            {id === "attention" ? "Needs attention" : id === "current" ? "Current" : "All"}
+          </Button>
+        ))}
+      </div>
+
       {inbox.error !== null ? (
         <WorkbenchEmptyState title="Provider audit unavailable" description={inbox.error} />
       ) : inbox.isPending && inbox.data === null ? (
         <p className="text-muted-foreground">Reading provider audit state…</p>
-      ) : findings.length === 0 ? (
-        <p className="text-muted-foreground">No provider audit findings.</p>
+      ) : filteredFindings.length === 0 ? (
+        <p className="text-muted-foreground">No projection health findings for this filter.</p>
       ) : (
         <div className="grid gap-2">
-          {findings.map((item) => {
+          {filteredFindings.map((item) => {
             const audit = item.audit!;
             const review = reviews[audit.identity];
             const repairable = audit.state === "stale" || audit.state === "reopened";
@@ -213,6 +242,11 @@ export function WorkbenchAuditPanel(props: {
                         {review.receipt.status === "rolled-back"
                           ? "Repair rolled back"
                           : "Rollback receipt"}
+                      </Button>
+                    ) : null}
+                    {review.receipt?.undoAvailable && props.onOpenChanges ? (
+                      <Button size="sm" variant="outline" onClick={props.onOpenChanges}>
+                        Open changes &amp; rollback
                       </Button>
                     ) : null}
                   </section>

@@ -22,9 +22,9 @@ export function WorkbenchCatalogContextPanel(props: {
           <Button
             size="xs"
             variant="outline"
-            render={<Link to="/workbench" search={{ module: "library" }} />}
+            render={<Link to="/workbench" search={{ module: "system" }} />}
           >
-            Open library
+            Open System
           </Button>
         </div>
         <WorkbenchCatalogView

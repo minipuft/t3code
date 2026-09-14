@@ -8,6 +8,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   parseWorkbenchModule,
+  WORKBENCH_MODULES,
   projectWorkbenchCatalog,
   retainWorkbenchSelection,
   selectWorkbenchEnvironment,
@@ -43,7 +44,11 @@ const environment = (id: string): EnvironmentPresentation =>
 describe("workbench catalog projection", () => {
   it("normalizes unknown modules without hiding the default Plans surface", () => {
     expect(parseWorkbenchModule("skills")).toBe("skills");
-    expect(parseWorkbenchModule("library")).toBe("library");
+    expect(parseWorkbenchModule("system")).toBe("system");
+    expect(parseWorkbenchModule("library")).toBe("plans");
+    expect(parseWorkbenchModule("topology")).toBe("plans");
+    expect(parseWorkbenchModule("audit")).toBe("plans");
+    expect(WORKBENCH_MODULES).toEqual(["plans", "prompts", "skills", "vitals", "system"]);
     expect(parseWorkbenchModule("unknown")).toBe("plans");
     expect(parseWorkbenchModule(undefined)).toBe("plans");
   });

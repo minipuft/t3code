@@ -12,7 +12,8 @@ import { describe, expect, it } from "vite-plus/test";
 import { groupCatalogItems, WorkbenchCatalogView } from "./WorkbenchCatalogView";
 import { resolveWorkbenchProjectSelection, WorkbenchModuleRail } from "./WorkbenchPage";
 import { filterWorkbenchPlans, markdownHeadingBefore, PlanList } from "./WorkbenchPlansPanel";
-import { authorityReason, resourceApplyInput } from "./WorkbenchResourceLibraryPanel";
+import { authorityReason } from "./WorkbenchResourceLibraryPanel";
+import { resourceApplyInput } from "./WorkbenchResourceMutation";
 
 const catalog: WorkflowCatalogList = {
   capability: { status: "available", sourceKind: "http", reason: null },
@@ -95,9 +96,13 @@ describe("WorkbenchCatalogView", () => {
     expect(markup).toContain("Plans");
     expect(markup).toContain("Prompts");
     expect(markup).toContain("Skills");
-    expect(markup).toContain("Library");
     expect(markup).toContain("Vitals");
-    expect(markup).toContain('aria-current="page"');
+    expect(markup).toContain("System");
+    expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
+    expect(markup.indexOf(">Plans</button>")).toBeLessThan(markup.indexOf(">Prompts</button>"));
+    expect(markup.indexOf(">Prompts</button>")).toBeLessThan(markup.indexOf(">Skills</button>"));
+    expect(markup.indexOf(">Skills</button>")).toBeLessThan(markup.indexOf(">Vitals</button>"));
+    expect(markup.indexOf(">Vitals</button>")).toBeLessThan(markup.indexOf(">System</button>"));
   });
 
   it("renders only the selected catalog kind", () => {

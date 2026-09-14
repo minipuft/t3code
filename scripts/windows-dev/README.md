@@ -51,13 +51,11 @@ vp run test:windows-dev-guard
 
 The Windows dev launcher activates Agent Workbench only after the old T3 client is closed and
 before the new environment backend starts. `refresh-agent-workbench-on-launch.sh` waits for the
-old sidecar to release its final lease, then reads only the top-level `version` from the workspace
-file. A v1/v2 workspace is migrated through the Agent Workbench CLI with a durable receipt under
-`~/.local/state/agent-workbench`; a v3 workspace uses the normal snapshot refresh. Both paths end
-with `doctor`, and any migration, refresh, or doctor failure keeps the desktop closed. It never
-stops the sidecar. If another host still owns a lease, it exits `75` and the desktop remains closed
-rather than launching against a stale snapshot. Missing, invalid, or unsupported workspace
-versions fail closed as well.
+old sidecar to release its final lease, refreshes the selected snapshot from the configured source,
+then requires a healthy `doctor` result. Any refresh or doctor failure keeps the desktop closed. It
+never stops the sidecar. If another host still owns a lease, it exits `75` and the desktop remains
+closed rather than launching against a stale snapshot. A missing workspace file also fails closed;
+workspace schema validation remains owned by the Agent Workbench refresh command.
 
 Refresh preserves the existing Agent Workbench workspace and secrets files. This makes desktop
 startup the activation boundary without making T3 Code own Agent Workbench source or configuration.

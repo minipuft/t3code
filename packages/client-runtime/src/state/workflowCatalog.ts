@@ -22,7 +22,7 @@ import { WorkflowCatalogLoader } from "./workflowCatalogHttp.ts";
 
 export { WorkflowCatalogLoader, workflowCatalogLoaderLayer } from "./workflowCatalogHttp.ts";
 
-export class WorkflowCatalogConnectionNotReadyError extends Data.TaggedError(
+class WorkflowCatalogConnectionNotReadyError extends Data.TaggedError(
   "WorkflowCatalogConnectionNotReadyError",
 )<{ readonly message: string }> {}
 

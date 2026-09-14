@@ -3,10 +3,21 @@ import { assert, describe, it } from "vite-plus/test";
 import { fullAppRestartWatchTargets } from "./dev-reload-policy.mjs";
 
 describe("desktop development reload policy", () => {
-  it("reserves full Electron relaunches for main and preload bundles", () => {
+  it("relaunches Electron when a process entry bundle changes", () => {
     assert.deepEqual(
       fullAppRestartWatchTargets.map(({ directory, files }) => [directory, [...files]]),
-      [["dist-electron", ["main.cjs", "preload.cjs"]]],
+      [
+        ["dist-electron", ["main.cjs", "preload.cjs"]],
+        ["dist-electron/electron", ["WindowsForegroundFocusWorker.cjs"]],
+        [
+          "dist-electron/snapShot",
+          [
+            "GlobalShiftShortcutWorker.cjs",
+            "RegionSnapShotWorker.cjs",
+            "SnapShotAccessibilityWorker.cjs",
+          ],
+        ],
+      ],
     );
   });
 

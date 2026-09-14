@@ -18,7 +18,7 @@ export interface WorkflowRecentEntry {
 
 export const WORKFLOW_RECENTS_MAX_ENTRIES_PER_SCOPE = 8;
 export const WORKFLOW_RECENTS_MAX_PROJECT_SCOPES = 20;
-export const WORKFLOW_RECENTS_MAX_THREAD_SCOPES = 40;
+const WORKFLOW_RECENTS_MAX_THREAD_SCOPES = 40;
 const WORKFLOW_CATALOG_ITEM_ID_MAX_LENGTH = 256;
 const MAX_VALID_DATE_MS = 8_640_000_000_000_000;
 
@@ -49,7 +49,7 @@ function isValidEntry(candidate: unknown): candidate is WorkflowRecentEntry {
   );
 }
 
-export function upsertWorkflowRecent(
+function upsertWorkflowRecent(
   entries: ReadonlyArray<WorkflowRecentEntry>,
   itemId: WorkflowCatalogItemId,
   usedAt: number,

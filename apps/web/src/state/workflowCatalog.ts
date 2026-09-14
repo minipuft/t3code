@@ -24,8 +24,7 @@ import { formatEnvironmentQueryError } from "./query";
 import { serverEnvironment } from "./server";
 import { useAtomCommand } from "./use-atom-command";
 
-export const workflowCatalogEnvironment =
-  createWorkflowCatalogEnvironmentAtoms(connectionAtomRuntime);
+const workflowCatalogEnvironment = createWorkflowCatalogEnvironmentAtoms(connectionAtomRuntime);
 
 export function useWorkflowCatalog(environmentId: EnvironmentId): {
   readonly data: WorkflowCatalogList | null;

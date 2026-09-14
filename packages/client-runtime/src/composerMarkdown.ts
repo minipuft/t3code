@@ -1,4 +1,4 @@
-export const COMPOSER_MARKDOWN_DECORATION_KINDS = [
+const COMPOSER_MARKDOWN_DECORATION_KINDS = [
   "marker",
   "heading",
   "quote",

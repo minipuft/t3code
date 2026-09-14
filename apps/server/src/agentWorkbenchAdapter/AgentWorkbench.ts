@@ -568,7 +568,7 @@ const make = Effect.gen(function* () {
 
 export const layer = Layer.effect(AgentWorkbench, make);
 
-export function usageAttributionPayload(environmentId: string, summary: UsageSummary) {
+function usageAttributionPayload(environmentId: string, summary: UsageSummary) {
   const projects = new Map<string, { costUsd: number; totalTokens: number; records: number }>();
   const unattributed = new Map<string, { costUsd: number; totalTokens: number; records: number }>();
   const add = (

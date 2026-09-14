@@ -623,7 +623,7 @@ const EnvironmentWorkflowPromptCompareQuery = {
   to: Schema.NumberFromString,
 };
 
-export class EnvironmentWorkflowCatalogHttpApi extends HttpApiGroup.make("workflowCatalog")
+class EnvironmentWorkflowCatalogHttpApi extends HttpApiGroup.make("workflowCatalog")
   .add(
     HttpApiEndpoint.get("list", "/api/workflows", {
       headers: OptionalBearerHeaders,
@@ -745,7 +745,7 @@ const EnvironmentWorkbenchResourceMutationErrors = [
   EnvironmentInternalError,
 ] as const;
 
-export class EnvironmentWorkbenchPlansHttpApi extends HttpApiGroup.make("workbenchPlans")
+class EnvironmentWorkbenchPlansHttpApi extends HttpApiGroup.make("workbenchPlans")
   .add(
     HttpApiEndpoint.get("associations", "/api/workbench/plans/associations", {
       headers: OptionalBearerHeaders,

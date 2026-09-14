@@ -31,7 +31,7 @@ import { WorkbenchPlansLoader } from "./workbenchPlansHttp.ts";
 
 export { WorkbenchPlansLoader, workbenchPlansLoaderLayer } from "./workbenchPlansHttp.ts";
 
-export class WorkbenchPlansConnectionNotReadyError extends Data.TaggedError(
+class WorkbenchPlansConnectionNotReadyError extends Data.TaggedError(
   "WorkbenchPlansConnectionNotReadyError",
 )<{ readonly message: string }> {}
 

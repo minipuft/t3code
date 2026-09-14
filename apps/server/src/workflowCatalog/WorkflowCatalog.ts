@@ -42,7 +42,7 @@ export class WorkflowCatalog extends Context.Service<WorkflowCatalog, WorkflowCa
   "t3/workflowCatalog/WorkflowCatalog",
 ) {}
 
-export function makeWorkflowCatalog(workbench: AgentWorkbenchShape): WorkflowCatalogShape {
+function makeWorkflowCatalog(workbench: AgentWorkbenchShape): WorkflowCatalogShape {
   const list = workbench.catalog.pipe(
     Effect.map(projectCatalog),
     Effect.orElseSucceed(() => ({

@@ -571,7 +571,7 @@ const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSettings, {
   error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
 });
 
-export const WsWorkflowPreferencesMutateRpc = Rpc.make(WS_METHODS.workflowPreferencesMutate, {
+const WsWorkflowPreferencesMutateRpc = Rpc.make(WS_METHODS.workflowPreferencesMutate, {
   payload: Schema.Struct({ mutation: WorkflowLibraryPreferenceMutation }),
   success: WorkflowLibraryPreferences,
   error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),

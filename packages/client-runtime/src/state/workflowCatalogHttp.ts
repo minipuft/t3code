@@ -137,55 +137,55 @@ export const fetchEnvironmentWorkflowPromptHistory = Effect.fn(
   });
 });
 
-export const compareEnvironmentWorkflowPrompt = Effect.fn(
-  "clientRuntime.state.compareWorkflowPrompt",
-)(function* (
-  input: WorkflowCatalogRequestContext & {
-    readonly itemId: WorkflowCatalogItemId;
-    readonly from: number;
-    readonly to: number;
+const compareEnvironmentWorkflowPrompt = Effect.fn("clientRuntime.state.compareWorkflowPrompt")(
+  function* (
+    input: WorkflowCatalogRequestContext & {
+      readonly itemId: WorkflowCatalogItemId;
+      readonly from: number;
+      readonly to: number;
+    },
+  ) {
+    const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+    const payload = { from: input.from, to: input.to };
+    const requestUrl = queryUrl(
+      input.prepared.httpBaseUrl,
+      `/api/workflows/${encodeURIComponent(input.itemId)}/compare`,
+      { from: String(input.from), to: String(input.to) },
+    );
+    return yield* executeRequest({
+      ...input,
+      method: "GET",
+      requestUrl,
+      request: (headers) =>
+        client.workflowCatalog.compare({ params: { itemId: input.itemId }, payload, headers }),
+    });
   },
-) {
-  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
-  const payload = { from: input.from, to: input.to };
-  const requestUrl = queryUrl(
-    input.prepared.httpBaseUrl,
-    `/api/workflows/${encodeURIComponent(input.itemId)}/compare`,
-    { from: String(input.from), to: String(input.to) },
-  );
-  return yield* executeRequest({
-    ...input,
-    method: "GET",
-    requestUrl,
-    request: (headers) =>
-      client.workflowCatalog.compare({ params: { itemId: input.itemId }, payload, headers }),
-  });
-});
+);
 
-export const reviewEnvironmentWorkflowPrompt = Effect.fn(
-  "clientRuntime.state.reviewWorkflowPrompt",
-)(function* (
-  input: WorkflowCatalogRequestContext & {
-    readonly itemId: WorkflowCatalogItemId;
-    readonly value: AgentWorkbenchPromptReviewInput;
+const reviewEnvironmentWorkflowPrompt = Effect.fn("clientRuntime.state.reviewWorkflowPrompt")(
+  function* (
+    input: WorkflowCatalogRequestContext & {
+      readonly itemId: WorkflowCatalogItemId;
+      readonly value: AgentWorkbenchPromptReviewInput;
+    },
+  ) {
+    const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+    const requestUrl = makeEnvironmentHttpApiUrlBuilder(
+      input.prepared.httpBaseUrl,
+    ).workflowCatalog.review({ params: { itemId: input.itemId } });
+    return yield* executeRequest({
+      ...input,
+      method: "POST",
+      requestUrl,
+      request: (headers) =>
+        client.workflowCatalog.review({
+          params: { itemId: input.itemId },
+          payload: input.value,
+          headers,
+        }),
+    });
   },
-) {
-  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
-  const requestUrl = makeEnvironmentHttpApiUrlBuilder(
-    input.prepared.httpBaseUrl,
-  ).workflowCatalog.review({ params: { itemId: input.itemId } });
-  return yield* executeRequest({
-    ...input,
-    method: "POST",
-    requestUrl,
-    request: (headers) =>
-      client.workflowCatalog.review({
-        params: { itemId: input.itemId },
-        payload: input.value,
-        headers,
-      }),
-  });
-});
+);
 
 export const applyEnvironmentWorkflowPrompt = Effect.fn("clientRuntime.state.applyWorkflowPrompt")(
   function* (
@@ -212,30 +212,30 @@ export const applyEnvironmentWorkflowPrompt = Effect.fn("clientRuntime.state.app
   },
 );
 
-export const rollbackEnvironmentWorkflowPrompt = Effect.fn(
-  "clientRuntime.state.rollbackWorkflowPrompt",
-)(function* (
-  input: WorkflowCatalogRequestContext & {
-    readonly itemId: WorkflowCatalogItemId;
-    readonly value: AgentWorkbenchPromptRollbackInput;
+const rollbackEnvironmentWorkflowPrompt = Effect.fn("clientRuntime.state.rollbackWorkflowPrompt")(
+  function* (
+    input: WorkflowCatalogRequestContext & {
+      readonly itemId: WorkflowCatalogItemId;
+      readonly value: AgentWorkbenchPromptRollbackInput;
+    },
+  ) {
+    const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+    const requestUrl = makeEnvironmentHttpApiUrlBuilder(
+      input.prepared.httpBaseUrl,
+    ).workflowCatalog.rollback({ params: { itemId: input.itemId } });
+    return yield* executeRequest({
+      ...input,
+      method: "POST",
+      requestUrl,
+      request: (headers) =>
+        client.workflowCatalog.rollback({
+          params: { itemId: input.itemId },
+          payload: input.value,
+          headers,
+        }),
+    });
   },
-) {
-  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
-  const requestUrl = makeEnvironmentHttpApiUrlBuilder(
-    input.prepared.httpBaseUrl,
-  ).workflowCatalog.rollback({ params: { itemId: input.itemId } });
-  return yield* executeRequest({
-    ...input,
-    method: "POST",
-    requestUrl,
-    request: (headers) =>
-      client.workflowCatalog.rollback({
-        params: { itemId: input.itemId },
-        payload: input.value,
-        headers,
-      }),
-  });
-});
+);
 
 export class WorkflowCatalogLoader extends Context.Service<
   WorkflowCatalogLoader,

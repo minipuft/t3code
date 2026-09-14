@@ -36,7 +36,7 @@ export type WorkflowRevision = typeof WorkflowRevision.Type;
 export const WORKFLOW_LIBRARY_MAX_PINS = 64;
 export const WORKFLOW_LIBRARY_MAX_PRESETS = 64;
 export const WORKFLOW_PRESET_MAX_ARGUMENTS = 32;
-export const WORKFLOW_PRESET_MAX_LABEL_LENGTH = 128;
+const WORKFLOW_PRESET_MAX_LABEL_LENGTH = 128;
 export const WORKFLOW_PRESET_MAX_VALUE_LENGTH = 16_384;
 
 export const WorkflowPresetId = TrimmedNonEmptyString.check(Schema.isMaxLength(128)).pipe(

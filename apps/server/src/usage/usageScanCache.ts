@@ -24,7 +24,7 @@ import type { CodexScanState, UsageRecord } from "./usageTranscripts.ts";
 
 // v4 combines workspace provenance with incremental resume and tail records.
 // Both incompatible v3 formats must be rescanned.
-export const USAGE_SCAN_CACHE_VERSION = 4 as const;
+const USAGE_SCAN_CACHE_VERSION = 4 as const;
 
 export interface CachedFile {
   readonly size: number;

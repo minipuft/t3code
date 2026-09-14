@@ -156,7 +156,7 @@ export class WorkbenchPlans extends Context.Service<WorkbenchPlans, WorkbenchPla
   "t3/workbenchPlans/WorkbenchPlans",
 ) {}
 
-export function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPlansShape {
+function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPlansShape {
   return WorkbenchPlans.of({
     list: workbench.listPlans.pipe(
       Effect.map(projectPlanList),

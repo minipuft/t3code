@@ -7,7 +7,7 @@ import type * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopObservability from "../app/DesktopObservability.ts";
 import type { DesktopBackendInstance } from "./DesktopBackendManager.ts";
 
-export const ACTIVATION_MARKER_FILE_NAME = ".t3-dev-backend-activation.json";
+const ACTIVATION_MARKER_FILE_NAME = ".t3-dev-backend-activation.json";
 
 const { logInfo, logWarning } = DesktopObservability.makeComponentLogger(
   "desktop-development-backend-activation",

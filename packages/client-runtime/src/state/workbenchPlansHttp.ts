@@ -283,7 +283,7 @@ export const fetchEnvironmentWorkbenchPlanAnnotations = Effect.fn(
   });
 });
 
-export const mutateEnvironmentWorkbenchPlanAnnotations = Effect.fn(
+const mutateEnvironmentWorkbenchPlanAnnotations = Effect.fn(
   "clientRuntime.state.mutateEnvironmentWorkbenchPlanAnnotations",
 )(function* (
   input: WorkbenchPlansRequestContext & { readonly value: WorkbenchPlanAnnotationMutationInput },
@@ -302,7 +302,7 @@ export const mutateEnvironmentWorkbenchPlanAnnotations = Effect.fn(
   });
 });
 
-export const fetchEnvironmentWorkbenchResourceLibrary = Effect.fn(
+const fetchEnvironmentWorkbenchResourceLibrary = Effect.fn(
   "clientRuntime.state.fetchEnvironmentWorkbenchResourceLibrary",
 )(function* (
   input: WorkbenchPlansRequestContext & {
@@ -328,7 +328,7 @@ export const fetchEnvironmentWorkbenchResourceLibrary = Effect.fn(
   });
 });
 
-export const fetchEnvironmentWorkbenchReviewInbox = Effect.fn(
+const fetchEnvironmentWorkbenchReviewInbox = Effect.fn(
   "clientRuntime.state.fetchEnvironmentWorkbenchReviewInbox",
 )(function* (input: WorkbenchPlansRequestContext) {
   const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
@@ -342,7 +342,7 @@ export const fetchEnvironmentWorkbenchReviewInbox = Effect.fn(
   });
 });
 
-export const fetchEnvironmentWorkbenchResourceAuthority = Effect.fn(
+const fetchEnvironmentWorkbenchResourceAuthority = Effect.fn(
   "clientRuntime.state.fetchEnvironmentWorkbenchResourceAuthority",
 )(function* (input: WorkbenchPlansRequestContext) {
   const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
@@ -376,7 +376,7 @@ const authorityCommand = Effect.fn("clientRuntime.state.workbenchResourceAuthori
   },
 );
 
-export const fetchEnvironmentWorkbenchResourcePolicy = Effect.fn(
+const fetchEnvironmentWorkbenchResourcePolicy = Effect.fn(
   "clientRuntime.state.fetchEnvironmentWorkbenchResourcePolicy",
 )(function* (input: WorkbenchPlansRequestContext) {
   const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
@@ -390,7 +390,7 @@ export const fetchEnvironmentWorkbenchResourcePolicy = Effect.fn(
   });
 });
 
-export const fetchEnvironmentWorkbenchResourceMutations = Effect.fn(
+const fetchEnvironmentWorkbenchResourceMutations = Effect.fn(
   "clientRuntime.state.fetchEnvironmentWorkbenchResourceMutations",
 )(function* (input: WorkbenchPlansRequestContext) {
   const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
@@ -437,23 +437,23 @@ export const reviewEnvironmentWorkbenchResource = Effect.fn(
   });
 });
 
-export const applyEnvironmentWorkbenchResource = Effect.fn(
-  "clientRuntime.state.applyWorkbenchResource",
-)(function* (
-  input: WorkbenchPlansRequestContext & { readonly value: WorkbenchResourceApplyInput },
-) {
-  const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
-  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
-  const requestUrl = urlBuilder.workbenchPlans.applyResource();
-  return yield* executeRequest({
-    ...input,
-    method: "POST",
-    requestUrl,
-    request: (headers) => client.workbenchPlans.applyResource({ payload: input.value, headers }),
-  });
-});
+const applyEnvironmentWorkbenchResource = Effect.fn("clientRuntime.state.applyWorkbenchResource")(
+  function* (
+    input: WorkbenchPlansRequestContext & { readonly value: WorkbenchResourceApplyInput },
+  ) {
+    const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
+    const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+    const requestUrl = urlBuilder.workbenchPlans.applyResource();
+    return yield* executeRequest({
+      ...input,
+      method: "POST",
+      requestUrl,
+      request: (headers) => client.workbenchPlans.applyResource({ payload: input.value, headers }),
+    });
+  },
+);
 
-export const rollbackEnvironmentWorkbenchResource = Effect.fn(
+const rollbackEnvironmentWorkbenchResource = Effect.fn(
   "clientRuntime.state.rollbackWorkbenchResource",
 )(function* (
   input: WorkbenchPlansRequestContext & { readonly value: WorkbenchResourceRollbackInput },

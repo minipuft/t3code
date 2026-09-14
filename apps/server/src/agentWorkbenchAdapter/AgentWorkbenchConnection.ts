@@ -1,8 +1,8 @@
 // @effect-diagnostics nodeBuiltinImport:off globalTimers:off globalDate:off - process lifecycle is the Node adapter boundary owned by this module.
-import { spawn, type ChildProcess } from "node:child_process";
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 
 const PROTOCOL_VERSION = "1.0.0";
 const ATTACH_TIMEOUT_MS = 10_000;
@@ -149,7 +149,7 @@ export class AgentWorkbenchConnection {
       if (compatible === false) throw new AgentWorkbenchConnectionError("unsupported_version");
     }
     if (descriptor === null) {
-      const launcher = path.join(this.dependencies.homeDir, ".local", "bin", "agent-workbench");
+      const launcher = NodePath.join(this.dependencies.homeDir, ".local", "bin", "agent-workbench");
       await this.dependencies.startRuntime(launcher);
       descriptor = await waitForDescriptor(this.dependencies);
       if (!(await handshake(this.dependencies.fetch, descriptor, config))) {
@@ -193,9 +193,9 @@ export class AgentWorkbenchConnection {
 
 export function makeAgentWorkbenchConnectionDependencies(): AgentWorkbenchConnectionDependencies {
   return {
-    homeDir: os.homedir(),
-    readFile: (target) => fs.readFile(target, "utf8"),
-    removeFile: (target) => fs.rm(target, { force: true }),
+    homeDir: NodeOS.homedir(),
+    readFile: (target) => NodeFSP.readFile(target, "utf8"),
+    removeFile: (target) => NodeFSP.rm(target, { force: true }),
     startRuntime: startRuntimeProcess,
     fetch,
     setInterval,
@@ -204,14 +204,17 @@ export function makeAgentWorkbenchConnectionDependencies(): AgentWorkbenchConnec
 }
 
 async function startRuntimeProcess(launcher: string) {
-  await fs.access(launcher).catch((cause) => {
+  await NodeFSP.access(launcher).catch((cause) => {
     throw new AgentWorkbenchConnectionError("not_installed", { cause });
   });
-  const child = spawn(launcher, ["serve"], { stdio: ["ignore", "pipe", "pipe"], detached: false });
+  const child = NodeChildProcess.spawn(launcher, ["serve"], {
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: false,
+  });
   await waitForListening(child);
 }
 
-function waitForListening(child: ChildProcess) {
+function waitForListening(child: NodeChildProcess.ChildProcess) {
   return new Promise<void>((resolve, reject) => {
     const timer = setTimeout(
       () => finish(new AgentWorkbenchConnectionError("start_failed")),
@@ -302,10 +305,10 @@ async function requestJson(
 async function readConfig(
   dependencies: AgentWorkbenchConnectionDependencies,
 ): Promise<WorkbenchConfig> {
-  const root = path.join(dependencies.homeDir, ".config", "agent-workbench");
+  const root = NodePath.join(dependencies.homeDir, ".config", "agent-workbench");
   const [workspaceText, secretsText] = await Promise.all([
-    dependencies.readFile(path.join(root, "workspace.yaml")),
-    dependencies.readFile(path.join(root, "secrets.yaml")),
+    dependencies.readFile(NodePath.join(root, "workspace.yaml")),
+    dependencies.readFile(NodePath.join(root, "secrets.yaml")),
   ]).catch((cause) => {
     throw new AgentWorkbenchConnectionError("configuration_invalid", { cause });
   });
@@ -350,7 +353,7 @@ async function waitForDescriptor(dependencies: AgentWorkbenchConnectionDependenc
 }
 
 function runtimePath(homeDir: string) {
-  return path.join(homeDir, ".local", "state", "agent-workbench", "runtime.json");
+  return NodePath.join(homeDir, ".local", "state", "agent-workbench", "runtime.json");
 }
 
 function decodeConfig(text: string): Record<string, unknown> {

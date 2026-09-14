@@ -167,7 +167,11 @@ describe("fetchEnvironmentWorkflowCatalog", () => {
       yield* fetchEnvironmentWorkflowCatalog({
         prepared: {
           ...PREPARED,
-          httpAuthorization: { _tag: "Dpop", accessToken: "test-access-token" },
+          httpAuthorization: {
+            _tag: "Dpop",
+            accessToken: "test-access-token",
+            expiresAtEpochMs: 0,
+          },
         },
         signer: Option.some(signer),
       }).pipe(Effect.provide(remoteHttpClientLayer(fetchFn)));

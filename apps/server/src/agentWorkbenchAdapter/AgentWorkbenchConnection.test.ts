@@ -1,5 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off - lifecycle adapter tests exercise its Node filesystem boundary.
-import path from "node:path";
+import * as NodePath from "node:path";
 
 import { describe, expect, it, vi } from "vite-plus/test";
 
@@ -10,9 +10,9 @@ import {
 } from "./AgentWorkbenchConnection.ts";
 
 const homeDir = "/home/test";
-const runtimeFile = path.join(homeDir, ".local/state/agent-workbench/runtime.json");
-const workspaceFile = path.join(homeDir, ".config/agent-workbench/workspace.yaml");
-const secretsFile = path.join(homeDir, ".config/agent-workbench/secrets.yaml");
+const runtimeFile = NodePath.join(homeDir, ".local/state/agent-workbench/runtime.json");
+const workspaceFile = NodePath.join(homeDir, ".config/agent-workbench/workspace.yaml");
+const secretsFile = NodePath.join(homeDir, ".config/agent-workbench/secrets.yaml");
 
 function makeFixture() {
   const files = new Map<string, string>([
@@ -84,7 +84,7 @@ describe("Agent Workbench connection lifecycle", () => {
     await connection.leaseId();
 
     expect(fixture.startRuntime).toHaveBeenCalledWith(
-      path.join(homeDir, ".local/bin/agent-workbench"),
+      NodePath.join(homeDir, ".local/bin/agent-workbench"),
     );
     expect(fixture.requests[0]?.url.origin).toBe("http://127.0.0.1:42000");
   });

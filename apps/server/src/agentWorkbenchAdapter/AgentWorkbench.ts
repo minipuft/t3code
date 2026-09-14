@@ -48,7 +48,7 @@ import {
   makeAgentWorkbenchConnectionDependencies,
 } from "./AgentWorkbenchConnection.ts";
 
-export class AgentWorkbenchAdapterError extends Schema.TaggedErrorClass<AgentWorkbenchAdapterError>()(
+export class AgentWorkbenchAdapterError extends Schema.TaggedError<AgentWorkbenchAdapterError>()(
   "AgentWorkbenchAdapterError",
   {
     reason: Schema.Literals([

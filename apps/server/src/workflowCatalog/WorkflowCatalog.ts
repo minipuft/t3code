@@ -24,7 +24,7 @@ import {
   type AgentWorkbenchShape,
 } from "../agentWorkbenchAdapter/AgentWorkbench.ts";
 
-export class WorkflowCatalogSourceError extends Schema.TaggedErrorClass<WorkflowCatalogSourceError>()(
+export class WorkflowCatalogSourceError extends Schema.TaggedError<WorkflowCatalogSourceError>()(
   "WorkflowCatalogSourceError",
   {
     reason: Schema.Literals(["request_failed", "invalid_response"]),

@@ -392,7 +392,7 @@ describe("Workbench plan environment HTTP", () => {
       yield* fetchEnvironmentWorkbenchPlanSource({
         prepared: {
           ...PREPARED,
-          httpAuthorization: { _tag: "Dpop", accessToken: "test-token" },
+          httpAuthorization: { _tag: "Dpop", accessToken: "test-token", expiresAtEpochMs: 0 },
         },
         path: PLAN_PATH,
         signer: Option.some(signer),

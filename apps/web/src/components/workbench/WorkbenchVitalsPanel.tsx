@@ -13,7 +13,11 @@ export function WorkbenchVitalsPanel(props: {
   readonly projectId?: ProjectId | null | undefined;
 }) {
   const [window, setWindow] = useState(() => makeCurrentWeekWindow());
-  const usage = useUsage(window, {
+  const selectedEnvironmentIds = useMemo(
+    () => new Set([props.environmentId]),
+    [props.environmentId],
+  );
+  const usage = useUsage(window, selectedEnvironmentIds, {
     environmentId: props.environmentId,
     ...(props.projectId === undefined ? {} : { projectId: props.projectId }),
   });

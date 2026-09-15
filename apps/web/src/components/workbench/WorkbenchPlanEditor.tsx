@@ -35,6 +35,7 @@ type PlanMoveState = typeof WorkbenchPlanMoveState.Type;
 export function PlanEditor(props: {
   readonly environmentId: EnvironmentId;
   readonly summary: WorkbenchPlanSummary;
+  readonly cwd?: string;
   readonly onPathChanged: (path: WorkbenchPlanPath) => void;
   readonly onListRefresh: () => void;
   readonly onDirtyChange: (path: WorkbenchPlanPath | null) => void;
@@ -244,6 +245,7 @@ export function PlanEditor(props: {
             text={draft}
             planPath={props.summary.path}
             environmentId={props.environmentId}
+            {...(props.cwd === undefined ? {} : { cwd: props.cwd })}
           />
         </div>
       )}

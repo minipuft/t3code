@@ -8,6 +8,7 @@ import { FilePlus2Icon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { cn } from "../../lib/utils";
+import { useProjects } from "../../state/entities";
 import { useWorkbenchPlanActions, useWorkbenchPlans } from "../../state/workbenchPlans";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -34,8 +35,29 @@ export function filterWorkbenchPlans(
     });
 }
 
+/**
+ * A plan's relative image links resolve against its own directory (WorkbenchPlanMarkdown), but
+ * that still needs an absolute anchor for the plan's environment. Plans aren't scoped to a single
+ * project, so this takes the environment's first project as a representative cwd — the same
+ * first-project convention WorkbenchSystemPanel already uses for this environment.
+ */
+export function resolveEnvironmentCwd(
+  projects: ReadonlyArray<{
+    readonly environmentId: EnvironmentId;
+    readonly workspaceRoot: string;
+  }>,
+  environmentId: EnvironmentId,
+): string | undefined {
+  return projects.find((project) => project.environmentId === environmentId)?.workspaceRoot;
+}
+
 export function WorkbenchPlansPanel(props: { readonly environmentId: EnvironmentId }) {
   const plans = useWorkbenchPlans(props.environmentId);
+  const projects = useProjects();
+  const cwd = useMemo(
+    () => resolveEnvironmentCwd(projects, props.environmentId),
+    [projects, props.environmentId],
+  );
   const [query, setQuery] = useState("");
   const [selectedPath, setSelectedPath] = useState<WorkbenchPlanPath | null>(null);
   const [dirtyPath, setDirtyPath] = useState<WorkbenchPlanPath | null>(null);
@@ -115,6 +137,7 @@ export function WorkbenchPlansPanel(props: { readonly environmentId: Environment
               key={`${props.environmentId}:${selectedPath}`}
               environmentId={props.environmentId}
               summary={selectedSummary}
+              {...(cwd === undefined ? {} : { cwd })}
               onPathChanged={setSelectedPath}
               onListRefresh={plans.refresh}
               onDirtyChange={setDirtyPath}

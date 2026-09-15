@@ -1,4 +1,5 @@
 import {
+  EnvironmentId,
   ProjectId,
   ProviderDriverKind,
   WorkbenchPlanPath,
@@ -13,7 +14,7 @@ import { groupCatalogItems, WorkbenchCatalogView } from "./WorkbenchCatalogView"
 import { WorkbenchModuleRail } from "./WorkbenchModuleRail";
 import { markdownHeadingBefore } from "./WorkbenchPlanAnnotations";
 import { resolveWorkbenchProjectSelection } from "./WorkbenchProjectLens";
-import { filterWorkbenchPlans, PlanList } from "./WorkbenchPlansPanel";
+import { filterWorkbenchPlans, PlanList, resolveEnvironmentCwd } from "./WorkbenchPlansPanel";
 import { authorityReason } from "./WorkbenchSystemPanel";
 import { resourceApplyInput } from "./WorkbenchResourceMutation";
 
@@ -221,6 +222,17 @@ describe("WorkbenchCatalogView", () => {
     expect(markup).toContain("Agent Workbench thread");
     expect(markup).toContain("2 threads");
     expect(markup).toContain('aria-current="true"');
+  });
+
+  it("resolves the plan editor's cwd from the environment's first project, yielding a defined imageBaseDir anchor", () => {
+    const environmentA = EnvironmentId.make("environment-a");
+    const environmentB = EnvironmentId.make("environment-b");
+    const projects = [
+      { environmentId: environmentB, workspaceRoot: "/repos/other" },
+      { environmentId: environmentA, workspaceRoot: "/repos/t3code" },
+    ];
+    expect(resolveEnvironmentCwd(projects, environmentA)).toBe("/repos/t3code");
+    expect(resolveEnvironmentCwd([], environmentA)).toBeUndefined();
   });
 
   it("anchors annotations to the nearest preceding Markdown heading", () => {

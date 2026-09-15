@@ -196,7 +196,7 @@ export function TopologyCards(props: {
 
   return (
     <section aria-labelledby="workbench-topology-heading" className="grid gap-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.5fr)]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.5fr)]">
         <div className="rounded-lg border border-border bg-card p-3">
           <div className="mb-2 flex items-center justify-between">
             <h2 id="workbench-topology-heading" className="text-sm font-semibold">

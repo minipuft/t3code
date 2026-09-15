@@ -128,7 +128,7 @@ export function WorkbenchCatalogView(props: {
             "grid min-h-0 gap-5",
             compact
               ? "grid-rows-[minmax(8rem,auto)_auto]"
-              : "lg:grid-cols-[minmax(15rem,0.8fr)_minmax(20rem,1.2fr)]",
+              : "lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]",
           )}
         >
           <div
@@ -151,7 +151,13 @@ export function WorkbenchCatalogView(props: {
               </section>
             ))}
           </div>
-          <div className="min-h-64">
+          <div
+            className={cn(
+              "min-h-64",
+              !compact &&
+                "lg:sticky lg:top-0 lg:self-start lg:max-h-[calc(100dvh-var(--workspace-topbar-height)-6rem)] lg:overflow-y-auto",
+            )}
+          >
             {selectedItem ? (
               <CatalogDetail
                 item={selectedItem}

@@ -103,7 +103,7 @@ export function WorkbenchPlansPanel(props: { readonly environmentId: Environment
           }
         />
       ) : (
-        <div className="grid min-h-0 gap-4 lg:grid-cols-[19rem_minmax(0,1fr)]">
+        <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)]">
           <PlanList
             items={items}
             selectedPath={selectedPath}

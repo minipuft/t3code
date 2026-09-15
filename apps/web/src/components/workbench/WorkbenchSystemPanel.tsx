@@ -212,7 +212,7 @@ export function WorkbenchSystemPanel(props: {
             description="The selected lens did not expose any governed resources."
           />
         ) : (
-          <div className="grid gap-5 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(24rem,1.2fr)]">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
             <div className="grid content-start gap-4">
               {groups.map((group) => (
                 <section key={group.label} className="grid gap-1">
@@ -245,7 +245,7 @@ export function WorkbenchSystemPanel(props: {
               ))}
             </div>
             {target ? (
-              <div className="grid content-start gap-4">
+              <div className="grid content-start gap-4 lg:sticky lg:top-0 lg:self-start lg:max-h-[calc(100dvh-var(--workspace-topbar-height)-6rem)] lg:overflow-y-auto">
                 <ResourceEditor
                   key={`${target.sourceId}:${target.relativePath}`}
                   environmentId={props.environmentId}
@@ -263,7 +263,7 @@ export function WorkbenchSystemPanel(props: {
                 />
               </div>
             ) : selected ? (
-              <div className="rounded-xl border border-border/60 bg-card p-5">
+              <div className="rounded-xl border border-border/60 bg-card p-5 lg:sticky lg:top-0 lg:self-start lg:max-h-[calc(100dvh-var(--workspace-topbar-height)-6rem)] lg:overflow-y-auto">
                 <h3 className="font-semibold">{selected.name}</h3>
                 <p className="mt-2 text-muted-foreground text-sm">
                   {selected.description || "No description"}
@@ -284,7 +284,7 @@ export function WorkbenchSystemPanel(props: {
                 />
               </div>
             ) : (
-              <div className="grid gap-4">
+              <div className="grid gap-4 lg:sticky lg:top-0 lg:self-start lg:max-h-[calc(100dvh-var(--workspace-topbar-height)-6rem)] lg:overflow-y-auto">
                 <WorkbenchEmptyState
                   title="Select a resource"
                   description="Canonical source, provenance, and editing controls appear here."

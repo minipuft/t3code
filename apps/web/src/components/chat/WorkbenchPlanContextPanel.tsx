@@ -32,7 +32,7 @@ import {
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { toastManager } from "../ui/toast";
-import { WorkbenchPlanMarkdown } from "./WorkbenchPlanMarkdown";
+import { WorkbenchPlanMarkdown } from "../workbench/WorkbenchPlanMarkdown";
 
 type PlanAssociation = WorkbenchPlanAssociations["references"][number];
 type PlanLens = "chat" | "project" | "all";

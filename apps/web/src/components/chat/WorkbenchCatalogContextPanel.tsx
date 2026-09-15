@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { useWorkflowCatalog } from "../../state/workflowCatalog";
 import { ScrollArea } from "../ui/scroll-area";
 import { Button } from "../ui/button";
-import { WorkbenchCatalogView } from "./WorkbenchCatalogView";
+import { WorkbenchCatalogView } from "../workbench/WorkbenchCatalogView";
 
 export function WorkbenchCatalogContextPanel(props: {
   readonly environmentId: EnvironmentId;

@@ -51,7 +51,7 @@ export function useWorkbenchPlans(environmentId: EnvironmentId): {
   };
 }
 
-export function useWorkbenchTopology(environmentId: EnvironmentId): {
+export function useWorkbenchRelationshipIndex(environmentId: EnvironmentId): {
   readonly data: WorkbenchTopology | null;
   readonly error: string | null;
   readonly isPending: boolean;

@@ -7,7 +7,7 @@ import type {
 import { useRef, useState } from "react";
 
 import { randomUUID } from "../../lib/utils";
-import { useWorkbenchTopology } from "../../state/workbenchPlans";
+import { useWorkbenchRelationshipIndex } from "../../state/workbenchPlans";
 import { useWorkbenchResourceActions } from "../../state/workbenchResources";
 import { Button } from "../ui/button";
 import { commandFailureMessage } from "./WorkbenchCommandFailure";
@@ -19,7 +19,9 @@ export function WorkbenchRelationshipIndexPanel(props: {
   readonly directLocal: boolean;
   readonly onOpenChanges: () => void;
 }) {
-  const { data, error, isPending, refresh, review } = useWorkbenchTopology(props.environmentId);
+  const { data, error, isPending, refresh, review } = useWorkbenchRelationshipIndex(
+    props.environmentId,
+  );
   const actions = useWorkbenchResourceActions(props.environmentId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mutationReview, setMutationReview] = useState<WorkbenchResourceMutationReview | null>(
@@ -29,16 +31,20 @@ export function WorkbenchRelationshipIndexPanel(props: {
   const [busy, setBusy] = useState(false);
   const [checkpoint, setCheckpoint] = useState(false);
 
-  if (error) return <WorkbenchEmptyState title="Topology unavailable" description={error} />;
+  if (error)
+    return <WorkbenchEmptyState title="Relationship index unavailable" description={error} />;
   if (isPending && data === null)
     return (
-      <WorkbenchEmptyState title="Loading topology…" description="Reading relationship evidence." />
+      <WorkbenchEmptyState
+        title="Loading relationship index…"
+        description="Reading relationship evidence."
+      />
     );
   if (data === null)
     return (
       <WorkbenchEmptyState
-        title="Topology unavailable"
-        description="No topology response was returned."
+        title="Relationship index unavailable"
+        description="No relationship index response was returned."
       />
     );
   if (!hasRelationshipEdges(data))
@@ -79,8 +85,8 @@ export function WorkbenchRelationshipIndexPanel(props: {
   };
 
   return (
-    <TopologyCards
-      topology={data}
+    <RelationshipIndexCards
+      relationshipIndex={data}
       selectedId={selectedId}
       onSelect={setSelectedId}
       onRefresh={refresh}
@@ -111,7 +117,7 @@ export function WorkbenchRelationshipSummary(props: {
   readonly candidateIds: readonly string[];
   readonly onOpenChanges: () => void;
 }) {
-  const { data, error, isPending } = useWorkbenchTopology(props.environmentId);
+  const { data, error, isPending } = useWorkbenchRelationshipIndex(props.environmentId);
   const [showIndex, setShowIndex] = useState(false);
   if (error || (isPending && data === null) || data === null || !hasRelationshipEdges(data))
     return null;
@@ -162,8 +168,8 @@ export function WorkbenchRelationshipSummary(props: {
 
 type ProposedEdge = WorkbenchTopology["proposed"][number];
 
-export function TopologyCards(props: {
-  readonly topology: WorkbenchTopology;
+export function RelationshipIndexCards(props: {
+  readonly relationshipIndex: WorkbenchTopology;
   readonly selectedId: string | null;
   readonly onSelect: (id: string) => void;
   readonly onRefresh: () => void;
@@ -179,16 +185,21 @@ export function TopologyCards(props: {
 }) {
   const nodeRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selected =
-    props.topology.nodes.find((node) => node.id === props.selectedId) ?? props.topology.nodes[0];
+    props.relationshipIndex.nodes.find((node) => node.id === props.selectedId) ??
+    props.relationshipIndex.nodes[0];
   const proposed = selected
-    ? props.topology.proposed.filter(
+    ? props.relationshipIndex.proposed.filter(
         (edge) => edge.source === selected.id || edge.target === selected.id,
       )
     : [];
 
   const moveFocus = (currentIndex: number, direction: -1 | 1) => {
-    const nextIndex = nextTopologyNodeIndex(currentIndex, direction, props.topology.nodes.length);
-    const node = props.topology.nodes[nextIndex];
+    const nextIndex = nextRelationshipNodeIndex(
+      currentIndex,
+      direction,
+      props.relationshipIndex.nodes.length,
+    );
+    const node = props.relationshipIndex.nodes[nextIndex];
     if (node === undefined) return;
     props.onSelect(node.id);
     nodeRefs.current[nextIndex]?.focus();
@@ -206,8 +217,8 @@ export function TopologyCards(props: {
               Refresh
             </Button>
           </div>
-          <ul aria-label="Topology nodes" className="space-y-1">
-            {props.topology.nodes.map((node, index) => (
+          <ul aria-label="Relationship index nodes" className="space-y-1">
+            {props.relationshipIndex.nodes.map((node, index) => (
               <li key={node.id}>
                 <button
                   ref={(element) => {
@@ -248,7 +259,7 @@ export function TopologyCards(props: {
               </div>
               <RelationshipList
                 title="Approved relationships"
-                items={props.topology.approved.filter(
+                items={props.relationshipIndex.approved.filter(
                   (edge) => edge.source === selected.id || edge.target === selected.id,
                 )}
               />
@@ -336,7 +347,7 @@ function findRelationshipNode(topology: WorkbenchTopology, candidateIds: readonl
   );
 }
 
-export function nextTopologyNodeIndex(current: number, direction: -1 | 1, count: number) {
+export function nextRelationshipNodeIndex(current: number, direction: -1 | 1, count: number) {
   if (count <= 0) return -1;
   return (current + direction + count) % count;
 }

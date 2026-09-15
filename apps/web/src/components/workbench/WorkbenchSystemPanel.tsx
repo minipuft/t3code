@@ -200,7 +200,7 @@ export function WorkbenchSystemPanel(props: {
 
       {view === "resources" ? (
         library.error ? (
-          <WorkbenchEmptyState title="Resource library unavailable" description={library.error} />
+          <WorkbenchEmptyState title="Resources unavailable" description={library.error} />
         ) : library.isPending && library.data === null ? (
           <WorkbenchEmptyState
             title="Loading resources"

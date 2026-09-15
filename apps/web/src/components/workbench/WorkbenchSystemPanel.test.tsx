@@ -84,7 +84,7 @@ vi.mock("../../state/workbenchResources", () => ({
 }));
 
 vi.mock("../../state/workbenchPlans", () => ({
-  useWorkbenchTopology: () => ({
+  useWorkbenchRelationshipIndex: () => ({
     data: null,
     error: null,
     isPending: false,
@@ -128,7 +128,7 @@ describe("WorkbenchSystemPanel", () => {
     state.libraryError = "Workbench capability is unavailable.";
     const markup = render(true);
     expect(markup).toContain("Resources");
-    expect(markup).toContain("Resource library unavailable");
+    expect(markup).toContain("Resources unavailable");
     expect(markup).toContain("Workbench capability is unavailable.");
     state.libraryError = null;
   });

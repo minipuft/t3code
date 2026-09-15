@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 const topologyState = vi.hoisted(() => ({ data: null as unknown }));
 
 vi.mock("../../state/workbenchPlans", () => ({
-  useWorkbenchTopology: () => ({
+  useWorkbenchRelationshipIndex: () => ({
     data: topologyState.data,
     error: null,
     isPending: false,
@@ -18,13 +18,13 @@ vi.mock("../../state/workbenchResources", () => ({
 }));
 
 import {
-  nextTopologyNodeIndex,
-  TopologyCards,
+  nextRelationshipNodeIndex,
+  RelationshipIndexCards,
   WorkbenchRelationshipIndexPanel,
   WorkbenchRelationshipSummary,
 } from "./WorkbenchRelationshipIndexPanel";
 
-const topology = {
+const relationshipIndex = {
   protocolVersion: "1.0.0",
   nodes: [
     { id: "project:a", kind: "project", label: "Alpha", provenance: "/work/alpha" },
@@ -44,7 +44,7 @@ const topology = {
 } as const;
 
 const baseProps = {
-  topology,
+  relationshipIndex,
   selectedId: "project:a",
   onSelect: vi.fn(),
   onRefresh: vi.fn(),
@@ -92,9 +92,11 @@ const resourceRelationshipTopology = {
   ],
 } as const;
 
-describe("Workbench topology", () => {
+describe("Workbench relationship index", () => {
   it("keeps remote topology readable while disabling relationship review", () => {
-    const markup = renderToStaticMarkup(<TopologyCards {...baseProps} directLocal={false} />);
+    const markup = renderToStaticMarkup(
+      <RelationshipIndexCards {...baseProps} directLocal={false} />,
+    );
     expect(markup).toContain("Read-only: relationship approval");
     expect(markup).toContain("Review relationship");
     expect(markup).toContain("disabled");
@@ -103,7 +105,7 @@ describe("Workbench topology", () => {
 
   it("renders the prepared exact diff and rollback handoff", () => {
     const markup = renderToStaticMarkup(
-      <TopologyCards
+      <RelationshipIndexCards
         {...baseProps}
         directLocal
         mutationReview={{
@@ -148,10 +150,10 @@ describe("Workbench topology", () => {
   });
 
   it("moves node focus with wraparound", () => {
-    expect(nextTopologyNodeIndex(0, 1, 2)).toBe(1);
-    expect(nextTopologyNodeIndex(1, 1, 2)).toBe(0);
-    expect(nextTopologyNodeIndex(0, -1, 2)).toBe(1);
-    expect(nextTopologyNodeIndex(0, 1, 0)).toBe(-1);
+    expect(nextRelationshipNodeIndex(0, 1, 2)).toBe(1);
+    expect(nextRelationshipNodeIndex(1, 1, 2)).toBe(0);
+    expect(nextRelationshipNodeIndex(0, -1, 2)).toBe(1);
+    expect(nextRelationshipNodeIndex(0, 1, 0)).toBe(-1);
   });
 
   it("renders the full index only when approved or proposed edges exist", () => {
@@ -164,9 +166,9 @@ describe("Workbench topology", () => {
       />,
     );
     expect(nodeOnlyMarkup).toContain("No relationship index");
-    expect(nodeOnlyMarkup).not.toContain("Topology nodes");
+    expect(nodeOnlyMarkup).not.toContain("Relationship index nodes");
 
-    topologyState.data = topology;
+    topologyState.data = relationshipIndex;
     const edgeMarkup = renderToStaticMarkup(
       <WorkbenchRelationshipIndexPanel
         environmentId={"environment-1" as never}
@@ -175,7 +177,7 @@ describe("Workbench topology", () => {
       />,
     );
     expect(edgeMarkup).toContain("Relationship Index");
-    expect(edgeMarkup).toContain("Topology nodes");
+    expect(edgeMarkup).toContain("Relationship index nodes");
     topologyState.data = null;
   });
 

@@ -157,29 +157,6 @@ export const AgentWorkbenchPlanAnnotations = Schema.Struct({
   markdown: Schema.String,
 });
 
-export const AgentWorkbenchVitals = Schema.Struct({
-  protocolVersion: AgentWorkbenchProtocolVersion,
-  capturedAt: Schema.String,
-  state: AgentWorkbenchCapabilityState,
-  reason: Schema.optionalKey(Schema.String),
-  windows: Schema.Array(
-    Schema.Struct({
-      id: TrimmedNonEmptyString,
-      label: TrimmedNonEmptyString,
-      provider: Schema.optionalKey(Schema.String),
-      providerInstanceId: Schema.optionalKey(Schema.String),
-      providerLabel: Schema.optionalKey(Schema.String),
-      usedPercent: Schema.NullOr(Schema.Number),
-      remainingPercent: Schema.NullOr(Schema.Number),
-      resetsAt: Schema.NullOr(Schema.String),
-      observedAt: Schema.NullOr(Schema.String),
-      source: Schema.Literals(["claude-oauth", "codex-app-server", "statusline-capture"]),
-      state: Schema.Literals(["available", "stale", "unavailable"]),
-    }),
-  ),
-});
-export type AgentWorkbenchVitals = typeof AgentWorkbenchVitals.Type;
-
 export const AgentWorkbenchCatalogEntry = Schema.Struct({
   id: TrimmedNonEmptyString,
   kind: Schema.Literals(["prompt", "skill", "rule"]),

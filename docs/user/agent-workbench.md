@@ -1,8 +1,7 @@
 # Agent Workbench
 
-Agent Workbench keeps plans, prompts, provider skills, and subscription vitals available in one
-native T3 Code view. Open it from the sidebar, command palette, or the Workbench link in the composer
-action menu.
+Agent Workbench keeps plans, prompts, and provider skills available in one native T3 Code view.
+Open it from the sidebar, command palette, or the Workbench link in the composer action menu.
 
 - **Plans** lists every project, opens rendered Markdown or editable source, and supports save,
   create, rename, move, and annotations when the current connection can operate on the environment.
@@ -24,14 +23,9 @@ action menu.
   Findings state whether each family is current, stale, missing, or unsupported and include the
   evidence used for that result. You can dismiss and restore a finding without changing its source.
   Repair remains a separate review, apply, and rollback workflow.
-- **Vitals** shows provider-reported used and remaining percentages, reset time, observation
-  freshness, and source. Missing provider facts stay unavailable; T3 Code does not estimate limits
-  or exhaustion from token counts.
 
-Project usage and Vitals answer different questions. Vitals reports account-level quota observed
-from a provider. Project usage attributes completed transcript records to environment-qualified
-projects and keeps unmatched records under **Unattributed**. Project totals do not consume or
-reconstruct the quota bar, and account quota is not divided among projects.
+Account limits and project usage live on the Usage page, not in the Workbench. See
+[Usage and limits](usage.md).
 
 Remote sessions with normal scopes can inspect the library but cannot unlock or edit canonical
 rules and hooks. An unlock expires after ten minutes and is cleared when its host lease ends. A
@@ -63,6 +57,3 @@ and Agents.
 - **Actions** and **Skills** provide compact versions of the shared workflow library. **Insert** adds
   an invocation to the current composer without sending it; **Copy** leaves the composer unchanged.
   Their **Open library** handoff leads to the full provenance, imports, and change-review surface.
-
-Vitals remains in the full Workbench because it is account-level information rather than chat
-context.

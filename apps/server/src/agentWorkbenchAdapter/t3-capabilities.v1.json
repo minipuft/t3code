@@ -82,18 +82,6 @@
       ]
     },
     {
-      "id": "vitals",
-      "state": "available",
-      "actions": [
-        {
-          "id": "read",
-          "label": "read",
-          "enabled": true,
-          "destructive": false
-        }
-      ]
-    },
-    {
       "id": "prompt-governance",
       "state": "available",
       "actions": [

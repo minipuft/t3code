@@ -53,19 +53,19 @@ active composer's existing imperative boundary rather than dispatching a turn.
 
 Plan Markdown uses the chat renderer for GFM, sanitized HTML, links, and images. Mermaid 11.17.2 is
 loaded only after a Mermaid fence appears, initializes with strict security, and leaves source plus
-an error/retry state visible when rendering fails. Vitals remains a full-page module.
+an error/retry state visible when rendering fails.
 
 ## Authorization
 
-| Operation                                                      | Environment scope       |
-| -------------------------------------------------------------- | ----------------------- |
-| Plans, plan associations/suggestions, vitals, catalog, prompts | `orchestration:read`    |
-| Plan association changes, save/move/rename/create/annotations  | `orchestration:operate` |
-| Prompt review/apply/rollback                                   | `access:write`          |
-| Resource library/source/authority/policy/ledger                | `orchestration:read`    |
-| Resource unlock/relock/review/apply/rollback                   | `access:write`          |
-| Topology, audit, projection health, project attribution        | `orchestration:read`    |
-| Relationship review, audit lifecycle, projection apply/undo    | `access:write`          |
+| Operation                                                     | Environment scope       |
+| ------------------------------------------------------------- | ----------------------- |
+| Plans, plan associations/suggestions, catalog, prompts        | `orchestration:read`    |
+| Plan association changes, save/move/rename/create/annotations | `orchestration:operate` |
+| Prompt review/apply/rollback                                  | `access:write`          |
+| Resource library/source/authority/policy/ledger               | `orchestration:read`    |
+| Resource unlock/relock/review/apply/rollback                  | `access:write`          |
+| Topology, audit, projection health, project attribution       | `orchestration:read`    |
+| Relationship review, audit lifecycle, projection apply/undo   | `access:write`          |
 
 Prompt apply and rollback carry a browser-generated idempotency request id. Agent Workbench forwards
 confirmed mutations to Claude Prompts MCP, which remains the sole writer and revision-history owner.

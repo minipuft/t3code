@@ -73,7 +73,6 @@ const provideCatalogRequest = <A, E, R>(effect: Effect.Effect<A, E, R>, canRead 
 
 const workbench = {
   listPlans: Effect.die(new Error("unused")),
-  vitals: Effect.die(new Error("unused")),
   planAssociations: () => Effect.die(new Error("unused")),
   mutatePlanAssociation: () => Effect.die(new Error("unused")),
   suggestPlans: () => Effect.die(new Error("unused")),

@@ -1820,7 +1820,7 @@ function OpenCommandPaletteDialog(props: {
   actionItems.push({
     kind: "action",
     value: "action:agent-workbench",
-    searchTerms: ["agent", "workbench", "plans", "prompts", "skills", "vitals", "workflows"],
+    searchTerms: ["agent", "workbench", "plans", "prompts", "skills", "workflows"],
     title: "Open Agent Workbench",
     icon: <PanelsTopLeftIcon className={ITEM_ICON_CLASS} />,
     run: async () => {

@@ -196,31 +196,3 @@ export const WorkbenchPlanAnnotationMutationInput = Schema.Union([
   }),
 ]);
 export type WorkbenchPlanAnnotationMutationInput = typeof WorkbenchPlanAnnotationMutationInput.Type;
-
-export const WorkbenchVitalsCapability = Schema.Struct({
-  status: Schema.Literals(["available", "partial", "unavailable"]),
-  reason: Schema.NullOr(Schema.String),
-});
-
-export const WorkbenchQuotaWindow = Schema.Struct({
-  id: TrimmedNonEmptyString,
-  provider: Schema.Literals(["claude", "codex"]),
-  providerInstanceId: TrimmedNonEmptyString,
-  providerLabel: TrimmedNonEmptyString,
-  label: TrimmedNonEmptyString,
-  usedPercent: Schema.NullOr(Schema.Number),
-  remainingPercent: Schema.NullOr(Schema.Number),
-  resetsAt: Schema.NullOr(Schema.String),
-  observedAt: Schema.NullOr(Schema.String),
-  source: Schema.Literals(["claude-oauth", "codex-app-server", "statusline-capture"]),
-  state: Schema.Literals(["available", "stale", "unavailable"]),
-});
-export type WorkbenchQuotaWindow = typeof WorkbenchQuotaWindow.Type;
-
-/** Account quota is provider-owned; absent windows stay absent rather than being estimated. */
-export const WorkbenchVitalsSnapshot = Schema.Struct({
-  capturedAt: Schema.NullOr(Schema.String),
-  capability: WorkbenchVitalsCapability,
-  windows: Schema.Array(WorkbenchQuotaWindow),
-});
-export type WorkbenchVitalsSnapshot = typeof WorkbenchVitalsSnapshot.Type;

@@ -84,18 +84,6 @@
           ]
         },
         {
-          "id": "vitals",
-          "state": "available",
-          "actions": [
-            {
-              "id": "read",
-              "label": "read",
-              "enabled": true,
-              "destructive": false
-            }
-          ]
-        },
-        {
           "id": "prompt-governance",
           "state": "available",
           "actions": [
@@ -263,18 +251,6 @@
             {
               "id": "detail",
               "label": "detail",
-              "enabled": true,
-              "destructive": false
-            }
-          ]
-        },
-        {
-          "id": "vitals",
-          "state": "available",
-          "actions": [
-            {
-              "id": "read",
-              "label": "read",
               "enabled": true,
               "destructive": false
             }
@@ -463,20 +439,6 @@
             {
               "id": "detail",
               "label": "detail",
-              "enabled": false,
-              "destructive": false,
-              "reason": "Agent Workbench is unavailable."
-            }
-          ]
-        },
-        {
-          "id": "vitals",
-          "state": "unavailable",
-          "reason": "Agent Workbench is unavailable.",
-          "actions": [
-            {
-              "id": "read",
-              "label": "read",
               "enabled": false,
               "destructive": false,
               "reason": "Agent Workbench is unavailable."

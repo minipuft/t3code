@@ -1,6 +1,5 @@
 import { ProjectId, type EnvironmentId } from "@t3tools/contracts";
 import {
-  ActivityIcon,
   BlocksIcon,
   BracesIcon,
   CloudIcon,
@@ -25,7 +24,6 @@ import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { WorkbenchCatalogPanel } from "./WorkbenchCatalogView";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
 import { WorkbenchPlansPanel } from "./WorkbenchPlansPanel";
-import { WorkbenchVitalsPanel } from "./WorkbenchVitalsPanel";
 import { WorkbenchSystemPanel } from "./WorkbenchResourceLibraryPanel";
 import { ScrollArea } from "../ui/scroll-area";
 import {
@@ -47,7 +45,6 @@ const MODULES: ReadonlyArray<{
   { id: "plans", label: "Plans", icon: <FileTextIcon /> },
   { id: "prompts", label: "Prompts", icon: <BracesIcon /> },
   { id: "skills", label: "Skills", icon: <BlocksIcon /> },
-  { id: "vitals", label: "Vitals", icon: <ActivityIcon /> },
   { id: "system", label: "System", icon: <Settings2Icon /> },
 ];
 
@@ -203,19 +200,6 @@ export function WorkbenchPage(props: {
                   key={`${effectiveEnvironmentId}:${props.activeModule}`}
                   environmentId={effectiveEnvironmentId}
                   module={props.activeModule}
-                />
-              )
-            ) : null}
-            {props.activeModule === "vitals" ? (
-              effectiveEnvironmentId === null ? (
-                <WorkbenchEmptyState
-                  title="No environment is connected"
-                  description="Connect an environment before reading usage and quota."
-                />
-              ) : (
-                <WorkbenchVitalsPanel
-                  environmentId={effectiveEnvironmentId}
-                  {...(effectiveProjectId === undefined ? {} : { projectId: effectiveProjectId })}
                 />
               )
             ) : null}

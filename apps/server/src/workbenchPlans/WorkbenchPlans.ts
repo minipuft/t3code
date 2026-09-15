@@ -7,7 +7,6 @@ import {
   type WorkbenchPlanAssociationMutationInput,
   type WorkbenchPlanAssociations,
   type AgentWorkbenchPlanList,
-  type AgentWorkbenchVitals,
   type AgentWorkbenchReviewInbox as RawReviewInbox,
   type AgentWorkbenchResourceLibrary as RawResourceLibrary,
   type AgentWorkbenchResourceMutationLedger as RawResourceMutationLedger,
@@ -25,8 +24,6 @@ import {
   type WorkbenchPlanSuggestionInput,
   type WorkbenchPlanSuggestions,
   type WorkbenchPlanSummary,
-  type WorkbenchQuotaWindow,
-  type WorkbenchVitalsSnapshot,
   type WorkbenchResourceApplyInput,
   type WorkbenchResourceAuthority,
   type WorkbenchResourceLibrary,
@@ -69,7 +66,6 @@ export class WorkbenchPlansAdapterError extends Data.TaggedError("WorkbenchPlans
 
 export interface WorkbenchPlansShape {
   readonly list: Effect.Effect<WorkbenchPlanList>;
-  readonly vitals: Effect.Effect<WorkbenchVitalsSnapshot>;
   readonly associations: (
     input: WorkbenchConversationInput,
   ) => Effect.Effect<WorkbenchPlanAssociations, WorkbenchPlansAdapterError>;
@@ -161,17 +157,6 @@ function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPlansShape
     list: workbench.listPlans.pipe(
       Effect.map(projectPlanList),
       Effect.orElseSucceed(() => unavailable("Agent Workbench plans are unavailable.")),
-    ),
-    vitals: workbench.vitals.pipe(
-      Effect.map(projectVitals),
-      Effect.orElseSucceed(() => ({
-        capturedAt: null,
-        capability: {
-          status: "unavailable" as const,
-          reason: "Agent Workbench vitals are unavailable.",
-        },
-        windows: [],
-      })),
     ),
     associations: (input) =>
       workbench
@@ -555,48 +540,6 @@ export function projectPlanList(value: AgentWorkbenchPlanList): WorkbenchPlanLis
       reason: value.reason ?? null,
     },
     items: [...new Map(items.map((item) => [item.path, item])).values()],
-  };
-}
-
-export function projectVitals(value: AgentWorkbenchVitals): WorkbenchVitalsSnapshot {
-  const windows = value.windows.flatMap((window): ReadonlyArray<WorkbenchQuotaWindow> => {
-    if (window.provider !== "claude" && window.provider !== "codex") return [];
-    return [
-      {
-        id: window.id,
-        provider: window.provider,
-        providerInstanceId: window.providerInstanceId ?? window.provider,
-        providerLabel: window.providerLabel ?? window.provider,
-        label: window.label,
-        usedPercent: window.usedPercent,
-        remainingPercent: window.remainingPercent,
-        resetsAt: window.resetsAt,
-        observedAt: window.observedAt,
-        source: window.source,
-        state: window.state,
-      },
-    ];
-  });
-  const partial =
-    value.state === "partial" || windows.some((window) => window.state !== "available");
-  return {
-    capturedAt: value.capturedAt,
-    capability: {
-      status:
-        value.state === "unavailable" || value.state === "unsupported"
-          ? "unavailable"
-          : partial
-            ? "partial"
-            : "available",
-      reason:
-        value.reason ??
-        (windows.length === 0
-          ? "No provider quota is currently reported."
-          : partial
-            ? "One or more provider quota observations are stale or unavailable."
-            : null),
-    },
-    windows,
   };
 }
 

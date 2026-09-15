@@ -13,7 +13,6 @@ import type {
   WorkbenchPlanSourceDocument,
   WorkbenchPlanSuggestionInput,
   WorkbenchPlanSuggestions,
-  WorkbenchVitalsSnapshot,
   WorkbenchResourceApplyInput,
   WorkbenchResourceAuthority,
   WorkbenchResourceLibrary,
@@ -163,20 +162,6 @@ export const suggestEnvironmentWorkbenchPlans = Effect.fn(
     request: (headers) => client.workbenchPlans.suggest({ payload: input.value, headers }),
   });
   return { ...suggestions, items: suggestions.items.slice(0, 3) };
-});
-
-export const fetchEnvironmentWorkbenchVitals = Effect.fn(
-  "clientRuntime.state.fetchEnvironmentWorkbenchVitals",
-)(function* (input: WorkbenchPlansRequestContext) {
-  const urlBuilder = makeEnvironmentHttpApiUrlBuilder(input.prepared.httpBaseUrl);
-  const requestUrl = urlBuilder.workbenchPlans.vitals();
-  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
-  return yield* executeRequest({
-    ...input,
-    method: "GET",
-    requestUrl,
-    request: (headers) => client.workbenchPlans.vitals({ headers }),
-  });
 });
 
 export const fetchEnvironmentWorkbenchTopology = Effect.fn(
@@ -552,9 +537,6 @@ export class WorkbenchPlansLoader extends Context.Service<
     readonly list: (
       prepared: PreparedConnection,
     ) => Effect.Effect<WorkbenchPlanList, RemoteEnvironmentRequestError>;
-    readonly vitals: (
-      prepared: PreparedConnection,
-    ) => Effect.Effect<WorkbenchVitalsSnapshot, RemoteEnvironmentRequestError>;
     readonly topology: (
       prepared: PreparedConnection,
     ) => Effect.Effect<WorkbenchTopology, RemoteEnvironmentRequestError>;
@@ -667,7 +649,6 @@ export const workbenchPlansLoaderLayer: Layer.Layer<
       effect.pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
     return WorkbenchPlansLoader.of({
       list: (prepared) => provideHttp(fetchEnvironmentWorkbenchPlans({ prepared, signer })),
-      vitals: (prepared) => provideHttp(fetchEnvironmentWorkbenchVitals({ prepared, signer })),
       topology: (prepared) => provideHttp(fetchEnvironmentWorkbenchTopology({ prepared, signer })),
       reviewRelationship: (prepared, value) =>
         provideHttp(reviewEnvironmentWorkbenchRelationship({ prepared, value, signer })),

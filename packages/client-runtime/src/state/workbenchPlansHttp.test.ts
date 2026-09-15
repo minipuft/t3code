@@ -12,7 +12,6 @@ import {
   fetchEnvironmentWorkbenchPlanAnnotations,
   fetchEnvironmentWorkbenchPlanSource,
   fetchEnvironmentWorkbenchPlans,
-  fetchEnvironmentWorkbenchVitals,
   fetchEnvironmentWorkbenchTopology,
   applyEnvironmentWorkbenchProjection,
   executeWorkbenchReviewInboxCommand,
@@ -271,52 +270,6 @@ describe("Workbench plan environment HTTP", () => {
       expect(result.items).toEqual([]);
       expect(String(calls[0]?.[0])).toBe("https://environment.example.test/api/workbench/plans");
       expect(calls[0]?.[1].method).toBe("GET");
-      expect(calls[0]?.[1].credentials).toBe("include");
-    }),
-  );
-
-  it.effect("reads quota through the authenticated environment instead of the browser source", () =>
-    Effect.gen(function* () {
-      const calls: Array<readonly [RequestInfo | URL, RequestInit]> = [];
-      const fetchFn = ((request, init) => {
-        calls.push([request, init ?? {}]);
-        return Promise.resolve(
-          Response.json({
-            capturedAt: "2026-08-27T00:00:00.000Z",
-            capability: { status: "partial", reason: "One window is stale." },
-            windows: [
-              {
-                id: "codex-work:weekly",
-                provider: "codex",
-                providerInstanceId: "codex-work",
-                providerLabel: "Codex · codex-work",
-                label: "Weekly",
-                usedPercent: null,
-                remainingPercent: null,
-                resetsAt: "2026-08-31T05:43:21.000Z",
-                observedAt: "2026-08-26T23:58:00.000Z",
-                source: "codex-app-server",
-                state: "stale",
-              },
-            ],
-          }),
-        );
-      }) satisfies typeof fetch;
-
-      const result = yield* fetchEnvironmentWorkbenchVitals({
-        prepared: PREPARED,
-        signer: Option.none(),
-      }).pipe(Effect.provide(remoteHttpClientLayer(fetchFn)));
-
-      expect(result.capability.status).toBe("partial");
-      expect(result.windows[0]).toMatchObject({
-        providerInstanceId: "codex-work",
-        usedPercent: null,
-        resetsAt: "2026-08-31T05:43:21.000Z",
-        source: "codex-app-server",
-        state: "stale",
-      });
-      expect(String(calls[0]?.[0])).toBe("https://environment.example.test/api/workbench/vitals");
       expect(calls[0]?.[1].credentials).toBe("include");
     }),
   );

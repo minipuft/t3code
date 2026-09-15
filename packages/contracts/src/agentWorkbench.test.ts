@@ -4,44 +4,12 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   AgentWorkbenchPromptDetail,
   AgentWorkbenchResourceMutationReview,
-  AgentWorkbenchVitals,
 } from "./agentWorkbench.ts";
 
-const decodeVitals = Schema.decodeUnknownSync(AgentWorkbenchVitals);
 const decodePromptDetail = Schema.decodeUnknownSync(AgentWorkbenchPromptDetail);
 const decodeResourceReview = Schema.decodeUnknownSync(AgentWorkbenchResourceMutationReview);
 
 describe("Agent Workbench contracts", () => {
-  it("decodes provider-reported quota with provenance and no forecast fields", () => {
-    const decoded = decodeVitals({
-      protocolVersion: "1.0.0",
-      capturedAt: "2026-08-27T00:00:00.000Z",
-      state: "available",
-      windows: [
-        {
-          id: "claude-weekly",
-          provider: "claude",
-          providerInstanceId: "claude",
-          providerLabel: "Claude",
-          label: "7-day",
-          usedPercent: 35,
-          remainingPercent: 65,
-          resetsAt: null,
-          observedAt: "2026-08-26T23:58:00.000Z",
-          source: "claude-oauth",
-          state: "available",
-        },
-      ],
-    });
-
-    expect(decoded.windows[0]).toMatchObject({
-      remainingPercent: 65,
-      observedAt: "2026-08-26T23:58:00.000Z",
-      source: "claude-oauth",
-    });
-    expect("binding" in decoded).toBe(false);
-  });
-
   it("preserves nullable prompt content from the authority", () => {
     const decoded = decodePromptDetail({
       state: "read-only",

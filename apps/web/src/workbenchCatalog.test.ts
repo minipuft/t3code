@@ -48,7 +48,8 @@ describe("workbench catalog projection", () => {
     expect(parseWorkbenchModule("library")).toBe("plans");
     expect(parseWorkbenchModule("topology")).toBe("plans");
     expect(parseWorkbenchModule("audit")).toBe("plans");
-    expect(WORKBENCH_MODULES).toEqual(["plans", "prompts", "skills", "vitals", "system"]);
+    expect(parseWorkbenchModule("vitals")).toBe("plans");
+    expect(WORKBENCH_MODULES).toEqual(["plans", "prompts", "skills", "system"]);
     expect(parseWorkbenchModule("unknown")).toBe("plans");
     expect(parseWorkbenchModule(undefined)).toBe("plans");
   });

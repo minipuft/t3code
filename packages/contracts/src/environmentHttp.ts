@@ -82,7 +82,6 @@ import {
   WorkbenchPlanSourceDocument,
   WorkbenchPlanSuggestionInput,
   WorkbenchPlanSuggestions,
-  WorkbenchVitalsSnapshot,
 } from "./workbenchPlans.ts";
 import {
   WorkbenchResourceApplyInput,
@@ -786,19 +785,6 @@ class EnvironmentWorkbenchPlansHttpApi extends HttpApiGroup.make("workbenchPlans
       .annotate(
         OpenApi.Description,
         "Returns up to three advisory lexical matches for the explicitly supplied thread and first-message text. Requires orchestration:read and never binds a plan.",
-      ),
-  )
-  .add(
-    HttpApiEndpoint.get("vitals", "/api/workbench/vitals", {
-      headers: OptionalBearerHeaders,
-      success: WorkbenchVitalsSnapshot,
-      error: EnvironmentOrchestrationSnapshotErrors,
-    })
-      .middleware(EnvironmentAuthenticatedAuth)
-      .annotate(OpenApi.Summary, "Read provider-owned Workbench quota windows")
-      .annotate(
-        OpenApi.Description,
-        "Returns provider-reported subscription quota windows through the configured Workbench adapter. Requires orchestration:read. Missing windows are returned as an empty array and are never estimated from token usage.",
       ),
   )
   .add(

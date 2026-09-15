@@ -8,11 +8,8 @@ cost. These estimates are not your subscription bill.
 
 The project usage view attributes persisted transcript records once, qualifies project identity by
 environment, and leaves records without matching workspace evidence under **Unattributed**.
-These totals describe observed activity, not subscription headroom.
-
-Agent Workbench Vitals keeps transcript-derived project usage separate from provider-reported
-account quota percentages and reset times. Unknown or stale quota stays unknown or stale; token
-costs are not used to estimate headroom or forecast exhaustion.
+These totals describe observed activity, not subscription headroom, and token costs are never used
+to estimate headroom or forecast exhaustion.
 
 Totals depend on the history available on each server. Grok turns without a saved completed-turn
 record are missing from the totals.

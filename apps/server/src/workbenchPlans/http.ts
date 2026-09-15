@@ -164,12 +164,6 @@ export const workbenchPlansHttpApiLayer = HttpApiBuilder.group(
           Effect.andThen(handleReadAdapterError(plans.suggest(payload))),
         ),
       )
-      .handle("vitals", ({ endpoint }) =>
-        annotateEnvironmentRequest(endpoint.name).pipe(
-          Effect.andThen(requireEnvironmentScope(AuthOrchestrationReadScope)),
-          Effect.andThen(plans.vitals),
-        ),
-      )
       .handle("list", ({ endpoint }) =>
         annotateEnvironmentRequest(endpoint.name).pipe(
           Effect.andThen(requireEnvironmentScope(AuthOrchestrationReadScope)),

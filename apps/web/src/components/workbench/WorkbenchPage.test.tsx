@@ -11,7 +11,8 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { groupCatalogItems, WorkbenchCatalogView } from "./WorkbenchCatalogView";
 import { resolveWorkbenchProjectSelection, WorkbenchModuleRail } from "./WorkbenchPage";
-import { filterWorkbenchPlans, markdownHeadingBefore, PlanList } from "./WorkbenchPlansPanel";
+import { markdownHeadingBefore } from "./WorkbenchPlanAnnotations";
+import { filterWorkbenchPlans, PlanList } from "./WorkbenchPlansPanel";
 import { authorityReason } from "./WorkbenchResourceLibraryPanel";
 import { resourceApplyInput } from "./WorkbenchResourceMutation";
 
@@ -89,20 +90,18 @@ describe("WorkbenchCatalogView", () => {
       resolveWorkbenchProjectSelection({ selectedProjectId: null, availableProjectIds: available }),
     ).toBeNull();
   });
-  it("keeps all five modules directly visible with one active item", () => {
+  it("keeps all four modules directly visible with one active item", () => {
     const markup = renderToStaticMarkup(
       <WorkbenchModuleRail activeModule="skills" onChange={() => {}} />,
     );
     expect(markup).toContain("Plans");
     expect(markup).toContain("Prompts");
     expect(markup).toContain("Skills");
-    expect(markup).toContain("Vitals");
     expect(markup).toContain("System");
     expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
     expect(markup.indexOf(">Plans</button>")).toBeLessThan(markup.indexOf(">Prompts</button>"));
     expect(markup.indexOf(">Prompts</button>")).toBeLessThan(markup.indexOf(">Skills</button>"));
-    expect(markup.indexOf(">Skills</button>")).toBeLessThan(markup.indexOf(">Vitals</button>"));
-    expect(markup.indexOf(">Vitals</button>")).toBeLessThan(markup.indexOf(">System</button>"));
+    expect(markup.indexOf(">Skills</button>")).toBeLessThan(markup.indexOf(">System</button>"));
   });
 
   it("renders only the selected catalog kind", () => {

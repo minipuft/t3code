@@ -1,15 +1,10 @@
-import {
-  WorkbenchPlanPath,
-  type AgentWorkbenchPlanList,
-  type AgentWorkbenchVitals,
-} from "@t3tools/contracts";
+import { WorkbenchPlanPath, type AgentWorkbenchPlanList } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   projectAssociations,
   projectPlanList,
   projectSuggestions,
-  projectVitals,
   projectResourceLibrary,
   projectResourceLedger,
   projectReviewInbox,
@@ -262,47 +257,6 @@ describe("Agent Workbench plan projection", () => {
       plans: [...input.plans, { ...input.plans[0]!, id: "inventory-copy" }],
     });
     expect(duplicatePath.items).toHaveLength(1);
-  });
-
-  it("keeps nullable provider facts, absolute reset time, and provenance", () => {
-    const input: AgentWorkbenchVitals = {
-      protocolVersion: "1.0.0",
-      capturedAt: "2026-08-27T00:00:00.000Z",
-      state: "partial",
-      windows: [
-        {
-          id: "claude-weekly",
-          label: "7-day",
-          provider: "claude",
-          providerInstanceId: "claude",
-          providerLabel: "Claude",
-          usedPercent: null,
-          remainingPercent: null,
-          resetsAt: "2026-08-31T05:43:21.000Z",
-          observedAt: "2026-08-26T23:58:00.000Z",
-          source: "claude-oauth",
-          state: "stale",
-        },
-      ],
-    };
-
-    const projected = projectVitals(input);
-    expect(projected.capability.status).toBe("partial");
-    expect(projected.capturedAt).toBe("2026-08-27T00:00:00.000Z");
-    expect(projected.windows[0]).toEqual({
-      id: "claude-weekly",
-      provider: "claude",
-      providerInstanceId: "claude",
-      providerLabel: "Claude",
-      label: "7-day",
-      usedPercent: null,
-      remainingPercent: null,
-      resetsAt: "2026-08-31T05:43:21.000Z",
-      observedAt: "2026-08-26T23:58:00.000Z",
-      source: "claude-oauth",
-      state: "stale",
-    });
-    expect("binding" in projected).toBe(false);
   });
 
   it("degrades unsupported portable state without affecting other server capabilities", () => {

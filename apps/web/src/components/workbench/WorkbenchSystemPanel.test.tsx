@@ -93,7 +93,7 @@ vi.mock("../../state/workbenchPlans", () => ({
   }),
 }));
 
-import { WorkbenchSystemPanel } from "./WorkbenchResourceLibraryPanel";
+import { WorkbenchSystemPanel } from "./WorkbenchSystemPanel";
 
 function render(directLocal: boolean) {
   return renderToStaticMarkup(

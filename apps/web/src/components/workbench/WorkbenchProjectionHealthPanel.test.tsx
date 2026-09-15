@@ -57,17 +57,17 @@ vi.mock("../../state/workbenchResources", () => ({
   }),
 }));
 
-import { WorkbenchAuditPanel } from "./WorkbenchAuditPanel";
+import { WorkbenchProjectionHealthPanel } from "./WorkbenchProjectionHealthPanel";
 
 const render = (directLocal: boolean) =>
   renderToStaticMarkup(
-    <WorkbenchAuditPanel
+    <WorkbenchProjectionHealthPanel
       environmentId={EnvironmentId.make("environment-1")}
       directLocal={directLocal}
     />,
   );
 
-describe("WorkbenchAuditPanel", () => {
+describe("WorkbenchProjectionHealthPanel", () => {
   it("reports an unavailable audit instead of treating it as an empty result", () => {
     state.error = "Workbench capability is unavailable.";
     const markup = render(true);

@@ -20,9 +20,9 @@ vi.mock("../../state/workbenchResources", () => ({
 import {
   nextTopologyNodeIndex,
   TopologyCards,
+  WorkbenchRelationshipIndexPanel,
   WorkbenchRelationshipSummary,
-  WorkbenchTopologyPanel,
-} from "./WorkbenchTopologyPanel";
+} from "./WorkbenchRelationshipIndexPanel";
 
 const topology = {
   protocolVersion: "1.0.0",
@@ -157,7 +157,7 @@ describe("Workbench topology", () => {
   it("renders the full index only when approved or proposed edges exist", () => {
     topologyState.data = nodeOnlyTopology;
     const nodeOnlyMarkup = renderToStaticMarkup(
-      <WorkbenchTopologyPanel
+      <WorkbenchRelationshipIndexPanel
         environmentId={"environment-1" as never}
         directLocal
         onOpenChanges={vi.fn()}
@@ -168,7 +168,7 @@ describe("Workbench topology", () => {
 
     topologyState.data = topology;
     const edgeMarkup = renderToStaticMarkup(
-      <WorkbenchTopologyPanel
+      <WorkbenchRelationshipIndexPanel
         environmentId={"environment-1" as never}
         directLocal
         onOpenChanges={vi.fn()}

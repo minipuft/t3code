@@ -20,7 +20,7 @@ type ReviewState = WorkbenchProjectionReview & {
   readonly receipt?: WorkbenchProjectionReceipt;
 };
 
-export function WorkbenchAuditPanel(props: {
+export function WorkbenchProjectionHealthPanel(props: {
   readonly environmentId: EnvironmentId;
   readonly directLocal: boolean;
   readonly embedded?: boolean;

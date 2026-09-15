@@ -24,7 +24,7 @@ import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { WorkbenchCatalogPanel } from "./WorkbenchCatalogView";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
 import { WorkbenchPlansPanel } from "./WorkbenchPlansPanel";
-import { WorkbenchSystemPanel } from "./WorkbenchResourceLibraryPanel";
+import { WorkbenchSystemPanel } from "./WorkbenchSystemPanel";
 import { ScrollArea } from "../ui/scroll-area";
 import {
   Select,

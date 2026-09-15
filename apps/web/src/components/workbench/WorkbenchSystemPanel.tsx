@@ -31,8 +31,8 @@ import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
 import { resourceApplyInput } from "./WorkbenchResourceMutation";
-import { WorkbenchAuditPanel } from "./WorkbenchAuditPanel";
-import { WorkbenchRelationshipSummary } from "./WorkbenchTopologyPanel";
+import { WorkbenchProjectionHealthPanel } from "./WorkbenchProjectionHealthPanel";
+import { WorkbenchRelationshipSummary } from "./WorkbenchRelationshipIndexPanel";
 
 type ResourceEntry = WorkbenchResourceLibrary["entries"][number];
 type View = "resources" | "inbox" | "changes";
@@ -312,7 +312,7 @@ export function WorkbenchSystemPanel(props: {
           />
         ) : (
           <div className="grid gap-5">
-            <WorkbenchAuditPanel
+            <WorkbenchProjectionHealthPanel
               environmentId={props.environmentId}
               directLocal={props.directLocal}
               embedded

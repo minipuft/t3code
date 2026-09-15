@@ -13,7 +13,7 @@ import { groupCatalogItems, WorkbenchCatalogView } from "./WorkbenchCatalogView"
 import { resolveWorkbenchProjectSelection, WorkbenchModuleRail } from "./WorkbenchPage";
 import { markdownHeadingBefore } from "./WorkbenchPlanAnnotations";
 import { filterWorkbenchPlans, PlanList } from "./WorkbenchPlansPanel";
-import { authorityReason } from "./WorkbenchResourceLibraryPanel";
+import { authorityReason } from "./WorkbenchSystemPanel";
 import { resourceApplyInput } from "./WorkbenchResourceMutation";
 
 const catalog: WorkflowCatalogList = {

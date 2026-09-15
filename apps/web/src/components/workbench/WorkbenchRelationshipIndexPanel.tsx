@@ -14,7 +14,7 @@ import { Button } from "../ui/button";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
 import { resourceApplyInput } from "./WorkbenchResourceMutation";
 
-export function WorkbenchTopologyPanel(props: {
+export function WorkbenchRelationshipIndexPanel(props: {
   readonly environmentId: EnvironmentId;
   readonly directLocal: boolean;
   readonly onOpenChanges: () => void;
@@ -150,7 +150,7 @@ export function WorkbenchRelationshipSummary(props: {
         </p>
       ) : null}
       {showIndex ? (
-        <WorkbenchTopologyPanel
+        <WorkbenchRelationshipIndexPanel
           environmentId={props.environmentId}
           directLocal={props.directLocal}
           onOpenChanges={props.onOpenChanges}

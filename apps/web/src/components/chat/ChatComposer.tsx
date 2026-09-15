@@ -5001,6 +5001,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       {workflowPicker.actionsVisible ? (
         <ComposerWorkflowActionsControl
           compact={composerControlsInStrip || composerControlsCompact}
+          size={composerControlsInStrip ? "xs" : "sm"}
           open={workflowPickerOpen}
           onToggle={() => {
             setIsStashMenuOpen(false);

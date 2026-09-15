@@ -465,6 +465,7 @@ function ContextPlanReader(props: {
       <WorkbenchPlanMarkdown
         text={source.data.text}
         {...(props.cwd === undefined ? {} : { cwd: props.cwd })}
+        planPath={props.path}
         environmentId={props.environmentId}
         threadRef={props.threadRef}
       />

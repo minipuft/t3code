@@ -5,6 +5,7 @@ import { useEffect, useId, useState } from "react";
 import ChatMarkdown from "../ChatMarkdown";
 import { Button } from "../ui/button";
 import { cn } from "../../lib/utils";
+import { resolvePathLinkTarget } from "../../terminal-links";
 
 export type WorkbenchMarkdownSegment =
   | { readonly kind: "markdown"; readonly offset: number; readonly text: string }
@@ -125,14 +126,31 @@ function MermaidDiagram(props: { readonly source: string }) {
   );
 }
 
+/**
+ * Mirrors FileMarkdownPreview's derivation: a plan's relative image links resolve against the
+ * plan file's own directory, not the environment's cwd. Needs both the plan's path and the cwd
+ * it is relative to; callers missing either leave imageBaseDir undefined and ChatMarkdown falls
+ * back to resolving against cwd (or blocking, if cwd is also absent).
+ */
+function derivePlanImageBaseDir(
+  planPath: string | undefined,
+  cwd: string | undefined,
+): string | undefined {
+  if (!planPath || !cwd) return undefined;
+  const lastSeparator = Math.max(planPath.lastIndexOf("/"), planPath.lastIndexOf("\\"));
+  return lastSeparator >= 0 ? resolvePathLinkTarget(planPath.slice(0, lastSeparator), cwd) : cwd;
+}
+
 export function WorkbenchPlanMarkdown(props: {
   readonly text: string;
   readonly cwd?: string;
+  readonly planPath?: string;
   readonly environmentId?: EnvironmentId;
   readonly threadRef?: ScopedThreadRef;
   readonly className?: string;
 }) {
   const segments = splitWorkbenchMarkdown(props.text);
+  const imageBaseDir = derivePlanImageBaseDir(props.planPath, props.cwd);
   return (
     <div className={cn("min-w-0", props.className)} data-workbench-plan-markdown>
       {segments.map((segment) =>
@@ -143,6 +161,7 @@ export function WorkbenchPlanMarkdown(props: {
             key={`markdown:${segment.offset}`}
             text={segment.text}
             cwd={props.cwd}
+            imageBaseDir={imageBaseDir}
             environmentId={props.environmentId}
             threadRef={props.threadRef}
             parseRawHtml

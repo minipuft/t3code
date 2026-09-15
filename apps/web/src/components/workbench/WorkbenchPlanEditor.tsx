@@ -240,7 +240,11 @@ export function PlanEditor(props: {
           className="min-h-[28rem] rounded-lg border border-border/60 bg-background/48 p-5"
           aria-label="Rendered plan"
         >
-          <WorkbenchPlanMarkdown text={draft} environmentId={props.environmentId} />
+          <WorkbenchPlanMarkdown
+            text={draft}
+            planPath={props.summary.path}
+            environmentId={props.environmentId}
+          />
         </div>
       )}
 

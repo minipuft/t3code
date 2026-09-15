@@ -411,9 +411,8 @@ function RightPanelEmptyState(props: {
       ? [
           {
             label: "Plan",
-            description: "Keep this thread's plans in view.",
             icon: BookOpenText,
-            shortcut: "L",
+            shortcut: "N",
             available: true,
             disabledReason: "",
             onClick: props.workbenchSurfaces.onAddPlan,
@@ -421,7 +420,6 @@ function RightPanelEmptyState(props: {
           },
           {
             label: "Actions",
-            description: "Find and insert prompt workflows.",
             icon: Sparkles,
             shortcut: "Q",
             available: true,
@@ -431,7 +429,6 @@ function RightPanelEmptyState(props: {
           },
           {
             label: "Skills",
-            description: "Browse the active skill library.",
             icon: GraduationCap,
             shortcut: "S",
             available: true,
@@ -977,7 +974,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           {
             label: "Plan",
             icon: BookOpenText,
-            shortcut: "L",
+            shortcut: "N",
             available: true,
             disabledReason: "",
             onClick: props.workbenchSurfaces.onAddPlan,

@@ -237,7 +237,7 @@ describe("Workbench surfaces", () => {
     expect(html).toContain("Plan");
     expect(html).toContain("Actions");
     expect(html).toContain("Skills");
-    expect(html).toContain('data-surface-launcher-keys="BLQS"');
+    expect(html).toContain('data-surface-launcher-keys="BNQS"');
   });
 });
 

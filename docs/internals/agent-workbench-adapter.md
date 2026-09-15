@@ -11,21 +11,21 @@ loopback endpoint or starts the pinned `~/.local/bin/agent-workbench` launcher, 
 released by the server layer finalizer. Request or sidecar failure resets only this adapter; provider
 sessions and chat remain available.
 
-The sidecar projects portable plans, catalog entries, provider quota windows, project attribution,
-bindings, topology, projection audits, and prompt governance. T3 maps those semantic contracts into
-native environment HTTP contracts and components. No browser credential can reach the sidecar
-token, seed filesystem routes, or Claude Prompts authority credentials.
+The sidecar projects portable plans, catalog entries, provider quota windows, bindings, topology,
+projection audits, and prompt governance. T3 maps those semantic contracts into native environment
+HTTP contracts and components. No browser credential can reach the sidecar token, seed filesystem
+routes, or Claude Prompts authority credentials.
 
 Quota windows cross this boundary as provider observations: nullable used/remaining percentages,
 an absolute reset timestamp, observation timestamp, source, provider-instance identity, and window
 state. T3 may derive a display countdown from the absolute timestamp, but does not reconstruct reset
 truth from response time or add exhaustion forecasts.
 
-Project usage follows the opposite ownership direction. T3 scans provider-owned transcript state,
-deduplicates physical records, assigns environment-qualified project identities, and publishes the
-result to Agent Workbench under the active lease. Agent Workbench does not scan provider transcripts
-or infer project usage from account quota. Releasing the lease removes that host projection;
-missing or incompatible host data stays explicitly unavailable.
+Project usage attribution stays entirely inside T3. T3 scans provider-owned transcript state,
+deduplicates physical records, and assigns environment-qualified project identities for its own
+Usage page. It does not publish that projection to Agent Workbench, and Agent Workbench does not
+scan provider transcripts or infer project usage from account quota; the two ownership domains meet
+only at the quota-window boundary above.
 
 Workspace version 3 is the only runtime configuration accepted by this integration. It owns
 registered resource sources, projects, categories, groups, and approved relationships. Relationship
@@ -64,7 +64,7 @@ an error/retry state visible when rendering fails.
 | Prompt review/apply/rollback                                  | `access:write`          |
 | Resource library/source/authority/policy/ledger               | `orchestration:read`    |
 | Resource unlock/relock/review/apply/rollback                  | `access:write`          |
-| Topology, audit, projection health, project attribution       | `orchestration:read`    |
+| Topology, audit, projection health                            | `orchestration:read`    |
 | Relationship review, audit lifecycle, projection apply/undo   | `access:write`          |
 
 Prompt apply and rollback carry a browser-generated idempotency request id. Agent Workbench forwards

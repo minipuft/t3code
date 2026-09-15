@@ -12,17 +12,19 @@ Open it from the sidebar, command palette, or the Workbench link in the composer
   or confirming a rollback.
 - **Skills** groups the skills reported by the environment's providers and keeps the `$name`
   invocation copyable.
-- **Library** groups prompts, skills, rules, hooks, and plans by category and source. Switch between
-  the global inventory and a project's effective view, inspect inert imports, and review previous
-  change receipts. Canonical rule and hook source is editable only after an explicit local-session
-  unlock; review shows the exact diff and validator evidence before Apply becomes available.
-- **Topology** shows projects, repositories, resource sources, and projection targets as a grouped
-  relationship index. Approved relationships and proposed discoveries remain separate. A discovery
-  can become workspace configuration only after you review and apply its exact diff.
-- **Audit** compares the configured Claude, Codex, and OpenCode projections with their sources.
-  Findings state whether each family is current, stale, missing, or unsupported and include the
-  evidence used for that result. You can dismiss and restore a finding without changing its source.
-  Repair remains a separate review, apply, and rollback workflow.
+- **System** groups prompts, skills, rules, hooks, and plans by category and source, and covers the
+  environment's governance workflow in three views:
+  - **Resources** switches between the global inventory and a project's effective view, inspects
+    inert imports, and opens a resource's relationship index — approved relationships and proposed
+    discoveries for that resource or project, kept separate until you review and apply an exact
+    diff. Canonical rule and hook source is editable only after an explicit local-session unlock;
+    review shows the exact diff and validator evidence before Apply becomes available.
+  - **Inbox** compares the configured Claude, Codex, and OpenCode projections with their sources.
+    Findings state whether each family is current, stale, missing, or unsupported and include the
+    evidence used for that result. You can dismiss and restore a finding without changing its
+    source. Repair remains a separate review, apply, and rollback workflow.
+  - **Changes** lists applied canonical mutations with a rollback receipt for each, and lets an
+    unlocked session roll one back.
 
 Account limits and project usage live on the Usage page, not in the Workbench. See
 [Usage and limits](usage.md).

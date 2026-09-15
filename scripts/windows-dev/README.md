@@ -18,6 +18,13 @@ Use this boundary before operations that mutate a live checkout:
 
 Read-only inspection and work in a separate WSL checkout or worktree do not require the gate.
 
+The WSL source must be a complete clone. A partial clone (`--filter=blob:none`, any remote with
+`promisor = true`) cannot serve upload-pack to the Windows checkout; Git aborts with "possible
+repository corruption on the remote side". `ensure-complete-source.sh` runs before the Windows
+fetch, backfills missing objects by ID from every remote, and removes the partial-clone
+configuration. It exits `74` and leaves the configuration in place when no remote can serve an
+object.
+
 Server-only development has a narrower safe path while the client is open:
 
 ```bash

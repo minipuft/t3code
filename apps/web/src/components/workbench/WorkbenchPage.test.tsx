@@ -10,8 +10,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import { groupCatalogItems, WorkbenchCatalogView } from "./WorkbenchCatalogView";
-import { resolveWorkbenchProjectSelection, WorkbenchModuleRail } from "./WorkbenchPage";
+import { WorkbenchModuleRail } from "./WorkbenchModuleRail";
 import { markdownHeadingBefore } from "./WorkbenchPlanAnnotations";
+import { resolveWorkbenchProjectSelection } from "./WorkbenchProjectLens";
 import { filterWorkbenchPlans, PlanList } from "./WorkbenchPlansPanel";
 import { authorityReason } from "./WorkbenchSystemPanel";
 import { resourceApplyInput } from "./WorkbenchResourceMutation";

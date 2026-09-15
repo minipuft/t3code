@@ -1,7 +1,4 @@
-import {
-  squashAtomCommandFailure,
-  type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
+import { type AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import type {
   EnvironmentId,
   WorkbenchProjectionReceipt,
@@ -14,6 +11,7 @@ import { useState } from "react";
 import { useWorkbenchAuditActions, useWorkbenchReviewInbox } from "../../state/workbenchResources";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { commandFailureMessage } from "./WorkbenchCommandFailure";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
 
 type ReviewState = WorkbenchProjectionReview & {
@@ -42,7 +40,7 @@ export function WorkbenchProjectionHealthPanel(props: {
   const settle = async (effect: Promise<AtomCommandResult<unknown, unknown>>) => {
     const result = await effect;
     if (result._tag === "Failure") {
-      setMessage(commandFailureMessage(result));
+      setMessage(commandFailureMessage(result, "The audit operation failed."));
       return false;
     }
     inbox.refresh();
@@ -59,7 +57,7 @@ export function WorkbenchProjectionHealthPanel(props: {
       requestId: `t3-audit-${identity}-${Date.now()}`,
     });
     if (result._tag === "Failure") {
-      setMessage(commandFailureMessage(result));
+      setMessage(commandFailureMessage(result, "The audit operation failed."));
       return;
     }
     setReviews((current) => ({ ...current, [identity]: result.value }));
@@ -72,7 +70,7 @@ export function WorkbenchProjectionHealthPanel(props: {
       diffDigest: review.diffDigest,
     });
     if (result._tag === "Failure") {
-      setMessage(commandFailureMessage(result));
+      setMessage(commandFailureMessage(result, "The audit operation failed."));
       return;
     }
     setReviews((current) => ({
@@ -90,7 +88,7 @@ export function WorkbenchProjectionHealthPanel(props: {
       receiptId: review.receipt.id,
     });
     if (result._tag === "Failure") {
-      setMessage(commandFailureMessage(result));
+      setMessage(commandFailureMessage(result, "The audit operation failed."));
       return;
     }
     setReviews((current) => ({ ...current, [identity]: { ...review, receipt: result.value } }));
@@ -258,11 +256,4 @@ export function WorkbenchProjectionHealthPanel(props: {
       )}
     </section>
   );
-}
-
-function commandFailureMessage(result: Parameters<typeof squashAtomCommandFailure>[0]) {
-  const cause = squashAtomCommandFailure(result);
-  return cause instanceof Error && cause.message.trim().length > 0
-    ? cause.message
-    : "The audit operation failed.";
 }

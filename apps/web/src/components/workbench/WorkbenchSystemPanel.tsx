@@ -4,7 +4,6 @@ import type {
   WorkbenchResourceMutationReview,
   WorkbenchResourceTarget,
 } from "@t3tools/contracts";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import {
   CheckCircle2Icon,
   FileCogIcon,
@@ -29,6 +28,7 @@ import {
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
+import { commandFailureMessage } from "./WorkbenchCommandFailure";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
 import { resourceApplyInput } from "./WorkbenchResourceMutation";
 import { WorkbenchProjectionHealthPanel } from "./WorkbenchProjectionHealthPanel";
@@ -99,7 +99,9 @@ export function WorkbenchSystemPanel(props: {
               onClick={async () => {
                 const result = await actions.relock();
                 setAuthorityNotice(
-                  result._tag === "Failure" ? commandFailureMessage(result) : null,
+                  result._tag === "Failure"
+                    ? commandFailureMessage(result, "The resource operation failed.")
+                    : null,
                 );
                 refreshAll();
               }}
@@ -113,7 +115,7 @@ export function WorkbenchSystemPanel(props: {
                 const result = await actions.unlock();
                 setAuthorityNotice(
                   result._tag === "Failure"
-                    ? commandFailureMessage(result)
+                    ? commandFailureMessage(result, "The resource operation failed.")
                     : result.value.state === "locked"
                       ? authorityReason(result.value.reason)
                       : null,
@@ -385,7 +387,9 @@ export function WorkbenchSystemPanel(props: {
                         expectedDigest: receipt.afterDigest,
                       });
                       setAuthorityNotice(
-                        result._tag === "Failure" ? commandFailureMessage(result) : null,
+                        result._tag === "Failure"
+                          ? commandFailureMessage(result, "The resource operation failed.")
+                          : null,
                       );
                       refreshAll();
                     }}
@@ -450,7 +454,7 @@ function ResourceEditor(props: {
     });
     setBusy(false);
     if (result._tag === "Success") setReview(result.value);
-    else setActionError(commandFailureMessage(result));
+    else setActionError(commandFailureMessage(result, "The resource operation failed."));
   };
   const apply = async () => {
     if (!review) return;
@@ -463,7 +467,7 @@ function ResourceEditor(props: {
       setCheckpoint(false);
       source.refresh();
       props.onChanged();
-    } else setActionError(commandFailureMessage(result));
+    } else setActionError(commandFailureMessage(result, "The resource operation failed."));
   };
   return (
     <div className="grid content-start gap-4 rounded-xl border border-border/60 bg-card p-4">
@@ -555,13 +559,6 @@ export function authorityReason(reason: string | null): string {
     default:
       return "Canonical writes remain locked until a direct local administrative session unlocks them.";
   }
-}
-
-function commandFailureMessage(result: Parameters<typeof squashAtomCommandFailure>[0]) {
-  const cause = squashAtomCommandFailure(result);
-  return cause instanceof Error && cause.message.trim().length > 0
-    ? cause.message
-    : "The resource operation failed.";
 }
 
 function resourceTarget(entry: ResourceEntry): WorkbenchResourceTarget {

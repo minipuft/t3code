@@ -1,4 +1,3 @@
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type {
   EnvironmentId,
   WorkbenchRelationshipReviewInput,
@@ -11,6 +10,7 @@ import { randomUUID } from "../../lib/utils";
 import { useWorkbenchTopology } from "../../state/workbenchPlans";
 import { useWorkbenchResourceActions } from "../../state/workbenchResources";
 import { Button } from "../ui/button";
+import { commandFailureMessage } from "./WorkbenchCommandFailure";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
 import { resourceApplyInput } from "./WorkbenchResourceMutation";
 
@@ -59,7 +59,7 @@ export function WorkbenchRelationshipIndexPanel(props: {
       setCheckpoint(false);
       return;
     }
-    setNotice(commandFailureMessage(result));
+    setNotice(commandFailureMessage(result, "The relationship operation failed."));
   };
 
   const apply = async () => {
@@ -75,7 +75,7 @@ export function WorkbenchRelationshipIndexPanel(props: {
       refresh();
       return;
     }
-    setNotice(commandFailureMessage(result));
+    setNotice(commandFailureMessage(result, "The relationship operation failed."));
   };
 
   return (
@@ -372,11 +372,4 @@ function RelationshipList({
       )}
     </div>
   );
-}
-
-function commandFailureMessage(result: Parameters<typeof squashAtomCommandFailure>[0]) {
-  const cause = squashAtomCommandFailure(result);
-  return cause instanceof Error && cause.message.trim().length > 0
-    ? cause.message
-    : "The relationship operation failed.";
 }

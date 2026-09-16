@@ -30,12 +30,41 @@ import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { commandFailureMessage } from "./WorkbenchCommandFailure";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
+import {
+  groupWorkbenchItems,
+  useWorkbenchGroupOpenState,
+  WorkbenchGroupSection,
+} from "./WorkbenchGroupSections";
 import { resourceApplyInput } from "./WorkbenchResourceMutation";
 import { WorkbenchProjectionHealthPanel } from "./WorkbenchProjectionHealthPanel";
 import { WorkbenchRelationshipSummary } from "./WorkbenchRelationshipIndexPanel";
 
 type ResourceEntry = WorkbenchResourceLibrary["entries"][number];
 type View = "resources" | "inbox" | "changes";
+
+/**
+ * Resources group by `entry.kind`, in the order the shared entry schema declares it
+ * (`WorkbenchResourceEntry.kind` in packages/contracts/src/workbenchResources.ts) so the
+ * section order tracks the canonical type list rather than an ad-hoc UI choice.
+ */
+const RESOURCE_KIND_ORDER: ReadonlyArray<ResourceEntry["kind"]> = [
+  "prompt",
+  "skill",
+  "rule",
+  "hook",
+  "plan",
+];
+const RESOURCE_KIND_LABELS: Record<ResourceEntry["kind"], string> = {
+  prompt: "Prompts",
+  skill: "Skills",
+  rule: "Rules",
+  hook: "Hooks",
+  plan: "Plans",
+};
+
+function resourceKindLabel(kind: string): string {
+  return RESOURCE_KIND_LABELS[kind as ResourceEntry["kind"]] ?? kind;
+}
 
 export function WorkbenchSystemPanel(props: {
   readonly environmentId: EnvironmentId;
@@ -56,6 +85,7 @@ export function WorkbenchSystemPanel(props: {
   const projectionHealth = useWorkbenchProjectionHealth(props.environmentId);
   const ledger = useWorkbenchResourceMutations(props.environmentId);
   const actions = useWorkbenchResourceActions(props.environmentId);
+  const { isGroupOpen, setGroupOpen } = useWorkbenchGroupOpenState("system", props.environmentId);
   const editable = selected?.kind === "rule" || selected?.kind === "hook";
   const target = editable && selected.relativePath ? resourceTarget(selected) : null;
 
@@ -65,7 +95,8 @@ export function WorkbenchSystemPanel(props: {
   }, [library.data?.projects, project]);
 
   const groups = useMemo(
-    () => groupResources(library.data?.entries ?? []),
+    () =>
+      groupWorkbenchItems(library.data?.entries ?? [], (entry) => entry.kind, RESOURCE_KIND_ORDER),
     [library.data?.entries],
   );
   const refreshAll = () => {
@@ -215,10 +246,13 @@ export function WorkbenchSystemPanel(props: {
           <div className="grid gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
             <div className="grid content-start gap-4">
               {groups.map((group) => (
-                <section key={group.label} className="grid gap-1">
-                  <h3 className="px-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    {group.label}
-                  </h3>
+                <WorkbenchGroupSection
+                  key={group.id}
+                  label={resourceKindLabel(group.id)}
+                  count={group.items.length}
+                  open={isGroupOpen(`type:${group.id}`)}
+                  onOpenChange={(open) => setGroupOpen(`type:${group.id}`, open)}
+                >
                   {group.items.map((entry) => (
                     <button
                       key={entry.id}
@@ -241,7 +275,7 @@ export function WorkbenchSystemPanel(props: {
                       </span>
                     </button>
                   ))}
-                </section>
+                </WorkbenchGroupSection>
               ))}
             </div>
             {target ? (
@@ -568,17 +602,6 @@ function resourceTarget(entry: ResourceEntry): WorkbenchResourceTarget {
     relativePath: entry.relativePath!,
     ...(entry.project === null ? {} : { project: entry.project }),
   };
-}
-
-function groupResources(entries: ReadonlyArray<ResourceEntry>) {
-  const groups = new Map<string, ResourceEntry[]>();
-  for (const entry of entries) {
-    const label = `${entry.category || "Resources"} / ${entry.group || entry.kind}`;
-    const items = groups.get(label) ?? [];
-    items.push(entry);
-    groups.set(label, items);
-  }
-  return [...groups].map(([label, items]) => ({ label, items }));
 }
 
 function relationshipCandidateIds(entry: ResourceEntry) {

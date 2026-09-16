@@ -25,9 +25,29 @@ const resource = {
   relativePath: "rules/example.md",
 } as const;
 
+// A second resource of a different kind so the grouping tests can tell sections apart, and a
+// third kind (hook) stays absent from `entries` to prove an empty section disappears.
+const skillResource = {
+  id: "resource:skill",
+  kind: "skill",
+  name: "Skill",
+  description: "A governed skill.",
+  category: "System",
+  group: "Skills",
+  scope: "global",
+  project: null,
+  provenance: {
+    sourceId: "source:claude",
+    sourceType: "filesystem",
+    canonical: true,
+  },
+  effective: "enabled",
+  relativePath: "skills/example/SKILL.md",
+} as const;
+
 vi.mock("../../state/workbenchResources", () => ({
   useWorkbenchResourceLibrary: () => ({
-    data: state.libraryError ? null : { projects: [], entries: [resource] },
+    data: state.libraryError ? null : { projects: [], entries: [resource, skillResource] },
     error: state.libraryError,
     isPending: false,
     refresh: vi.fn(),
@@ -131,5 +151,21 @@ describe("WorkbenchSystemPanel", () => {
     expect(markup).toContain("Resources unavailable");
     expect(markup).toContain("Workbench capability is unavailable.");
     state.libraryError = null;
+  });
+
+  it("groups the Resources list into sections by resource type", () => {
+    const markup = render(true);
+    expect(markup).toContain("Rules");
+    expect(markup).toContain("Skills");
+  });
+
+  it("omits a resource-type section that has no entries", () => {
+    const markup = render(true);
+    expect(markup).not.toContain("Hooks");
+  });
+
+  it("marks each resource-type section trigger with aria-expanded", () => {
+    const markup = render(true);
+    expect(markup).toContain('aria-expanded="true"');
   });
 });

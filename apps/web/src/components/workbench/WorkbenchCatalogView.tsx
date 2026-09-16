@@ -15,6 +15,11 @@ import { projectWorkbenchCatalog, retainWorkbenchSelection } from "../../workben
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
+import {
+  groupWorkbenchItems,
+  useWorkbenchGroupOpenState,
+  WorkbenchGroupSection,
+} from "./WorkbenchGroupSections";
 import { WorkbenchPromptGovernance } from "./WorkbenchPromptGovernance";
 
 export function WorkbenchCatalogPanel(props: {
@@ -61,6 +66,10 @@ export function WorkbenchCatalogView(props: {
   const usableSelectionId = retainWorkbenchSelection(selectedItemId, items);
   const selectedItem = items.find((item) => item.id === usableSelectionId) ?? null;
   const groups = useMemo(() => groupCatalogItems(items), [items]);
+  const { isGroupOpen, setGroupOpen } = useWorkbenchGroupOpenState(
+    `catalog:${props.module}`,
+    props.environmentId ?? null,
+  );
   const capability = props.data?.capability ?? null;
   const capabilityMessage =
     props.error ??
@@ -135,10 +144,13 @@ export function WorkbenchCatalogView(props: {
             className={cn("grid content-start gap-3", compact && "max-h-72 overflow-y-auto pr-1")}
           >
             {groups.map((group) => (
-              <section key={group.label} className="grid gap-1" aria-label={group.label}>
-                <h3 className="px-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                  {group.label}
-                </h3>
+              <WorkbenchGroupSection
+                key={group.id}
+                label={group.label}
+                count={group.items.length}
+                open={isGroupOpen(group.id)}
+                onOpenChange={(open) => setGroupOpen(group.id, open)}
+              >
                 {group.items.map((item) => (
                   <CatalogRow
                     key={item.id}
@@ -148,7 +160,7 @@ export function WorkbenchCatalogView(props: {
                     onSelect={() => setSelectedItemId(item.id)}
                   />
                 ))}
-              </section>
+              </WorkbenchGroupSection>
             ))}
           </div>
           <div
@@ -182,17 +194,52 @@ export function WorkbenchCatalogView(props: {
   );
 }
 
-export function groupCatalogItems(
-  items: ReadonlyArray<WorkflowCatalogItem>,
-): ReadonlyArray<{ readonly label: string; readonly items: ReadonlyArray<WorkflowCatalogItem> }> {
-  const groups = new Map<string, WorkflowCatalogItem[]>();
-  for (const item of items) {
-    const label = item.kind === "prompt" ? item.category : (item.scope ?? "Unscoped");
-    const group = groups.get(label) ?? [];
-    group.push(item);
-    groups.set(label, group);
+/**
+ * Sentinel suffix for a group with no owner-supplied name: an empty prompt
+ * category (the schema forbids it in practice, but nothing in this file's
+ * types does) or a skill with no reported scope. Suffix-matching rather than
+ * an exact id keeps prompt and skill sentinels distinguishable without a
+ * second constant per kind.
+ */
+const CATALOG_GROUP_NONE_SUFFIX = ":none";
+
+/**
+ * Groups prompts by their own `category` and skills by their own `scope` —
+ * the catalog's authority, not a client-invented taxonomy. Ids are prefixed
+ * per kind (`category:`, `scope:`) per the `useWorkbenchGroupOpenState`
+ * namespace warning, since both kinds' ids can land in the same tab's
+ * open-state record.
+ */
+function catalogItemGroupId(item: WorkflowCatalogItem): string {
+  if (item.kind === "prompt") {
+    const category = item.category.trim();
+    return category.length > 0 ? `category:${category}` : `category${CATALOG_GROUP_NONE_SUFFIX}`;
   }
-  return [...groups].map(([label, groupedItems]) => ({ label, items: groupedItems }));
+  const scope = item.scope?.trim();
+  return scope && scope.length > 0 ? `scope:${scope}` : `scope${CATALOG_GROUP_NONE_SUFFIX}`;
+}
+
+function catalogItemGroupLabel(id: string): string {
+  if (id.endsWith(CATALOG_GROUP_NONE_SUFFIX)) {
+    return id.startsWith("category") ? "Uncategorized" : "Unscoped";
+  }
+  return id.slice(id.indexOf(":") + 1);
+}
+
+export function groupCatalogItems(items: ReadonlyArray<WorkflowCatalogItem>): ReadonlyArray<{
+  readonly id: string;
+  readonly label: string;
+  readonly items: ReadonlyArray<WorkflowCatalogItem>;
+}> {
+  const ids = items.map(catalogItemGroupId);
+  const namedOrder = [...new Set(ids.filter((id) => !id.endsWith(CATALOG_GROUP_NONE_SUFFIX)))];
+  const noneId = ids.find((id) => id.endsWith(CATALOG_GROUP_NONE_SUFFIX));
+  const order = noneId ? [...namedOrder, noneId] : namedOrder;
+  return groupWorkbenchItems(items, catalogItemGroupId, order).map((group) => ({
+    id: group.id,
+    label: catalogItemGroupLabel(group.id),
+    items: group.items,
+  }));
 }
 
 function CatalogRow(props: {

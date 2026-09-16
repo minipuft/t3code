@@ -10,6 +10,7 @@ import {
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
+import { projectWorkbenchCatalog } from "../../workbenchCatalog";
 import { groupCatalogItems, WorkbenchCatalogView } from "./WorkbenchCatalogView";
 import { WorkbenchModuleRail } from "./WorkbenchModuleRail";
 import { markdownHeadingBefore } from "./WorkbenchPlanAnnotations";
@@ -51,6 +52,21 @@ const catalog: WorkflowCatalogList = {
     },
   ],
 };
+
+function catalogPrompt(overrides: { readonly id: string; readonly category: string }) {
+  return {
+    kind: "prompt" as const,
+    id: WorkflowCatalogItemId.make(overrides.id),
+    name: overrides.id,
+    category: overrides.category,
+    description: "",
+    arguments: [],
+    composerInputArgument: null,
+    executionType: "single" as const,
+    providers: [],
+    revision: WorkflowRevision.make(`sha256:${"a".repeat(64)}`),
+  };
+}
 
 const renderCatalog = (
   overrides: Partial<React.ComponentProps<typeof WorkbenchCatalogView>> = {},
@@ -161,12 +177,38 @@ describe("WorkbenchCatalogView", () => {
   });
 
   it("groups actions by category and skills by scope without changing catalog authority", () => {
-    expect(groupCatalogItems(catalog.items).map((group) => group.label)).toEqual([
-      "development",
-      "Unscoped",
+    expect(groupCatalogItems(catalog.items)).toEqual([
+      { id: "category:development", label: "development", items: [catalog.items[0]] },
+      { id: "scope:none", label: "Unscoped", items: [catalog.items[1]] },
     ]);
+    // Grouping renders through the shared collapsible primitive (WorkbenchGroupSections),
+    // open by default, so both the compact (chat-side) and page variants share this markup.
     const markup = renderCatalog({ variant: "compact" });
-    expect(markup).toContain('aria-label="development"');
+    expect(markup).toContain("development");
+    expect(markup).toContain('aria-expanded="true"');
+  });
+
+  it("puts an uncategorized prompt group last regardless of item order", () => {
+    const items = [
+      catalogPrompt({ id: "no-category", category: "" }),
+      catalogPrompt({ id: "first-development", category: "development" }),
+      catalogPrompt({ id: "second-development", category: "development" }),
+    ];
+    expect(groupCatalogItems(items).map((group) => ({ id: group.id, label: group.label }))).toEqual(
+      [
+        { id: "category:development", label: "development" },
+        { id: "category:none", label: "Uncategorized" },
+      ],
+    );
+  });
+
+  it("drops a category group once filtering leaves it with no items", () => {
+    const items = [
+      catalogPrompt({ id: "kept", category: "development" }),
+      catalogPrompt({ id: "filtered-out", category: "operations" }),
+    ];
+    const filtered = projectWorkbenchCatalog({ items, module: "prompts", query: "kept" });
+    expect(groupCatalogItems(filtered).map((group) => group.label)).toEqual(["development"]);
   });
 
   it("renders null-safe skill metadata and multi-provider aggregation", () => {

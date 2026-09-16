@@ -1,6 +1,8 @@
 import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
 import { AlertTriangleIcon, Code2Icon, EyeIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useId, useState } from "react";
+import type { Options as ReactMarkdownOptions } from "react-markdown";
+import remarkFrontmatter from "remark-frontmatter";
 
 import ChatMarkdown from "../ChatMarkdown";
 import { Button } from "../ui/button";
@@ -12,6 +14,18 @@ export type WorkbenchMarkdownSegment =
   | { readonly kind: "mermaid"; readonly offset: number; readonly text: string };
 
 const MERMAID_FENCE = /^```mermaid(?:[^\S\r\n]+[^\r\n]*)?\r?\n([\s\S]*?)^```[^\S\r\n]*$/gim;
+
+/**
+ * Plans are frequently authored with a `---`-delimited YAML frontmatter block.
+ * CommonMark has no concept of frontmatter, so without this remark reads the
+ * closing `---` as a setext h2 underline and renders the block as body text.
+ * remark-frontmatter (default `'yaml'` matter) parses the block into a `yaml`
+ * node instead; react-markdown has no renderer for that node type and drops
+ * it, so the frontmatter disappears from the rendered plan.
+ */
+const WORKBENCH_PLAN_EXTRA_REMARK_PLUGINS: NonNullable<ReactMarkdownOptions["remarkPlugins"]> = [
+  remarkFrontmatter,
+];
 
 export function splitWorkbenchMarkdown(text: string): ReadonlyArray<WorkbenchMarkdownSegment> {
   const segments: WorkbenchMarkdownSegment[] = [];
@@ -173,6 +187,7 @@ export function WorkbenchPlanMarkdown(props: {
             environmentId={props.environmentId}
             threadRef={props.threadRef}
             parseRawHtml
+            extraRemarkPlugins={WORKBENCH_PLAN_EXTRA_REMARK_PLUGINS}
           />
         ),
       )}

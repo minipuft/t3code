@@ -34,6 +34,15 @@ describe("WorkbenchPlanMarkdown", () => {
     expect(html).toContain("Rendering diagram");
   });
 
+  it("drops YAML frontmatter instead of rendering it as body text", () => {
+    const html = renderToStaticMarkup(
+      <WorkbenchPlanMarkdown text={"---\ntitle: x\nstatus: active\n---\n# Real heading"} />,
+    );
+
+    expect(html).not.toContain("status: active");
+    expect(html).toContain("Real heading");
+  });
+
   it("contains a long plan inside its column and scrolls wide tables locally", () => {
     const longLine = `title: ${"plan-".repeat(60)} status: active tags: []`;
     const wideTable = [

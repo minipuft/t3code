@@ -237,8 +237,11 @@ export function PlanEditor(props: {
           onChange={(event) => setDraft(event.currentTarget.value)}
         />
       ) : (
+        // A grid item's automatic minimum keeps an auto track from shrinking below the item's
+        // min-content, so without this the bordered pane grows past the detail column and is
+        // clipped at the page (#root is overflow-x: clip) instead of scrolling.
         <div
-          className="min-h-[28rem] rounded-lg border border-border/60 bg-background/48 p-5"
+          className="min-h-[28rem] w-full min-w-0 overflow-x-clip rounded-lg border border-border/60 bg-background/48 p-5"
           aria-label="Rendered plan"
         >
           <WorkbenchPlanMarkdown

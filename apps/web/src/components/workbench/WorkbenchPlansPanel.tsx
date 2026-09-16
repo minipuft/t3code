@@ -83,7 +83,7 @@ export function WorkbenchPlansPanel(props: { readonly environmentId: Environment
       : (capability?.reason ?? "The external plan library is not available."));
 
   return (
-    <section className="grid min-h-[34rem] gap-5" aria-label="Plans library">
+    <section className="grid min-h-[34rem] min-w-0 gap-5" aria-label="Plans library">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="min-w-0 flex-1">
           <h2 className="font-semibold text-xl tracking-tight">Plans</h2>
@@ -125,7 +125,7 @@ export function WorkbenchPlansPanel(props: { readonly environmentId: Environment
           }
         />
       ) : (
-        <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)]">
+        <div className="grid min-h-0 min-w-0 gap-4 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)]">
           <PlanList
             items={items}
             selectedPath={selectedPath}

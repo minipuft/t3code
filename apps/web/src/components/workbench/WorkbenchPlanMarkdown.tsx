@@ -152,7 +152,15 @@ export function WorkbenchPlanMarkdown(props: {
   const segments = splitWorkbenchMarkdown(props.text);
   const imageBaseDir = derivePlanImageBaseDir(props.planPath, props.cwd);
   return (
-    <div className={cn("min-w-0", props.className)} data-workbench-plan-markdown>
+    // Same containment as the chat timeline root (MessagesTimeline's data-timeline-root):
+    // w-full pins a definite width so an auto grid/flex track cannot grow to this box's
+    // min-content, min-w-0 drops the automatic minimum, and overflow-x-clip catches the rest.
+    // Wide blocks already scroll locally inside ChatMarkdown (tables in a ScrollArea, `pre`
+    // with overflow-x: auto), so this box never scrolls.
+    <div
+      className={cn("w-full min-w-0 overflow-x-clip", props.className)}
+      data-workbench-plan-markdown
+    >
       {segments.map((segment) =>
         segment.kind === "mermaid" ? (
           <MermaidDiagram key={`mermaid:${segment.offset}`} source={segment.text} />

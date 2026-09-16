@@ -34,6 +34,28 @@ describe("WorkbenchPlanMarkdown", () => {
     expect(html).toContain("Rendering diagram");
   });
 
+  it("contains a long plan inside its column and scrolls wide tables locally", () => {
+    const longLine = `title: ${"plan-".repeat(60)} status: active tags: []`;
+    const wideTable = [
+      `| ${Array.from({ length: 12 }, (_, index) => `column-heading-${index}`).join(" | ")} |`,
+      `| ${Array.from({ length: 12 }, () => "---").join(" | ")} |`,
+      `| ${Array.from({ length: 12 }, (_, index) => `a-long-unbroken-cell-${index}`).join(" | ")} |`,
+    ].join("\n");
+    const html = renderToStaticMarkup(
+      <WorkbenchPlanMarkdown text={`${longLine}\n\n${wideTable}\n`} />,
+    );
+
+    const attribute = html.indexOf("data-workbench-plan-markdown");
+    const wrapper = html.slice(html.lastIndexOf("<div", attribute), html.indexOf(">", attribute));
+    expect(wrapper).toContain("data-workbench-plan-markdown");
+    for (const containment of ["w-full", "min-w-0", "overflow-x-clip"]) {
+      expect(wrapper).toContain(containment);
+    }
+    // The wide table keeps its own scroller instead of widening the column.
+    expect(html).toContain("chat-markdown-table-container");
+    expect(html).toContain('data-slot="scroll-area-viewport"');
+  });
+
   it("derives imageBaseDir from the plan's own directory, not cwd", async () => {
     const calls: Array<Record<string, unknown>> = [];
     vi.doMock("../ChatMarkdown", () => ({

@@ -51,6 +51,7 @@ describe("Agent Workbench workflow catalog projection", () => {
     expect(projected.items[1]).toMatchObject({
       kind: "skill",
       id: "skill:refactoring",
+      category: "process",
       sourcePath: "/skills/refactoring/SKILL.md",
     });
   });

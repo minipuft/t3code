@@ -195,33 +195,26 @@ export function WorkbenchCatalogView(props: {
 }
 
 /**
- * Sentinel suffix for a group with no owner-supplied name: an empty prompt
- * category (the schema forbids it in practice, but nothing in this file's
- * types does) or a skill with no reported scope. Suffix-matching rather than
- * an exact id keeps prompt and skill sentinels distinguishable without a
- * second constant per kind.
+ * Sentinel suffix for a group with no owner-supplied category (the schema
+ * requires a non-empty `category` for both prompts and skills, but nothing
+ * in this file's types enforces that at the boundary, so the empty case is
+ * still guarded defensively).
  */
 const CATALOG_GROUP_NONE_SUFFIX = ":none";
 
 /**
- * Groups prompts by their own `category` and skills by their own `scope` —
- * the catalog's authority, not a client-invented taxonomy. Ids are prefixed
- * per kind (`category:`, `scope:`) per the `useWorkbenchGroupOpenState`
- * namespace warning, since both kinds' ids can land in the same tab's
- * open-state record.
+ * Groups both prompts and skills by their own `category` — the catalog's
+ * authority, not a client-invented taxonomy. Skill `scope` remains visible
+ * in the skill detail view but no longer drives grouping.
  */
 function catalogItemGroupId(item: WorkflowCatalogItem): string {
-  if (item.kind === "prompt") {
-    const category = item.category.trim();
-    return category.length > 0 ? `category:${category}` : `category${CATALOG_GROUP_NONE_SUFFIX}`;
-  }
-  const scope = item.scope?.trim();
-  return scope && scope.length > 0 ? `scope:${scope}` : `scope${CATALOG_GROUP_NONE_SUFFIX}`;
+  const category = item.category.trim();
+  return category.length > 0 ? `category:${category}` : `category${CATALOG_GROUP_NONE_SUFFIX}`;
 }
 
 function catalogItemGroupLabel(id: string): string {
   if (id.endsWith(CATALOG_GROUP_NONE_SUFFIX)) {
-    return id.startsWith("category") ? "Uncategorized" : "Unscoped";
+    return "Uncategorized";
   }
   return id.slice(id.indexOf(":") + 1);
 }

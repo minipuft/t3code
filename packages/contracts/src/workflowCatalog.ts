@@ -131,6 +131,7 @@ export const WorkflowSkillSummary = Schema.Struct({
   kind: Schema.Literal("skill"),
   id: WorkflowCatalogItemId,
   name: TrimmedNonEmptyString,
+  category: TrimmedNonEmptyString,
   description: Schema.NullOr(Schema.String),
   scope: Schema.NullOr(TrimmedNonEmptyString),
   sourcePath: Schema.NullOr(TrimmedNonEmptyString),

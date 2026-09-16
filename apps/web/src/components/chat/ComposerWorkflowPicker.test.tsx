@@ -38,6 +38,7 @@ const catalog: WorkflowCatalogList = {
       kind: "skill",
       id: WorkflowCatalogItemId.make("skill:review"),
       name: "review-follow-up",
+      category: "delivery",
       description: "Resolve review feedback",
       scope: "personal",
       sourcePath: "/skills/review/SKILL.md",

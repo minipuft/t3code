@@ -36,6 +36,7 @@ const skill = {
   kind: "skill" as const,
   id: WorkflowCatalogItemId.make("skill:review"),
   name: "review-follow-up",
+  category: "delivery",
   description: "Resolve review feedback",
   scope: "personal",
   sourcePath: "/skills/review/SKILL.md",

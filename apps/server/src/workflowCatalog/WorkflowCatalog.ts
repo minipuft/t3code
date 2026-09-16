@@ -110,6 +110,7 @@ export function projectCatalog(value: AgentWorkbenchCatalog): WorkflowCatalogLis
               kind: "skill",
               id,
               name: entry.name,
+              category: entry.category,
               description: entry.description || null,
               scope: entry.scope ?? null,
               sourcePath: entry.sourcePath ?? null,

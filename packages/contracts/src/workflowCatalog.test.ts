@@ -72,6 +72,7 @@ describe("workflow catalog contracts", () => {
           kind: "skill",
           id: "skill:review",
           name: "review",
+          category: "collaboration",
           description: "Review a change",
           scope: "user",
           sourcePath: "/home/user/.agents/skills/review/SKILL.md",

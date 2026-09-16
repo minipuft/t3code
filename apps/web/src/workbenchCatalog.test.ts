@@ -32,6 +32,7 @@ const skill: WorkflowCatalogItem = {
   kind: "skill",
   id: WorkflowCatalogItemId.make("skill:review"),
   name: "review-follow-up",
+  category: "delivery",
   description: null,
   scope: "personal",
   sourcePath: null,

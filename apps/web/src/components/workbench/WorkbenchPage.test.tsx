@@ -45,6 +45,7 @@ const catalog: WorkflowCatalogList = {
       kind: "skill",
       id: WorkflowCatalogItemId.make("skill:review"),
       name: "review-follow-up",
+      category: "delivery",
       description: null,
       scope: null,
       sourcePath: null,
@@ -176,10 +177,10 @@ describe("WorkbenchCatalogView", () => {
     expect(markup).toContain("Insert");
   });
 
-  it("groups actions by category and skills by scope without changing catalog authority", () => {
+  it("groups both prompts and skills by category without changing catalog authority", () => {
     expect(groupCatalogItems(catalog.items)).toEqual([
       { id: "category:development", label: "development", items: [catalog.items[0]] },
-      { id: "scope:none", label: "Unscoped", items: [catalog.items[1]] },
+      { id: "category:delivery", label: "delivery", items: [catalog.items[1]] },
     ]);
     // Grouping renders through the shared collapsible primitive (WorkbenchGroupSections),
     // open by default, so both the compact (chat-side) and page variants share this markup.

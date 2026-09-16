@@ -216,12 +216,111 @@ describe("WorkbenchCatalogView", () => {
     expect(filterWorkbenchPlans([unbound, bound], "shipping")).toHaveLength(2);
     expect(filterWorkbenchPlans([unbound, bound], "t3code")).toEqual([bound]);
 
+    const environmentId = EnvironmentId.make("environment-a");
     const markup = renderToStaticMarkup(
-      <PlanList items={[bound]} selectedPath={bound.path} onSelect={() => {}} />,
+      <PlanList
+        items={[bound]}
+        selectedPath={bound.path}
+        environmentId={environmentId}
+        onSelect={() => {}}
+      />,
     );
     expect(markup).toContain("Agent Workbench thread");
     expect(markup).toContain("2 threads");
     expect(markup).toContain('aria-current="true"');
+  });
+
+  it("groups plans by project then status, with Global first and the fixed status order", () => {
+    const environmentId = EnvironmentId.make("environment-a");
+    const plan = (overrides: {
+      path: string;
+      project: string | null;
+      status: "active" | "backlog" | "done" | "reference" | null;
+    }) => ({
+      path: WorkbenchPlanPath.make(overrides.path),
+      name: overrides.path,
+      directory: "",
+      project: overrides.project,
+      status: overrides.status,
+      date: null,
+      tags: [],
+      mtimeMs: 0,
+      binding: null,
+    });
+    const items = [
+      plan({ path: "t3code/done.md", project: "t3code", status: "done" }),
+      plan({ path: "global/active.md", project: null, status: "active" }),
+      plan({ path: "apricot/active.md", project: "apricot", status: "active" }),
+      plan({ path: "t3code/reference.md", project: "t3code", status: "reference" }),
+      plan({ path: "t3code/active.md", project: "t3code", status: "active" }),
+      plan({ path: "apricot/backlog.md", project: "apricot", status: "backlog" }),
+    ];
+
+    const markup = renderToStaticMarkup(
+      <PlanList
+        items={items}
+        selectedPath={null}
+        environmentId={environmentId}
+        onSelect={() => {}}
+      />,
+    );
+
+    // Global sorts first among projects, then alphabetical: Global, apricot, t3code.
+    const projectOrder = ["Global", "apricot", "t3code"].map((label) => markup.indexOf(label));
+    expect(projectOrder).toEqual([...projectOrder].sort((left, right) => left - right));
+    expect(projectOrder.every((index) => index >= 0)).toBe(true);
+
+    // Within a project, status follows the fixed order (active, reference, done),
+    // with an out-of-order status like "backlog" appended after using its raw label.
+    const t3codeStatusOrder = ["Active", "Reference", "Done"].map((label) =>
+      markup.indexOf(label, markup.indexOf("t3code")),
+    );
+    expect(t3codeStatusOrder).toEqual([...t3codeStatusOrder].sort((left, right) => left - right));
+
+    const apricotSection = markup.slice(markup.indexOf("apricot"), markup.indexOf("t3code"));
+    expect(apricotSection.indexOf("Active")).toBeLessThan(apricotSection.indexOf("Backlog"));
+  });
+
+  it("drops a status section left with zero plans after filtering", () => {
+    const environmentId = EnvironmentId.make("environment-a");
+    const items = filterWorkbenchPlans(
+      [
+        {
+          path: WorkbenchPlanPath.make("t3code/active.md"),
+          name: "active.md",
+          directory: "",
+          project: "t3code",
+          status: "active",
+          date: null,
+          tags: [],
+          mtimeMs: 0,
+          binding: null,
+        },
+        {
+          path: WorkbenchPlanPath.make("t3code/done.md"),
+          name: "shipped-feature.md",
+          directory: "",
+          project: "t3code",
+          status: "done",
+          date: null,
+          tags: [],
+          mtimeMs: 0,
+          binding: null,
+        },
+      ],
+      "shipped",
+    );
+
+    const markup = renderToStaticMarkup(
+      <PlanList
+        items={items}
+        selectedPath={null}
+        environmentId={environmentId}
+        onSelect={() => {}}
+      />,
+    );
+    expect(markup).toContain("Done");
+    expect(markup).not.toContain("Active");
   });
 
   it("resolves the plan editor's cwd from the environment's first project, yielding a defined imageBaseDir anchor", () => {

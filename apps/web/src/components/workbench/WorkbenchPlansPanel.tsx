@@ -14,7 +14,45 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { toastManager } from "../ui/toast";
 import { WorkbenchEmptyState } from "./WorkbenchEmptyState";
+import {
+  groupWorkbenchItems,
+  useWorkbenchGroupOpenState,
+  WorkbenchGroupSection,
+} from "./WorkbenchGroupSections";
 import { PlanEditor, showActionFailure } from "./WorkbenchPlanEditor";
+
+/**
+ * Outer grouping key for `PlanList`: a plan's project label, or the sentinel below
+ * for global/unscoped plans so they can be ordered first as their own section.
+ */
+const PLAN_GLOBAL_PROJECT_ID = "global";
+
+function planProjectGroupId(item: WorkbenchPlanSummary): string {
+  const project = item.project?.trim();
+  return project ? project : PLAN_GLOBAL_PROJECT_ID;
+}
+
+function planProjectGroupLabel(id: string): string {
+  return id === PLAN_GLOBAL_PROJECT_ID ? "Global" : id;
+}
+
+/**
+ * Inner grouping key for `PlanList`: status appears in this fixed order, with
+ * `backlog` and any future status value falling through to first-seen order
+ * after it (`groupWorkbenchItems` handles both). A plan with no status gets its
+ * own trailing section rather than disappearing.
+ */
+const PLAN_STATUS_ORDER = ["active", "reference", "done"] as const;
+const PLAN_NO_STATUS_ID = "none";
+
+function planStatusGroupId(item: WorkbenchPlanSummary): string {
+  return item.status ?? PLAN_NO_STATUS_ID;
+}
+
+function planStatusGroupLabel(id: string): string {
+  if (id === PLAN_NO_STATUS_ID) return "No status";
+  return id.charAt(0).toUpperCase() + id.slice(1);
+}
 
 export function filterWorkbenchPlans(
   items: WorkbenchPlanList["items"],
@@ -130,6 +168,7 @@ export function WorkbenchPlansPanel(props: { readonly environmentId: Environment
             items={items}
             selectedPath={selectedPath}
             lockedPath={dirtyPath}
+            environmentId={props.environmentId}
             onSelect={setSelectedPath}
           />
           {selectedPath === null || selectedSummary === null ? null : (
@@ -160,43 +199,90 @@ export function PlanList(props: {
   readonly items: ReadonlyArray<WorkbenchPlanSummary>;
   readonly selectedPath: WorkbenchPlanPath | null;
   readonly lockedPath?: WorkbenchPlanPath | null;
+  readonly environmentId: EnvironmentId;
   readonly onSelect: (path: WorkbenchPlanPath) => void;
 }) {
+  const { isGroupOpen, setGroupOpen } = useWorkbenchGroupOpenState("plans", props.environmentId);
+
+  const projectOrder = [...new Set(props.items.map(planProjectGroupId))].sort((left, right) => {
+    if (left === right) return 0;
+    if (left === PLAN_GLOBAL_PROJECT_ID) return -1;
+    if (right === PLAN_GLOBAL_PROJECT_ID) return 1;
+    return left.localeCompare(right);
+  });
+  const projectGroups = groupWorkbenchItems(props.items, planProjectGroupId, projectOrder);
+
   return (
     <div className="max-h-[68vh] overflow-y-auto rounded-xl border border-border/60 bg-card/60 p-1.5">
-      {props.items.map((item) => (
-        <button
-          key={item.path}
-          type="button"
-          disabled={props.lockedPath != null && props.lockedPath !== item.path}
-          aria-current={props.selectedPath === item.path ? "true" : undefined}
-          className={cn(
-            "grid w-full gap-1 rounded-lg px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            props.selectedPath === item.path ? "bg-primary/10" : "hover:bg-muted/56",
-            "disabled:cursor-not-allowed disabled:opacity-45",
-          )}
-          onClick={() => props.onSelect(item.path)}
-        >
-          <span className="flex min-w-0 items-center gap-2">
-            {item.binding ? (
-              <span className="size-1.5 shrink-0 rounded-full bg-emerald-400" aria-label="Bound" />
-            ) : null}
-            <span className="truncate font-medium text-sm">{item.name}</span>
-          </span>
-          <span className="flex min-w-0 items-center gap-2 text-muted-foreground text-xs">
-            <span className="truncate">{item.project ?? (item.directory || "Workspace")}</span>
-            {item.status ? (
-              <span className="rounded bg-muted px-1.5 py-0.5">{item.status}</span>
-            ) : null}
-          </span>
-          {item.binding ? (
-            <span className="truncate text-emerald-600 text-xs dark:text-emerald-400">
-              {item.binding.title ?? "Active thread"}
-              {item.binding.threads > 1 ? ` · ${item.binding.threads} threads` : ""}
-            </span>
-          ) : null}
-        </button>
-      ))}
+      {projectGroups.map((projectGroup) => {
+        const projectGroupId = `project:${projectGroup.id}`;
+        const statusGroups = groupWorkbenchItems(
+          projectGroup.items,
+          planStatusGroupId,
+          PLAN_STATUS_ORDER,
+        );
+        return (
+          <WorkbenchGroupSection
+            key={projectGroup.id}
+            label={planProjectGroupLabel(projectGroup.id)}
+            count={projectGroup.items.length}
+            open={isGroupOpen(projectGroupId)}
+            onOpenChange={(open) => setGroupOpen(projectGroupId, open)}
+          >
+            {statusGroups.map((statusGroup) => {
+              const statusGroupId = `status:${statusGroup.id}`;
+              return (
+                <WorkbenchGroupSection
+                  key={statusGroup.id}
+                  label={planStatusGroupLabel(statusGroup.id)}
+                  count={statusGroup.items.length}
+                  open={isGroupOpen(statusGroupId)}
+                  onOpenChange={(open) => setGroupOpen(statusGroupId, open)}
+                >
+                  {statusGroup.items.map((item) => (
+                    <button
+                      key={item.path}
+                      type="button"
+                      disabled={props.lockedPath != null && props.lockedPath !== item.path}
+                      aria-current={props.selectedPath === item.path ? "true" : undefined}
+                      className={cn(
+                        "grid w-full gap-1 rounded-lg px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        props.selectedPath === item.path ? "bg-primary/10" : "hover:bg-muted/56",
+                        "disabled:cursor-not-allowed disabled:opacity-45",
+                      )}
+                      onClick={() => props.onSelect(item.path)}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        {item.binding ? (
+                          <span
+                            className="size-1.5 shrink-0 rounded-full bg-emerald-400"
+                            aria-label="Bound"
+                          />
+                        ) : null}
+                        <span className="truncate font-medium text-sm">{item.name}</span>
+                      </span>
+                      <span className="flex min-w-0 items-center gap-2 text-muted-foreground text-xs">
+                        <span className="truncate">
+                          {item.project ?? (item.directory || "Workspace")}
+                        </span>
+                        {item.status ? (
+                          <span className="rounded bg-muted px-1.5 py-0.5">{item.status}</span>
+                        ) : null}
+                      </span>
+                      {item.binding ? (
+                        <span className="truncate text-emerald-600 text-xs dark:text-emerald-400">
+                          {item.binding.title ?? "Active thread"}
+                          {item.binding.threads > 1 ? ` · ${item.binding.threads} threads` : ""}
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </WorkbenchGroupSection>
+              );
+            })}
+          </WorkbenchGroupSection>
+        );
+      })}
     </div>
   );
 }

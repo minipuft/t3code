@@ -138,9 +138,9 @@ function fingerprintKey(fingerprint: UsageSourceFingerprint): string {
  *
  * Several environments on one machine (worktree servers, for instance) resolve
  * the same provider home and would otherwise double count every token. The
- * first environment in a stable order claims a fingerprint; the rest have that
- * provider's buckets dropped. Environments are sorted by id so the winner does
- * not change between renders.
+ * most recently read summary claims a fingerprint; the rest have that provider's
+ * buckets dropped. Environment ids break ties so the winner is stable when
+ * summaries have the same read time. A preferred environment claims first.
  */
 function claimSources(
   environments: readonly EnvironmentUsage[],
@@ -155,7 +155,10 @@ function claimSources(
   const ordered = [...environments].sort((a, b) => {
     if (a.environmentId === preferredEnvironmentId) return -1;
     if (b.environmentId === preferredEnvironmentId) return 1;
-    return a.environmentId.localeCompare(b.environmentId);
+    return (
+      (Date.parse(b.summary.readAt) || 0) - (Date.parse(a.summary.readAt) || 0) ||
+      a.environmentId.localeCompare(b.environmentId)
+    );
   });
 
   for (const environment of ordered) {

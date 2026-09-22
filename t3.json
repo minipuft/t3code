@@ -13,6 +13,27 @@
       "command": "vp i && New-Item -ItemType SymbolicLink -Path .env -Target \"$env:T3CODE_PROJECT_ROOT\\.env\" -Force && New-Item -ItemType SymbolicLink -Path \"infra\\relay\\.env\" -Target \"$env:T3CODE_PROJECT_ROOT\\infra\\relay\\.env\" -Force && node apps\\web\\scripts\\warm-dep-cache.ts",
       "icon": "configure",
       "runOnWorktreeCreate": true
+    },
+    {
+      "name": "Plans (this project)",
+      "command": "agent-workbench ~/knowledge-hub/plans",
+      "icon": "play",
+      "previewUrl": "http://localhost:4317/@t3code",
+      "autoOpenPreview": true
+    },
+    {
+      "name": "Plans (all projects)",
+      "command": "agent-workbench ~/knowledge-hub/plans",
+      "icon": "play",
+      "previewUrl": "http://localhost:4317",
+      "autoOpenPreview": true
+    },
+    {
+      "name": "Session vitals",
+      "command": "agent-workbench ~/knowledge-hub/plans",
+      "icon": "play",
+      "previewUrl": "http://localhost:4317/vitals",
+      "autoOpenPreview": true
     }
   ]
 }

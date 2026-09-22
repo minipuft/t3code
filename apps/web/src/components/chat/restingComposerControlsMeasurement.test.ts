@@ -6,7 +6,12 @@ import {
 } from "../composerFooterLayout";
 import { measureRestingComposerControls } from "./restingComposerControlsMeasurement";
 
-function measurePicker(input: { clientWidth: number; flexGrow: string; maxWidth?: string }) {
+function measurePicker(input: {
+  clientWidth: number;
+  flexGrow: string;
+  maxWidth?: string;
+  actionsWidth?: number;
+}) {
   const label = { clientWidth: input.clientWidth, scrollWidth: 160 };
   const picker = {
     getBoundingClientRect: () => ({ width: 52 }),
@@ -20,7 +25,18 @@ function measurePicker(input: { clientWidth: number; flexGrow: string; maxWidth?
       }
       return null;
     },
-    querySelectorAll: () => [{ getBoundingClientRect: () => ({ width: 140 }) }],
+    querySelectorAll: (selector: string) =>
+      selector === "[data-resting-fixed-control]"
+        ? input.actionsWidth === undefined
+          ? []
+          : [{ getBoundingClientRect: () => ({ width: input.actionsWidth }) }]
+        : [
+            {
+              dataset: {},
+              querySelectorAll: () => [],
+              getBoundingClientRect: () => ({ width: 140 }),
+            },
+          ],
   };
   vi.stubGlobal("getComputedStyle", (element: unknown) => {
     if (element === label) return { flexGrow: input.flexGrow };
@@ -33,6 +49,40 @@ function measurePicker(input: { clientWidth: number; flexGrow: string; maxWidth?
 afterEach(() => vi.unstubAllGlobals());
 
 describe("measureRestingComposerControls", () => {
+  it.each([28, 80])("reserves a %ipx Actions control before choosing overflow", (actionsWidth) => {
+    const measurement = measurePicker({ clientWidth: 0, flexGrow: "0", actionsWidth });
+    const fullWidth = 196 + actionsWidth + 4;
+
+    expect(resolveRestingComposerControlsNaturalWidth(measurement)).toBe(fullWidth);
+    expect(resolveRestingComposerControlsLayout({ ...measurement, hostWidth: fullWidth })).toEqual({
+      hiddenCount: 0,
+      iconOnlyCount: 0,
+      visible: true,
+    });
+    expect(
+      resolveRestingComposerControlsLayout({ ...measurement, hostWidth: fullWidth - 1 }),
+    ).toEqual({
+      hiddenCount: 1,
+      iconOnlyCount: 1,
+      visible: true,
+    });
+    expect(
+      resolveRestingComposerControlsLayout({ ...measurement, hostWidth: 80 + actionsWidth + 4 - 1 })
+        .visible,
+    ).toBe(false);
+  });
+
+  it("does not reserve a gap for a hidden Actions control", () => {
+    const measurement = measurePicker({ clientWidth: 0, flexGrow: "0", actionsWidth: 0 });
+
+    expect(resolveRestingComposerControlsNaturalWidth(measurement)).toBe(196);
+    expect(resolveRestingComposerControlsLayout({ ...measurement, hostWidth: 196 })).toEqual({
+      hiddenCount: 0,
+      iconOnlyCount: 0,
+      visible: true,
+    });
+  });
+
   it("keeps controls inline when the model label is deliberately collapsed", () => {
     const measurement = measurePicker({ clientWidth: 0, flexGrow: "0" });
 
@@ -40,6 +90,7 @@ describe("measureRestingComposerControls", () => {
     expect(resolveRestingComposerControlsNaturalWidth(measurement)).toBe(196);
     expect(resolveRestingComposerControlsLayout({ ...measurement, hostWidth: 200 })).toEqual({
       hiddenCount: 0,
+      iconOnlyCount: 0,
       visible: true,
     });
   });
@@ -50,6 +101,7 @@ describe("measureRestingComposerControls", () => {
     expect(measurement.naturalFixedWidth).toBe(192);
     expect(resolveRestingComposerControlsLayout({ ...measurement, hostWidth: 200 })).toEqual({
       hiddenCount: 1,
+      iconOnlyCount: 1,
       visible: true,
     });
   });
@@ -60,6 +112,7 @@ describe("measureRestingComposerControls", () => {
     expect(measurement.naturalFixedWidth).toBe(212);
     expect(resolveRestingComposerControlsLayout({ ...measurement, hostWidth: 200 })).toEqual({
       hiddenCount: 1,
+      iconOnlyCount: 1,
       visible: true,
     });
   });

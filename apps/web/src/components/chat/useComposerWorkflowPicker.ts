@@ -7,7 +7,7 @@ import {
   type WorkflowPresetId as WorkflowPresetIdType,
   type WorkflowPromptSummary,
 } from "@t3tools/contracts";
-import { type Dispatch, type SetStateAction, useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { type ComposerTrigger, filterDismissedWorkflowTrigger } from "../../composer-logic";
 import { useWorkflowCatalog, useWorkflowLibraryPreferences } from "../../state/workflowCatalog";
@@ -21,7 +21,7 @@ export function useComposerWorkflowPicker(input: {
   readonly threadRef: ScopedThreadRef | null;
   readonly prompt: string;
   readonly trigger: ComposerTrigger | null;
-  readonly setTrigger: Dispatch<SetStateAction<ComposerTrigger | null>>;
+  readonly setTrigger: (trigger: ComposerTrigger | null) => void;
   readonly scheduleComposerFocus: () => void;
 }) {
   const catalog = useWorkflowCatalog(input.environmentId);
@@ -114,13 +114,12 @@ export function useComposerWorkflowPicker(input: {
 
   const close = useCallback(() => {
     setOpenedFromAction(false);
-    input.setTrigger((current) => {
-      if (current?.kind !== "workflow") return current;
-      dismissedTriggerStartRef.current = current.rangeStart;
-      return null;
-    });
+    if (input.trigger?.kind === "workflow") {
+      dismissedTriggerStartRef.current = input.trigger.rangeStart;
+      input.setTrigger(null);
+    }
     input.scheduleComposerFocus();
-  }, [input.scheduleComposerFocus, input.setTrigger]);
+  }, [input.scheduleComposerFocus, input.setTrigger, input.trigger]);
 
   const toggleFromAction = useCallback(() => {
     dismissedTriggerStartRef.current = null;

@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -15,6 +16,7 @@ import {
   disableTailscaleServe,
   ensureTailscaleServe,
   isTailscaleIpv4Address,
+  makeReadTailscaleStatus,
   parseTailscaleMagicDnsName,
   parseTailscaleStatus,
   readTailscaleStatus,
@@ -281,6 +283,24 @@ describe("tailscale", () => {
     });
   });
 
+  it.effect("classifies serve-not-enabled stderr", () => {
+    const layer = mockSpawnerLayer(() => ({
+      code: 1,
+      stderr: "Serve is not enabled on your tailnet tskey-auth-secret-token-value",
+    }));
+
+    return Effect.gen(function* () {
+      const error = yield* ensureTailscaleServe({ localPort: 13773, servePort: 8443 }).pipe(
+        Effect.flip,
+        Effect.provide(layer),
+      );
+
+      assert.instanceOf(error, TailscaleCommandExitError);
+      assert.equal(error.stderrDiagnostic, "serve-not-enabled");
+      assertCarriesNoSecret(error, "tskey-auth-secret-token-value");
+    });
+  });
+
   it.effect("classifies unrecognized stderr without quoting it", () => {
     const layer = mockSpawnerLayer(() => ({
       code: 3,
@@ -318,6 +338,33 @@ describe("tailscale", () => {
       assert.equal(error.timeoutMs, 1_500);
       assert.isTrue(Cause.isTimeoutError(error.cause));
       assert.equal(error.message, "tailscale status timed out after 1500ms.");
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.effect("honours a custom timeout from makeReadTailscaleStatus", () => {
+    const customTimeout = Duration.seconds(5);
+    const layer = Layer.merge(
+      TestClock.layer(),
+      spawnerLayer(ChildProcessSpawner.make(() => Effect.succeed(neverFinishingMockHandle()))),
+    );
+
+    return Effect.gen(function* () {
+      const fiber = yield* makeReadTailscaleStatus({ timeout: customTimeout }).pipe(
+        Effect.flip,
+        Effect.forkScoped,
+      );
+      yield* Effect.yieldNow;
+      // The default timeout would have already fired here; advancing only to
+      // it must not resolve the fiber under the custom (longer) timeout.
+      yield* TestClock.adjust(TAILSCALE_STATUS_TIMEOUT);
+      assert.isUndefined(fiber.pollUnsafe());
+
+      yield* TestClock.adjust(Duration.subtract(customTimeout, TAILSCALE_STATUS_TIMEOUT));
+      const error = yield* Fiber.join(fiber);
+
+      assert.instanceOf(error, TailscaleCommandTimeoutError);
+      assert.equal(error.timeoutMs, 5_000);
+      assert.equal(error.message, "tailscale status timed out after 5000ms.");
     }).pipe(Effect.provide(layer));
   });
 

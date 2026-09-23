@@ -8,6 +8,7 @@ import {
   type AdvertisedEndpointProvider,
   type DesktopServerExposureMode,
   type DesktopServerExposureState,
+  type DesktopTailscaleServeDevice,
 } from "@t3tools/contracts";
 import { isTailscaleIpv4Address, readTailscaleStatus } from "@t3tools/tailscale";
 import * as Context from "effect/Context";
@@ -281,6 +282,7 @@ export class DesktopServerExposure extends Context.Service<
     readonly setTailscaleServeEnabled: (input: {
       readonly enabled: boolean;
       readonly port?: number;
+      readonly device?: DesktopTailscaleServeDevice;
     }) => Effect.Effect<DesktopServerExposureChange, DesktopTailscaleServePersistenceError>;
     readonly getAdvertisedEndpoints: Effect.Effect<readonly AdvertisedEndpoint[]>;
   }
@@ -298,6 +300,7 @@ interface RuntimeState {
   readonly advertisedHost: Option.Option<string>;
   readonly tailscaleServeEnabled: boolean;
   readonly tailscaleServePort: number;
+  readonly tailscaleServeDevice: DesktopTailscaleServeDevice;
 }
 
 interface ResolvedRuntimeState {
@@ -323,6 +326,7 @@ const toContractState = (state: RuntimeState): DesktopServerExposureState => ({
   advertisedHost: Option.getOrNull(state.advertisedHost),
   tailscaleServeEnabled: state.tailscaleServeEnabled,
   tailscaleServePort: state.tailscaleServePort,
+  tailscaleServeDevice: state.tailscaleServeDevice,
 });
 
 const toBackendConfig = (state: RuntimeState): DesktopServerExposureBackendConfig => ({
@@ -360,6 +364,7 @@ function runtimeStateFromResolvedExposure(input: {
     advertisedHost: Option.fromNullishOr(input.exposure.advertisedHost),
     tailscaleServeEnabled: input.settings.tailscaleServeEnabled,
     tailscaleServePort: input.settings.tailscaleServePort,
+    tailscaleServeDevice: input.settings.tailscaleServeDevice,
   };
 }
 
@@ -495,15 +500,21 @@ export const make = Effect.gen(function* () {
   });
 
   const setTailscaleServeEnabled = Effect.fn("desktop.serverExposure.setTailscaleServeEnabled")(
-    function* (input: { readonly enabled: boolean; readonly port?: number }) {
+    function* (input: {
+      readonly enabled: boolean;
+      readonly port?: number;
+      readonly device?: DesktopTailscaleServeDevice;
+    }) {
       yield* Effect.annotateCurrentSpan({
         enabled: input.enabled,
         ...(input.port === undefined ? {} : { port: input.port }),
+        ...(input.device === undefined ? {} : { device: input.device }),
       });
       const result = yield* desktopSettings
         .setTailscaleServe({
           enabled: input.enabled,
           port: Option.fromNullishOr(input.port),
+          device: Option.fromNullishOr(input.device),
         })
         .pipe(
           Effect.mapError(
@@ -520,6 +531,7 @@ export const make = Effect.gen(function* () {
         ...current,
         tailscaleServeEnabled: result.settings.tailscaleServeEnabled,
         tailscaleServePort: result.settings.tailscaleServePort,
+        tailscaleServeDevice: result.settings.tailscaleServeDevice,
       }));
 
       return {

@@ -486,12 +486,23 @@ export const DesktopServerExposureModeSchema = Schema.Literals([
   "network-accessible",
 ]);
 
+/**
+ * Which Tailscale daemon serves the primary backend's advertised HTTPS
+ * address. "wsl" and "both" only apply when the primary backend runs inside
+ * WSL (a distro carries its own `tailscaled`, separate from the host);
+ * "native" is the host OS daemon and "auto" lets the backend pick.
+ */
+export type DesktopTailscaleServeDevice = "auto" | "wsl" | "native" | "both";
+
+export const DesktopTailscaleServeDeviceSchema = Schema.Literals(["auto", "wsl", "native", "both"]);
+
 export interface DesktopServerExposureState {
   mode: DesktopServerExposureMode;
   endpointUrl: string | null;
   advertisedHost: string | null;
   tailscaleServeEnabled: boolean;
   tailscaleServePort: number;
+  tailscaleServeDevice: DesktopTailscaleServeDevice;
 }
 
 export const DesktopServerExposureStateSchema = Schema.Struct({
@@ -500,6 +511,7 @@ export const DesktopServerExposureStateSchema = Schema.Struct({
   advertisedHost: Schema.NullOr(Schema.String),
   tailscaleServeEnabled: Schema.Boolean,
   tailscaleServePort: Schema.Number,
+  tailscaleServeDevice: DesktopTailscaleServeDeviceSchema,
 });
 
 export interface PickFolderOptions {
@@ -1187,6 +1199,7 @@ export interface DesktopBridge {
   setTailscaleServeEnabled: (input: {
     readonly enabled: boolean;
     readonly port?: number;
+    readonly device?: DesktopTailscaleServeDevice;
   }) => Promise<DesktopServerExposureState>;
   getAdvertisedEndpoints: () => Promise<readonly AdvertisedEndpoint[]>;
   getWslState: () => Promise<DesktopWslState>;

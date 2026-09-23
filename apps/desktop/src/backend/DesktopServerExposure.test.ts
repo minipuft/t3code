@@ -197,6 +197,7 @@ describe("DesktopServerExposure", () => {
           advertisedHost: "192.168.1.20",
           tailscaleServeEnabled: false,
           tailscaleServePort: 443,
+          tailscaleServeDevice: "auto",
         });
 
         const backendConfig = yield* serverExposure.backendConfig;

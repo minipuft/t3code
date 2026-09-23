@@ -1,18 +1,9 @@
 import { createAdvertisedEndpoint } from "@t3tools/shared/advertisedEndpoint";
 import type { AdvertisedEndpoint, AdvertisedEndpointProvider } from "@t3tools/contracts";
-import {
-  buildTailscaleHttpsBaseUrl,
-  isTailscaleIpv4Address,
-  parseTailscaleMagicDnsName,
-  probeTailscaleHttpsEndpoint,
-  readTailscaleStatus,
-} from "@t3tools/tailscale";
+import { buildTailscaleHttpsBaseUrl, probeTailscaleHttpsEndpoint } from "@t3tools/tailscale";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-
-import type { NetworkInterfaces } from "./DesktopNetworkInterfaces.ts";
 
 export { parseTailscaleMagicDnsName } from "@t3tools/tailscale";
 
@@ -23,124 +14,127 @@ const TAILSCALE_ENDPOINT_PROVIDER: AdvertisedEndpointProvider = {
   isAddon: true,
 };
 
+/**
+ * One MagicDNS candidate endpoint, already resolved by the caller (which
+ * daemon, what its Tailscale Serve status is, what label it should carry).
+ * This module only formats and probes -- it never spawns the Tailscale CLI.
+ */
+export interface TailscaleServeMagicDnsEntry {
+  // Null when the daemon's MagicDNS name isn't known yet -- the caller
+  // drops the entry before it reaches here.
+  readonly dnsName: string | null;
+  readonly servePort: number;
+  readonly label: string;
+  readonly phase: "disabled" | "applying" | "active" | "failed";
+  // Set only when phase is "failed".
+  readonly failureMessage: string | null;
+}
+
 function resolveTailscaleIpAdvertisedEndpoints(input: {
   readonly port: number;
-  readonly networkInterfaces: NetworkInterfaces;
+  readonly tailnetIpv4Addresses: readonly string[];
 }): readonly AdvertisedEndpoint[] {
-  const seen = new Set<string>();
-  const endpoints: AdvertisedEndpoint[] = [];
-
-  for (const interfaceAddresses of Object.values(input.networkInterfaces)) {
-    if (!interfaceAddresses) continue;
-
-    for (const address of interfaceAddresses) {
-      if (address.internal) continue;
-      if (address.family !== "IPv4") continue;
-      if (!isTailscaleIpv4Address(address.address)) continue;
-      if (seen.has(address.address)) continue;
-      seen.add(address.address);
-
-      endpoints.push(
-        createAdvertisedEndpoint({
-          provider: TAILSCALE_ENDPOINT_PROVIDER,
-          source: "desktop-addon",
-          id: `tailscale-ip:http://${address.address}:${input.port}`,
-          label: "Tailscale IP",
-          httpBaseUrl: `http://${address.address}:${input.port}`,
-          reachability: "private-network",
-          status: "available",
-          description: "Reachable from devices on the same Tailnet.",
-        }),
-      );
-    }
-  }
-
-  return endpoints;
+  return input.tailnetIpv4Addresses.map((address) =>
+    createAdvertisedEndpoint({
+      provider: TAILSCALE_ENDPOINT_PROVIDER,
+      source: "desktop-addon",
+      id: `tailscale-ip:http://${address}:${input.port}`,
+      label: "Tailscale IP",
+      httpBaseUrl: `http://${address}:${input.port}`,
+      reachability: "private-network",
+      status: "available",
+      description: "Reachable from devices on the same Tailnet.",
+    }),
+  );
 }
 
 const resolveTailscaleMagicDnsAdvertisedEndpoint = Effect.fn(
   "resolveTailscaleMagicDnsAdvertisedEndpoint",
-)(function* (input: {
-  readonly dnsName: string | null;
-  readonly serveEnabled: boolean;
-  readonly servePort?: number;
-  readonly probe?: (baseUrl: string) => Effect.Effect<boolean, never, HttpClient.HttpClient>;
-}): Effect.fn.Return<Option.Option<AdvertisedEndpoint>, never, HttpClient.HttpClient> {
-  if (!input.dnsName) {
+)(function* (
+  entry: TailscaleServeMagicDnsEntry,
+  probe: (baseUrl: string) => Effect.Effect<boolean, never, HttpClient.HttpClient>,
+): Effect.fn.Return<Option.Option<AdvertisedEndpoint>, never, HttpClient.HttpClient> {
+  if (!entry.dnsName) {
     return Option.none();
   }
 
   const httpBaseUrl = buildTailscaleHttpsBaseUrl({
-    magicDnsName: input.dnsName,
-    ...(input.servePort === undefined ? {} : { servePort: input.servePort }),
+    magicDnsName: entry.dnsName,
+    servePort: entry.servePort,
   });
-  const probe =
-    input.probe?.(httpBaseUrl) ??
-    probeTailscaleHttpsEndpoint({
-      baseUrl: httpBaseUrl,
-    });
-  const isReachable = input.serveEnabled ? yield* probe : false;
 
-  return Option.some(
-    createAdvertisedEndpoint({
-      provider: TAILSCALE_ENDPOINT_PROVIDER,
-      source: "desktop-addon",
-      id: `tailscale-magicdns:${httpBaseUrl}`,
-      label: "Tailscale HTTPS",
-      httpBaseUrl,
-      reachability: "private-network",
-      hostedHttpsCompatibility: isReachable ? "compatible" : "requires-configuration",
-      status: isReachable ? "available" : "unavailable",
-      description: isReachable
-        ? "HTTPS endpoint served by Tailscale Serve."
-        : "MagicDNS hostname. Configure Tailscale Serve for HTTPS access.",
-    }),
-  );
+  const shared = {
+    provider: TAILSCALE_ENDPOINT_PROVIDER,
+    source: "desktop-addon" as const,
+    id: `tailscale-magicdns:${httpBaseUrl}`,
+    label: entry.label,
+    httpBaseUrl,
+    reachability: "private-network" as const,
+  };
+
+  switch (entry.phase) {
+    case "disabled":
+      return Option.some(
+        createAdvertisedEndpoint({
+          ...shared,
+          hostedHttpsCompatibility: "requires-configuration",
+          status: "unavailable",
+          description: "MagicDNS hostname. Configure Tailscale Serve for HTTPS access.",
+        }),
+      );
+    case "applying":
+      return Option.some(
+        createAdvertisedEndpoint({
+          ...shared,
+          hostedHttpsCompatibility: "requires-configuration",
+          status: "unavailable",
+          description: "Setting up Tailscale Serve…",
+        }),
+      );
+    case "failed":
+      return Option.some(
+        createAdvertisedEndpoint({
+          ...shared,
+          hostedHttpsCompatibility: "requires-configuration",
+          status: "unavailable",
+          description: entry.failureMessage ?? "Tailscale Serve failed.",
+        }),
+      );
+    case "active": {
+      const isReachable = yield* probe(httpBaseUrl);
+      return Option.some(
+        createAdvertisedEndpoint({
+          ...shared,
+          hostedHttpsCompatibility: isReachable ? "compatible" : "requires-configuration",
+          status: isReachable ? "available" : "unavailable",
+          description: isReachable
+            ? "HTTPS endpoint served by Tailscale Serve."
+            : "Tailscale Serve is configured. Waiting for Tailscale to issue the HTTPS certificate — this can take up to a minute.",
+        }),
+      );
+    }
+  }
 });
 
 export const resolveTailscaleAdvertisedEndpoints = Effect.fn("resolveTailscaleAdvertisedEndpoints")(
   function* (input: {
     readonly port: number;
-    readonly serveEnabled?: boolean;
-    readonly servePort?: number;
-    readonly networkInterfaces: NetworkInterfaces;
-    readonly statusJson?: string | null;
-    readonly readMagicDnsName?: Effect.Effect<
-      string | null,
-      never,
-      ChildProcessSpawner.ChildProcessSpawner
-    >;
+    readonly tailnetIpv4Addresses: readonly string[];
+    readonly magicDnsEntries: readonly TailscaleServeMagicDnsEntry[];
     readonly probe?: (baseUrl: string) => Effect.Effect<boolean, never, HttpClient.HttpClient>;
-  }): Effect.fn.Return<
-    readonly AdvertisedEndpoint[],
-    never,
-    ChildProcessSpawner.ChildProcessSpawner | HttpClient.HttpClient
-  > {
-    const ipEndpoints = resolveTailscaleIpAdvertisedEndpoints(input);
-    const readDnsName =
-      input.readMagicDnsName ??
-      readTailscaleStatus.pipe(
-        Effect.map((status) => status.magicDnsName),
-        Effect.orElseSucceed(() => null),
-      );
-    const dnsName =
-      input.statusJson === undefined
-        ? yield* readDnsName
-        : input.statusJson
-          ? yield* parseTailscaleMagicDnsName(input.statusJson).pipe(
-              Effect.orElseSucceed(() => null),
-            )
-          : null;
-    const magicDnsEndpoint = yield* resolveTailscaleMagicDnsAdvertisedEndpoint({
-      dnsName,
-      serveEnabled: input.serveEnabled === true,
-      ...(input.servePort === undefined ? {} : { servePort: input.servePort }),
-      ...(input.probe === undefined ? {} : { probe: input.probe }),
+  }): Effect.fn.Return<readonly AdvertisedEndpoint[], never, HttpClient.HttpClient> {
+    const ipEndpoints = resolveTailscaleIpAdvertisedEndpoints({
+      port: input.port,
+      tailnetIpv4Addresses: input.tailnetIpv4Addresses,
     });
+    const probe = input.probe ?? ((baseUrl: string) => probeTailscaleHttpsEndpoint({ baseUrl }));
+    const magicDnsEndpoints = yield* Effect.forEach(input.magicDnsEntries, (entry) =>
+      resolveTailscaleMagicDnsAdvertisedEndpoint(entry, probe),
+    );
 
-    return Option.match(magicDnsEndpoint, {
-      onNone: () => ipEndpoints,
-      onSome: (endpoint) => [...ipEndpoints, endpoint],
-    });
+    return [
+      ...ipEndpoints,
+      ...magicDnsEndpoints.filter(Option.isSome).map((endpoint) => endpoint.value),
+    ];
   },
 );

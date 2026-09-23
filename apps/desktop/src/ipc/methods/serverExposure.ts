@@ -51,9 +51,11 @@ export const setTailscaleServeEnabled = DesktopIpc.makeIpcMethod({
   handler: Effect.fn("desktop.ipc.serverExposure.setTailscaleServeEnabled")(function* (input) {
     const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
     const tailscaleServe = yield* DesktopTailscaleServe.DesktopTailscaleServe;
-    const state = yield* serverExposure.setTailscaleServeEnabled(input);
+    yield* serverExposure.setTailscaleServeEnabled(input);
     yield* tailscaleServe.reconcile;
-    return state;
+    // Re-read state after reconcile: it carries the fresh per-daemon
+    // statuses reconcile just produced, not the pre-reconcile snapshot.
+    return yield* serverExposure.getState;
   }),
 });
 

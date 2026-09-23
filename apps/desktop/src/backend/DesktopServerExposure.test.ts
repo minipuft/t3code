@@ -5,6 +5,7 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
@@ -13,6 +14,7 @@ import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopConfig from "../app/DesktopConfig.ts";
 import * as DesktopNetworkInterfaces from "./DesktopNetworkInterfaces.ts";
 import * as DesktopServerExposure from "./DesktopServerExposure.ts";
+import * as DesktopTailscaleServe from "./DesktopTailscaleServe.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 
 const encoder = new TextEncoder();
@@ -68,6 +70,42 @@ function dieOnSpawnLayer() {
   );
 }
 
+// No primary registered yet -- getAdvertisedEndpoints treats this like a
+// native primary (today's behaviour) and getState reports nothing to show.
+function nativeTailscaleServeLayer(): Layer.Layer<DesktopTailscaleServe.DesktopTailscaleServe> {
+  return Layer.succeed(DesktopTailscaleServe.DesktopTailscaleServe, {
+    primaryReady: () => Effect.void,
+    primaryStopped: Effect.void,
+    reconcile: Effect.void,
+    results: Effect.succeed([]),
+    primaryTarget: Effect.succeed(Option.none()),
+    readStatus: () => Effect.succeed(Option.none()),
+  } satisfies DesktopTailscaleServe.DesktopTailscaleServe["Service"]);
+}
+
+// A WSL primary, with a stubbed per-daemon status/results table the test
+// supplies directly instead of driving the real apply/retry machinery.
+function wslTailscaleServeLayer(input: {
+  readonly results?: ReadonlyArray<DesktopTailscaleServe.TailscaleServeDaemonResult>;
+  readonly statuses?: Partial<
+    Record<
+      DesktopTailscaleServe.TailscaleServeDaemon,
+      { magicDnsName: string | null; tailnetIpv4Addresses: readonly string[] }
+    >
+  >;
+}): Layer.Layer<DesktopTailscaleServe.DesktopTailscaleServe> {
+  const results = input.results ?? [];
+  const statuses = input.statuses ?? {};
+  return Layer.succeed(DesktopTailscaleServe.DesktopTailscaleServe, {
+    primaryReady: () => Effect.void,
+    primaryStopped: Effect.void,
+    reconcile: Effect.void,
+    results: Effect.succeed(results),
+    primaryTarget: Effect.succeed(Option.some({ port: 13773, distro: "Ubuntu" })),
+    readStatus: (daemon) => Effect.succeed(Option.fromNullishOr(statuses[daemon])),
+  } satisfies DesktopTailscaleServe.DesktopTailscaleServe["Service"]);
+}
+
 function makeEnvironmentLayer(baseDir: string, env: Record<string, string | undefined> = {}) {
   return DesktopEnvironment.layer({
     dirname: "/repo/apps/desktop/src",
@@ -92,6 +130,7 @@ function makeLayer(input: {
   readonly env?: Record<string, string | undefined>;
   readonly spawnerLayer?: Layer.Layer<ChildProcessSpawner.ChildProcessSpawner>;
   readonly desktopSettingsLayer?: Layer.Layer<DesktopAppSettings.DesktopAppSettings>;
+  readonly tailscaleServeLayer?: Layer.Layer<DesktopTailscaleServe.DesktopTailscaleServe>;
 }) {
   const env = { T3CODE_HOME: input.baseDir, ...input.env };
   const environmentLayer = makeEnvironmentLayer(input.baseDir, env);
@@ -100,6 +139,7 @@ function makeLayer(input: {
   });
 
   return DesktopServerExposure.layer.pipe(
+    Layer.provideMerge(input.tailscaleServeLayer ?? nativeTailscaleServeLayer()),
     Layer.provideMerge(input.desktopSettingsLayer ?? DesktopAppSettings.layer),
     Layer.provideMerge(NodeFileSystem.layer),
     Layer.provideMerge(NodeHttpClient.layerUndici),
@@ -124,6 +164,7 @@ const withHarness = <A, E, R>(
   env: Record<string, string | undefined> = {},
   spawnerLayer?: Layer.Layer<ChildProcessSpawner.ChildProcessSpawner>,
   desktopSettingsLayer?: Layer.Layer<DesktopAppSettings.DesktopAppSettings>,
+  tailscaleServeLayer?: Layer.Layer<DesktopTailscaleServe.DesktopTailscaleServe>,
 ) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -138,6 +179,7 @@ const withHarness = <A, E, R>(
           env,
           ...(spawnerLayer ? { spawnerLayer } : {}),
           ...(desktopSettingsLayer ? { desktopSettingsLayer } : {}),
+          ...(tailscaleServeLayer ? { tailscaleServeLayer } : {}),
         }),
       ),
     );
@@ -198,6 +240,8 @@ describe("DesktopServerExposure", () => {
           tailscaleServeEnabled: false,
           tailscaleServePort: 443,
           tailscaleServeDevice: "auto",
+          tailscaleServeStatuses: [],
+          tailscaleServeDeviceSelectable: false,
         });
 
         const backendConfig = yield* serverExposure.backendConfig;
@@ -485,6 +529,82 @@ describe("DesktopServerExposure", () => {
         T3CODE_DESKTOP_HTTPS_ENDPOINTS:
           "https://desktop.example.ts.net,http://desktop.example.test:3773,not-a-url",
       },
+    ),
+  );
+
+  it.effect("advertises the WSL tailnet IP for a WSL primary, never the native interface's", () =>
+    withHarness(
+      tailnetNetworkInterfaces,
+      Effect.gen(function* () {
+        const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
+        yield* serverExposure.configureFromSettings({ port: 4173 });
+        yield* serverExposure.setMode("network-accessible");
+
+        const endpoints = yield* serverExposure.getAdvertisedEndpoints;
+        const tailscaleIpUrls = endpoints
+          .filter((endpoint) => endpoint.id.startsWith("tailscale-ip:"))
+          .map((endpoint) => endpoint.httpBaseUrl);
+
+        assert.deepEqual(tailscaleIpUrls, ["http://100.100.50.50:4173/"]);
+      }),
+      {},
+      undefined,
+      undefined,
+      wslTailscaleServeLayer({
+        statuses: { wsl: { magicDnsName: null, tailnetIpv4Addresses: ["100.100.50.50"] } },
+      }),
+    ),
+  );
+
+  it.effect("advertises no tailnet IP endpoint for a local-only WSL primary", () =>
+    withHarness(
+      tailnetNetworkInterfaces,
+      Effect.gen(function* () {
+        const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
+        yield* serverExposure.configureFromSettings({ port: 4173 });
+        // Mode stays local-only; Serve enabled so the gate that skips
+        // Tailscale entirely doesn't short-circuit this assertion.
+        yield* serverExposure.setTailscaleServeEnabled({ enabled: true });
+
+        const endpoints = yield* serverExposure.getAdvertisedEndpoints;
+        const tailscaleIpUrls = endpoints.filter((endpoint) =>
+          endpoint.id.startsWith("tailscale-ip:"),
+        );
+
+        assert.deepEqual(tailscaleIpUrls, []);
+      }),
+      {},
+      undefined,
+      undefined,
+      wslTailscaleServeLayer({
+        statuses: { wsl: { magicDnsName: null, tailnetIpv4Addresses: ["100.100.50.50"] } },
+      }),
+    ),
+  );
+
+  it.effect("getState carries per-daemon statuses and device selectability", () =>
+    withHarness(
+      emptyNetworkInterfaces,
+      Effect.gen(function* () {
+        const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
+        yield* serverExposure.configureFromSettings({ port: 4173 });
+
+        const state = yield* serverExposure.getState;
+        assert.deepEqual(state.tailscaleServeStatuses, [
+          { device: "wsl", outcome: "active", message: null },
+          { device: "native", outcome: "failed", message: "boom" },
+        ]);
+        assert.equal(state.tailscaleServeDeviceSelectable, true);
+      }),
+      {},
+      undefined,
+      undefined,
+      wslTailscaleServeLayer({
+        results: [
+          { daemon: "wsl", servePort: 443, outcome: "active", message: null },
+          { daemon: "native", servePort: 443, outcome: "failed", message: "boom" },
+        ],
+      }),
     ),
   );
 });

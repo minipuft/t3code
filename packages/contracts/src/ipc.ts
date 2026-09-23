@@ -496,6 +496,19 @@ export type DesktopTailscaleServeDevice = "auto" | "wsl" | "native" | "both";
 
 export const DesktopTailscaleServeDeviceSchema = Schema.Literals(["auto", "wsl", "native", "both"]);
 
+/**
+ * Per-daemon Tailscale Serve status for the primary backend, surfaced
+ * alongside the state so the UI can show apply progress and failures
+ * without a separate poll. `device` matches DesktopTailscaleServe's
+ * `TailscaleServeDaemon`.
+ */
+export const DesktopTailscaleServeStatusSchema = Schema.Struct({
+  device: Schema.Literals(["wsl", "native"]),
+  outcome: Schema.Literals(["applying", "active", "failed"]),
+  message: Schema.NullOr(Schema.String),
+});
+export type DesktopTailscaleServeStatus = typeof DesktopTailscaleServeStatusSchema.Type;
+
 export interface DesktopServerExposureState {
   mode: DesktopServerExposureMode;
   endpointUrl: string | null;
@@ -503,6 +516,11 @@ export interface DesktopServerExposureState {
   tailscaleServeEnabled: boolean;
   tailscaleServePort: number;
   tailscaleServeDevice: DesktopTailscaleServeDevice;
+  tailscaleServeStatuses: ReadonlyArray<DesktopTailscaleServeStatus>;
+  // True when the running primary backend is a WSL backend, so the
+  // WSL/Windows/Both device choice applies. A native primary can only
+  // ever be served by the native daemon.
+  tailscaleServeDeviceSelectable: boolean;
 }
 
 export const DesktopServerExposureStateSchema = Schema.Struct({
@@ -512,6 +530,8 @@ export const DesktopServerExposureStateSchema = Schema.Struct({
   tailscaleServeEnabled: Schema.Boolean,
   tailscaleServePort: Schema.Number,
   tailscaleServeDevice: DesktopTailscaleServeDeviceSchema,
+  tailscaleServeStatuses: Schema.Array(DesktopTailscaleServeStatusSchema),
+  tailscaleServeDeviceSelectable: Schema.Boolean,
 });
 
 export interface PickFolderOptions {

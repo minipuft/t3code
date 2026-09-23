@@ -588,12 +588,28 @@ describe("DesktopServerExposure", () => {
       Effect.gen(function* () {
         const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
         yield* serverExposure.configureFromSettings({ port: 4173 });
+        // Enabled (not "active", to avoid the "active" case's live HTTPS
+        // probe) so getAdvertisedEndpoints also builds the wsl MagicDNS
+        // endpoint this test compares against.
+        yield* serverExposure.setTailscaleServeEnabled({ enabled: true });
 
         const state = yield* serverExposure.getState;
+        const endpoints = yield* serverExposure.getAdvertisedEndpoints;
+        const wslEndpoint = endpoints.find((endpoint) =>
+          endpoint.id.startsWith("tailscale-magicdns:"),
+        );
+        assert.ok(wslEndpoint, "expected a WSL MagicDNS endpoint to be advertised");
+
         assert.deepEqual(state.tailscaleServeStatuses, [
-          { device: "wsl", outcome: "active", message: null },
-          { device: "native", outcome: "failed", message: "boom" },
+          {
+            device: "wsl",
+            outcome: "applying",
+            message: null,
+            httpBaseUrl: wslEndpoint?.httpBaseUrl ?? null,
+          },
+          { device: "native", outcome: "failed", message: "boom", httpBaseUrl: null },
         ]);
+        assert.ok(state.tailscaleServeStatuses[0]?.httpBaseUrl);
         assert.equal(state.tailscaleServeDeviceSelectable, true);
       }),
       {},
@@ -601,9 +617,10 @@ describe("DesktopServerExposure", () => {
       undefined,
       wslTailscaleServeLayer({
         results: [
-          { daemon: "wsl", servePort: 443, outcome: "active", message: null },
+          { daemon: "wsl", servePort: 443, outcome: "applying", message: null },
           { daemon: "native", servePort: 443, outcome: "failed", message: "boom" },
         ],
+        statuses: { wsl: { magicDnsName: "desktop.example.ts.net", tailnetIpv4Addresses: [] } },
       }),
     ),
   );

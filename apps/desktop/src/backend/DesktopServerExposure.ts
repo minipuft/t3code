@@ -11,7 +11,7 @@ import {
   type DesktopTailscaleServeDevice,
   type DesktopTailscaleServeStatus,
 } from "@t3tools/contracts";
-import { isTailscaleIpv4Address } from "@t3tools/tailscale";
+import { buildTailscaleHttpsBaseUrl, isTailscaleIpv4Address } from "@t3tools/tailscale";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -539,12 +539,24 @@ export const make = Effect.gen(function* () {
     function* () {
       const results = yield* tailscaleServe.results;
       const primaryTarget = yield* tailscaleServe.primaryTarget;
+      const statuses = yield* Effect.forEach(results, (result) =>
+        readMagicDnsNameOf(tailscaleServe, result.daemon).pipe(
+          Effect.map((dnsName): DesktopTailscaleServeStatus => ({
+            device: result.daemon,
+            outcome: result.outcome,
+            message: result.message,
+            httpBaseUrl:
+              dnsName === null
+                ? null
+                : buildTailscaleHttpsBaseUrl({
+                    magicDnsName: dnsName,
+                    servePort: result.servePort,
+                  }),
+          })),
+        ),
+      );
       return {
-        tailscaleServeStatuses: results.map((result): DesktopTailscaleServeStatus => ({
-          device: result.daemon,
-          outcome: result.outcome,
-          message: result.message,
-        })),
+        tailscaleServeStatuses: statuses,
         tailscaleServeDeviceSelectable: Option.exists(
           primaryTarget,
           (target) => target.distro !== null,

@@ -24,24 +24,19 @@ export function isTailscaleHttpsEndpoint(endpoint: AdvertisedEndpoint): boolean 
 }
 
 /**
- * Endpoints carry no daemon field, so the daemon is recovered the way the
- * desktop labels them: a lone status owns the lone unsuffixed endpoint,
- * otherwise "Tailscale HTTPS (WSL)" is the WSL daemon and any other suffix
- * is the host OS daemon.
+ * Endpoints carry no daemon field, so the daemon is recovered by joining on
+ * the URL both sides publish: a status's httpBaseUrl matches the endpoint's
+ * httpBaseUrl exactly when that status is the one Serve daemon that
+ * produced it.
  */
 function daemonOfEndpoint(
   endpoint: AdvertisedEndpoint,
   statuses: ReadonlyArray<DesktopTailscaleServeStatus>,
 ): TailscaleServeDaemon | null {
-  const [only] = statuses;
-  if (statuses.length === 1 && only) return only.device;
-  const suffix = endpointPrefix(endpoint);
-  if (suffix === null) return null;
-  return suffix === "WSL" ? "wsl" : "native";
-}
-
-function endpointPrefix(endpoint: AdvertisedEndpoint): string | null {
-  return /\(([^)]+)\)$/u.exec(endpoint.label)?.[1] ?? null;
+  const match = statuses.find(
+    (status) => status.httpBaseUrl !== null && status.httpBaseUrl === endpoint.httpBaseUrl,
+  );
+  return match?.device ?? null;
 }
 
 function withPrefix(prefix: string | null, text: string): string {
@@ -78,7 +73,7 @@ export function buildTailscaleServeRowModel(input: {
       : (endpoint.description ?? "Tailscale HTTPS is not reachable yet.");
     lines.push({
       key: endpoint.id,
-      text: withPrefix(multiple ? endpointPrefix(endpoint) : null, text),
+      text: withPrefix(multiple && daemon ? DAEMON_LABEL[daemon] : null, text),
       isError: !isAvailable && daemon !== null && failedDaemons.has(daemon),
     });
   }

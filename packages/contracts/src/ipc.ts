@@ -506,6 +506,10 @@ export const DesktopTailscaleServeStatusSchema = Schema.Struct({
   device: Schema.Literals(["wsl", "native"]),
   outcome: Schema.Literals(["applying", "active", "failed"]),
   message: Schema.NullOr(Schema.String),
+  // The MagicDNS HTTPS base URL Tailscale Serve publishes for this device,
+  // matching a Tailscale endpoint's httpBaseUrl exactly. Null when the
+  // device hasn't resolved a MagicDNS name yet.
+  httpBaseUrl: Schema.NullOr(Schema.String),
 });
 export type DesktopTailscaleServeStatus = typeof DesktopTailscaleServeStatusSchema.Type;
 

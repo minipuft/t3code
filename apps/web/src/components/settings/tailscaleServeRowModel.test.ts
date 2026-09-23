@@ -33,8 +33,9 @@ function status(
   device: DesktopTailscaleServeStatus["device"],
   outcome: DesktopTailscaleServeStatus["outcome"],
   message: string | null = null,
+  httpBaseUrl: string | null = null,
 ): DesktopTailscaleServeStatus {
-  return { device, outcome, message };
+  return { device, outcome, message, httpBaseUrl };
 }
 
 describe("buildTailscaleServeRowModel", () => {
@@ -52,7 +53,7 @@ describe("buildTailscaleServeRowModel", () => {
     const model = buildTailscaleServeRowModel({
       enabled: true,
       endpoints: [lanEndpoint, tailscaleEndpoint({ host: "box.ts.net", status: "available" })],
-      statuses: [status("native", "active")],
+      statuses: [status("native", "active", null, "https://box.ts.net")],
     });
     expect(model.lines.map((line) => [line.text, line.isError])).toEqual([
       ["https://box.ts.net", false],
@@ -70,7 +71,7 @@ describe("buildTailscaleServeRowModel", () => {
           description: "Waiting for the certificate.",
         }),
       ],
-      statuses: [status("native", "active")],
+      statuses: [status("native", "active", null, "https://box.ts.net")],
     });
     expect(waiting.lines).toEqual([
       {
@@ -86,31 +87,32 @@ describe("buildTailscaleServeRowModel", () => {
       endpoints: [
         tailscaleEndpoint({ host: "box.ts.net", status: "unavailable", description: "denied" }),
       ],
-      statuses: [status("native", "failed", "denied")],
+      statuses: [status("native", "failed", "denied", "https://box.ts.net")],
     });
     expect(failed.lines.map((line) => [line.text, line.isError])).toEqual([["denied", true]]);
     expect(failed.showRetry).toBe(true);
   });
 
   it("prefixes each device when two endpoints are advertised and reports the failed one", () => {
+    // Labels are generic (no device suffix) on purpose: the daemon prefix
+    // and the failed-device flag must come from joining status.httpBaseUrl
+    // to endpoint.httpBaseUrl, not from parsing the endpoint's label.
     const model = buildTailscaleServeRowModel({
       enabled: true,
       endpoints: [
         tailscaleEndpoint({
           host: "wsl.ts.net",
-          label: "Tailscale HTTPS (WSL)",
           status: "available",
         }),
         tailscaleEndpoint({
           host: "win.ts.net",
-          label: "Tailscale HTTPS (Windows)",
           status: "unavailable",
           description: "Serve is not enabled on your tailnet.",
         }),
       ],
       statuses: [
-        status("wsl", "active"),
-        status("native", "failed", "Serve is not enabled on your tailnet."),
+        status("wsl", "active", null, "https://wsl.ts.net"),
+        status("native", "failed", "Serve is not enabled on your tailnet.", "https://win.ts.net"),
       ],
     });
     expect(model.lines.map((line) => [line.text, line.isError])).toEqual([
@@ -126,11 +128,13 @@ describe("buildTailscaleServeRowModel", () => {
       endpoints: [
         tailscaleEndpoint({
           host: "wsl.ts.net",
-          label: "Tailscale HTTPS (WSL)",
           status: "available",
         }),
       ],
-      statuses: [status("wsl", "active"), status("native", "failed", "tailscaled is not running")],
+      statuses: [
+        status("wsl", "active", null, "https://wsl.ts.net"),
+        status("native", "failed", "tailscaled is not running"),
+      ],
     });
     expect(model.lines.map((line) => [line.text, line.isError])).toEqual([
       ["WSL: https://wsl.ts.net", false],

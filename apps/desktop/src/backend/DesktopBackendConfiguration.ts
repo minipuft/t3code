@@ -691,6 +691,15 @@ const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl
     : Option.getOrElse(distroIp, () => "127.0.0.1");
   const httpBaseUrl = new URL(`http://${rendererHost}:${input.port}`);
 
+  // The renderer reaches this backend at rendererHost instead of loopback
+  // only in NAT mode with a resolved distro IP. Tell the server so it
+  // accepts T3 Connect link-proof requests addressed to that host too;
+  // mirrored mode and a failed probe both resolve rendererHost to loopback
+  // already, so the field stays absent and the server's default (loopback
+  // only) applies.
+  const wslBootstrap =
+    rendererHost === "127.0.0.1" ? bootstrap : { ...bootstrap, localRendererHost: rendererHost };
+
   const distroArgs = distroForConfig ? ["-d", distroForConfig] : [];
   const forwardedEnv: Record<string, string> = {};
   const forwardedEnvNames: string[] = [];
@@ -728,7 +737,7 @@ const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl
     // env is already a complete process.env minus T3CODE_HOME; pass it
     // verbatim instead of letting the spawner re-merge process.env on top.
     extendEnv: false,
-    bootstrap,
+    bootstrap: wslBootstrap,
     bootstrapDelivery: "stdin" as const,
     httpBaseUrl,
     captureOutput: true,

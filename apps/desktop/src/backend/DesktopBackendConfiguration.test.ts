@@ -1022,6 +1022,106 @@ describe("DesktopBackendConfiguration", () => {
   );
 
   it.effect(
+    "resolveWsl carries localRendererHost when the renderer reaches it via the distro IP",
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-desktop-backend-config-test-",
+        });
+
+        const config = yield* Effect.gen(function* () {
+          const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+          return yield* configuration.resolveWsl({ port: 5050, distro: null });
+        }).pipe(
+          Effect.provide(
+            DesktopBackendConfiguration.layer.pipe(
+              Layer.provideMerge(serverExposureLayer),
+              Layer.provideMerge(DesktopAppSettings.layerTest()),
+              Layer.provideMerge(DesktopWslServerTree.layerTest()),
+              Layer.provideMerge(
+                DesktopWslEnvironment.layerTest({
+                  isAvailable: true,
+                  windowsToWslPath: () => Option.some("/mnt/c/repo/apps/server/src/index.ts"),
+                  getDistroIp: () => Option.some("172.27.0.99"),
+                }),
+              ),
+              Layer.provideMerge(makeEnvironmentLayer(baseDir, { platform: "win32" })),
+            ),
+          ),
+        );
+
+        // NAT mode: the renderer reaches the backend at the distro IP, not
+        // loopback, so the server must accept T3 Connect link proofs
+        // addressed to that host too.
+        assert.equal(config.bootstrap.localRendererHost, "172.27.0.99");
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "resolveWsl omits localRendererHost in mirrored mode, where the renderer already uses loopback",
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-desktop-backend-config-test-",
+        });
+
+        const config = yield* Effect.gen(function* () {
+          const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+          return yield* configuration.resolveWsl({ port: 5050, distro: null });
+        }).pipe(
+          Effect.provide(
+            DesktopBackendConfiguration.layer.pipe(
+              Layer.provideMerge(serverExposureLayer),
+              Layer.provideMerge(DesktopAppSettings.layerTest()),
+              Layer.provideMerge(DesktopWslServerTree.layerTest()),
+              Layer.provideMerge(
+                DesktopWslEnvironment.layerTest({
+                  isAvailable: true,
+                  windowsToWslPath: () => Option.some("/mnt/c/repo/apps/server/src/index.ts"),
+                  // 127.0.0.1 always matches a real loopback interface, which
+                  // is the same signature isLocalHostIpv4 uses to detect
+                  // mirrored mode.
+                  getDistroIp: () => Option.some("127.0.0.1"),
+                }),
+              ),
+              Layer.provideMerge(makeEnvironmentLayer(baseDir, { platform: "win32" })),
+            ),
+          ),
+        );
+
+        assert.equal(config.httpBaseUrl.hostname, "127.0.0.1");
+        assert.notProperty(config.bootstrap, "localRendererHost");
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("resolveWsl omits localRendererHost when the distro IP probe fails", () =>
+    withHarness(
+      Effect.gen(function* () {
+        const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+        // The default DesktopWslEnvironment.layerTest() stub reports no
+        // distro IP, which resolveWsl falls back to loopback for.
+        const config = yield* configuration.resolveWsl({ port: 5000, distro: null });
+
+        assert.equal(config.httpBaseUrl.hostname, "127.0.0.1");
+        assert.notProperty(config.bootstrap, "localRendererHost");
+      }),
+    ),
+  );
+
+  it.effect("resolvePrimary never carries localRendererHost", () =>
+    withHarness(
+      Effect.gen(function* () {
+        const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+        const config = yield* configuration.resolvePrimary;
+
+        assert.notProperty(config.bootstrap, "localRendererHost");
+      }),
+    ),
+  );
+
+  it.effect(
     "resolvePrimary falls back to the Windows primary when wsl-only but WSL is unavailable",
     () =>
       Effect.gen(function* () {

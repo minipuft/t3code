@@ -259,8 +259,6 @@ export interface DesktopServerExposureBackendConfig {
   readonly port: number;
   readonly bindHost: string;
   readonly httpBaseUrl: URL;
-  readonly tailscaleServeEnabled: boolean;
-  readonly tailscaleServePort: number;
 }
 
 export interface DesktopServerExposureChange {
@@ -279,11 +277,13 @@ export class DesktopServerExposure extends Context.Service<
     readonly setMode: (
       mode: DesktopServerExposureMode,
     ) => Effect.Effect<DesktopServerExposureChange, DesktopServerExposureSetModeError>;
+    // Persists only. Serve is applied by DesktopTailscaleServe.reconcile,
+    // with no backend relaunch.
     readonly setTailscaleServeEnabled: (input: {
       readonly enabled: boolean;
       readonly port?: number;
       readonly device?: DesktopTailscaleServeDevice;
-    }) => Effect.Effect<DesktopServerExposureChange, DesktopTailscaleServePersistenceError>;
+    }) => Effect.Effect<DesktopServerExposureState, DesktopTailscaleServePersistenceError>;
     readonly getAdvertisedEndpoints: Effect.Effect<readonly AdvertisedEndpoint[]>;
   }
 >()("@t3tools/desktop/backend/DesktopServerExposure") {}
@@ -333,8 +333,6 @@ const toBackendConfig = (state: RuntimeState): DesktopServerExposureBackendConfi
   port: state.port,
   bindHost: state.bindHost,
   httpBaseUrl: state.httpBaseUrl,
-  tailscaleServeEnabled: state.tailscaleServeEnabled,
-  tailscaleServePort: state.tailscaleServePort,
 });
 
 const toResolvedExposure = (state: RuntimeState): ResolvedDesktopServerExposure => ({
@@ -534,10 +532,7 @@ export const make = Effect.gen(function* () {
         tailscaleServeDevice: result.settings.tailscaleServeDevice,
       }));
 
-      return {
-        state: toContractState(nextState),
-        requiresRelaunch: result.changed,
-      };
+      return toContractState(nextState);
     },
   );
 

@@ -56,8 +56,6 @@ const serverExposureLayer = Layer.succeed(DesktopServerExposure.DesktopServerExp
     port: 3773,
     bindHost: "127.0.0.1",
     httpBaseUrl: new URL("http://127.0.0.1:3773"),
-    tailscaleServeEnabled: false,
-    tailscaleServePort: 443,
   }),
   configureFromSettings: () => Effect.die("unexpected configureFromSettings"),
   setMode: () => Effect.die("unexpected setMode"),
@@ -155,7 +153,28 @@ describe("DesktopWslBackend", () => {
       assert.isFalse(yield* recordFailure({ reason: "Node.js not found", fatal: true }));
       assert.deepEqual(yield* backend.lastPreflightError, Option.some("Node.js not found"));
 
-      yield* clearFailure(new URL("http://127.0.0.1:41773"));
+      const readyUrl = new URL("http://127.0.0.1:41773");
+      yield* clearFailure(readyUrl, {
+        executablePath: "wsl.exe",
+        args: [],
+        entryPath: "/app/bin.mjs",
+        cwd: "/app",
+        env: {},
+        extendEnv: false,
+        bootstrap: {
+          mode: "desktop",
+          noBrowser: true,
+          port: 41773,
+          host: "0.0.0.0",
+          desktopBootstrapToken: "bootstrap-token",
+          tailscaleServeEnabled: false,
+          tailscaleServePort: 443,
+        },
+        bootstrapDelivery: "stdin",
+        httpBaseUrl: readyUrl,
+        captureOutput: true,
+        preflightFailure: Option.none(),
+      });
       assert.deepEqual(yield* backend.lastPreflightError, Option.none());
     }).pipe(
       Effect.provide(

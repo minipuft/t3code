@@ -121,7 +121,7 @@ interface MakeInstanceInput {
   readonly spawnerLayer: Layer.Layer<ChildProcessSpawner.ChildProcessSpawner>;
   readonly httpClientLayer?: Layer.Layer<HttpClient.HttpClient>;
   readonly backendOutputLog?: Partial<DesktopObservability.DesktopBackendOutputLogShape>;
-  readonly onReady?: Effect.Effect<void>;
+  readonly onReady?: DesktopBackendManager.BackendInstanceSpec["onReady"];
   readonly onShutdown?: Effect.Effect<void>;
   readonly onPreflightFailed?: (
     failure: DesktopBackendManager.PreflightFailure,
@@ -182,7 +182,7 @@ function makeTestInstance(input: MakeInstanceInput) {
     id: DesktopBackendManager.PRIMARY_INSTANCE_ID,
     label: Effect.succeed("Windows"),
     configResolve: input.configResolve ?? Effect.succeed(input.config ?? baseConfig),
-    ...(input.onReady ? { onReady: () => input.onReady! } : {}),
+    ...(input.onReady ? { onReady: input.onReady } : {}),
     ...(input.onShutdown ? { onShutdown: () => input.onShutdown! } : {}),
     ...(input.onPreflightFailed ? { onPreflightFailed: input.onPreflightFailed } : {}),
   });
@@ -233,9 +233,10 @@ describe("DesktopBackendManager", () => {
           desktopTelemetryStream: Stream.encodeText(
             Stream.make('{"version":1,"type":"desktopTelemetryHello","electronPid":123}\n'),
           ),
-          onReady: Effect.sync(() => {
-            readyCount += 1;
-          }).pipe(Effect.andThen(Deferred.succeed(ready, void 0)), Effect.asVoid),
+          onReady: () =>
+            Effect.sync(() => {
+              readyCount += 1;
+            }).pipe(Effect.andThen(Deferred.succeed(ready, void 0)), Effect.asVoid),
           backendOutputLog: {
             persistFailure: () => Queue.offer(exited, void 0).pipe(Effect.asVoid),
           },
@@ -657,6 +658,7 @@ describe("DesktopBackendManager", () => {
       Effect.gen(function* () {
         const requestUrls: Array<string> = [];
         const prunedRuntimes: Array<[string | null, string]> = [];
+        const readyRuns: Array<[number, string | undefined]> = [];
         const statuses = [503, 200];
         let readyCount = 0;
         const firstRequest = yield* Deferred.make<void>();
@@ -698,9 +700,11 @@ describe("DesktopBackendManager", () => {
               return responseForRequest(request, status);
             }),
           ),
-          onReady: Effect.sync(() => {
-            readyCount += 1;
-          }).pipe(Effect.andThen(Deferred.succeed(backendReady, void 0)), Effect.asVoid),
+          onReady: (_httpBaseUrl, config) =>
+            Effect.sync(() => {
+              readyCount += 1;
+              readyRuns.push([config.bootstrap.port, config.runningDistro]);
+            }).pipe(Effect.andThen(Deferred.succeed(backendReady, void 0)), Effect.asVoid),
           backendOutputLog: {
             persistFailure: () => Queue.offer(exited, void 0).pipe(Effect.asVoid),
           },
@@ -720,6 +724,7 @@ describe("DesktopBackendManager", () => {
         yield* Queue.take(exited);
 
         assert.equal(readyCount, 1);
+        assert.deepEqual(readyRuns, [[3773, "Ubuntu"]]);
         assert.deepEqual(prunedRuntimes, [["Ubuntu", "1.2.3-x64"]]);
         assert.deepEqual(requestUrls, [
           "http://127.0.0.1:3773/.well-known/t3/environment",
@@ -853,10 +858,11 @@ describe("DesktopBackendManager", () => {
 
         const instance = yield* makeTestInstance({
           spawnerLayer,
-          onReady: Ref.set(backendReadyFlag, true).pipe(
-            Effect.andThen(Deferred.succeed(ready, void 0)),
-            Effect.asVoid,
-          ),
+          onReady: () =>
+            Ref.set(backendReadyFlag, true).pipe(
+              Effect.andThen(Deferred.succeed(ready, void 0)),
+              Effect.asVoid,
+            ),
           onShutdown: Ref.set(backendReadyFlag, false).pipe(
             Effect.andThen(
               Effect.sync(() => {

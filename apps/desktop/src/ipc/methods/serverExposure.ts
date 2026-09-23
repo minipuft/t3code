@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 
 import * as DesktopLifecycle from "../../app/DesktopLifecycle.ts";
 import * as DesktopServerExposure from "../../backend/DesktopServerExposure.ts";
+import * as DesktopTailscaleServe from "../../backend/DesktopTailscaleServe.ts";
 import * as IpcChannels from "../channels.ts";
 import * as DesktopIpc from "../DesktopIpc.ts";
 
@@ -48,15 +49,11 @@ export const setTailscaleServeEnabled = DesktopIpc.makeIpcMethod({
   payload: SetTailscaleServeEnabledInput,
   result: DesktopServerExposureStateSchema,
   handler: Effect.fn("desktop.ipc.serverExposure.setTailscaleServeEnabled")(function* (input) {
-    const lifecycle = yield* DesktopLifecycle.DesktopLifecycle;
     const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
-    const change = yield* serverExposure.setTailscaleServeEnabled(input);
-    if (change.requiresRelaunch) {
-      yield* lifecycle.relaunch(
-        change.state.tailscaleServeEnabled ? "tailscale-serve-enabled" : "tailscale-serve-disabled",
-      );
-    }
-    return change.state;
+    const tailscaleServe = yield* DesktopTailscaleServe.DesktopTailscaleServe;
+    const state = yield* serverExposure.setTailscaleServeEnabled(input);
+    yield* tailscaleServe.reconcile;
+    return state;
   }),
 });
 

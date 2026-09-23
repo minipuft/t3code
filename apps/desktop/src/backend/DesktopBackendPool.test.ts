@@ -17,6 +17,7 @@ import * as DesktopWindow from "../window/DesktopWindow.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
 import * as DesktopBackendConfiguration from "./DesktopBackendConfiguration.ts";
 import * as DesktopBackendPool from "./DesktopBackendPool.ts";
+import * as DesktopTailscaleServe from "./DesktopTailscaleServe.ts";
 import type { DesktopBackendSnapshot, DesktopBackendStartConfig } from "./DesktopBackendManager.ts";
 
 function makeStubInstance(
@@ -101,6 +102,14 @@ function makePoolLayer(
           zoomMain: () => Effect.die("unexpected zoom"),
           syncAppearance: Effect.void,
         } satisfies DesktopWindow.DesktopWindow["Service"]),
+        Layer.succeed(DesktopTailscaleServe.DesktopTailscaleServe, {
+          primaryReady: () => Effect.void,
+          primaryStopped: Effect.void,
+          reconcile: Effect.void,
+          results: Effect.succeed([]),
+          primaryTarget: Effect.succeed(Option.none()),
+          readStatus: () => Effect.succeed(Option.none()),
+        } satisfies DesktopTailscaleServe.DesktopTailscaleServe["Service"]),
       ),
     ),
   );

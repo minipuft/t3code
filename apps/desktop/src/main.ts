@@ -48,6 +48,7 @@ import * as DesktopLinuxUrlHandler from "./app/DesktopLinuxUrlHandler.ts";
 import * as DesktopShutdown from "./app/DesktopShutdown.ts";
 import * as DesktopObservability from "./app/DesktopObservability.ts";
 import * as DesktopServerExposure from "./backend/DesktopServerExposure.ts";
+import * as DesktopTailscaleServe from "./backend/DesktopTailscaleServe.ts";
 import * as DesktopClientSettings from "./settings/DesktopClientSettings.ts";
 import * as DesktopSavedEnvironments from "./settings/DesktopSavedEnvironments.ts";
 import * as DesktopSnapShot from "./snapShot/DesktopSnapShot.ts";
@@ -139,7 +140,10 @@ const desktopSshLayer = desktopSshEnvironmentLayer.pipe(
   Layer.provideMerge(DesktopSshPasswordPrompts.layer()),
 );
 
+// DesktopTailscaleServe is merged here so the exposure service, the backend
+// pool and the IPC handlers all share one instance.
 const desktopServerExposureLayer = DesktopServerExposure.layer.pipe(
+  Layer.provideMerge(DesktopTailscaleServe.layer),
   Layer.provideMerge(DesktopNetworkInterfaces.layer),
   Layer.provideMerge(desktopFoundationLayer),
 );

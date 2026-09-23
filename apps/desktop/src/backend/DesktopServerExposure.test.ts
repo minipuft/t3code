@@ -210,7 +210,7 @@ describe("DesktopServerExposure", () => {
     ),
   );
 
-  it.effect("persists tailscale serve preferences atomically and reports no-op updates", () =>
+  it.effect("persists tailscale serve preferences atomically", () =>
     withHarness(
       emptyNetworkInterfaces,
       Effect.gen(function* () {
@@ -220,19 +220,13 @@ describe("DesktopServerExposure", () => {
         yield* settings.load;
         yield* serverExposure.configureFromSettings({ port: 4173 });
 
-        const changed = yield* serverExposure.setTailscaleServeEnabled({
+        const state = yield* serverExposure.setTailscaleServeEnabled({
           enabled: true,
           port: 8443,
         });
-        assert.equal(changed.requiresRelaunch, true);
-        assert.equal(changed.state.tailscaleServeEnabled, true);
-        assert.equal(changed.state.tailscaleServePort, 8443);
-
-        const unchanged = yield* serverExposure.setTailscaleServeEnabled({
-          enabled: true,
-          port: 8443,
-        });
-        assert.equal(unchanged.requiresRelaunch, false);
+        assert.equal(state.tailscaleServeEnabled, true);
+        assert.equal(state.tailscaleServePort, 8443);
+        assert.deepEqual(yield* serverExposure.getState, state);
 
         const persisted = yield* settings.get;
         assert.equal(persisted.tailscaleServeEnabled, true);

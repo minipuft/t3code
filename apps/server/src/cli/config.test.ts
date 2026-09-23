@@ -467,6 +467,54 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
     }),
   );
 
+  it.effect(
+    "carries the desktop's renderer host from the bootstrap envelope, with no flag or env override",
+    () =>
+      Effect.gen(function* () {
+        const fd = yield* openBootstrapFd(
+          makeDesktopBootstrap({
+            port: 4888,
+            host: "127.0.0.1",
+            t3Home: "/tmp/t3-bootstrap-home",
+            localRendererHost: "192.168.65.182",
+          }),
+        );
+
+        const resolved = yield* resolveServerConfig(
+          {
+            mode: Option.none(),
+            port: Option.none(),
+            host: Option.none(),
+            baseDir: Option.none(),
+            cwd: Option.none(),
+            devUrl: Option.none(),
+            noBrowser: Option.none(),
+            bootstrapFd: Option.none(),
+            autoBootstrapProjectFromCwd: Option.none(),
+            logWebSocketEvents: Option.none(),
+            tailscaleServeEnabled: Option.none(),
+            tailscaleServePort: Option.none(),
+          },
+          Option.none(),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              ConfigProvider.layer(
+                ConfigProvider.fromEnv({
+                  env: {
+                    T3CODE_BOOTSTRAP_FD: String(fd),
+                  },
+                }),
+              ),
+              NetService.layer,
+            ),
+          ),
+        );
+
+        assert.equal(resolved.localRendererHost, "192.168.65.182");
+      }),
+  );
+
   it.effect("creates derived runtime directories during config resolution", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

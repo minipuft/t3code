@@ -33,6 +33,8 @@ import type { RelayLinkProofRequest } from "@t3tools/contracts/relay";
 import { CLOUD_ENDPOINT_RUNTIME_CONFIG, RELAY_URL_SECRET } from "./config.ts";
 import {
   consumeCloudReplayGuards,
+  hasForwardedAuthorityHeaders,
+  isAllowedEndpointOrigin,
   isSupportedLinkProviderKind,
   linkProofScopes,
   pendingServiceUpdateExists,
@@ -229,7 +231,12 @@ describe("reconcileDesiredCloudLink", () => {
         HttpClient.HttpClient,
         HttpClient.make(() => unusedSecretStoreOperation()),
       ),
-      Effect.provide(NodeServices.layer),
+      Effect.provide(
+        Layer.provideMerge(
+          ServerConfigModule.layerTest(process.cwd(), { prefix: "t3-cloud-http-test-" }),
+          NodeServices.layer,
+        ),
+      ),
     ),
   );
 });
@@ -607,5 +614,82 @@ describe("link proof provider kinds", () => {
       "managed_tunnels",
     ]);
     expect(linkProofScopes(proofRequest("manual"))).toEqual(["agent_activity_notifications"]);
+  });
+});
+
+describe("isAllowedEndpointOrigin", () => {
+  const loopbackOrigin = { localHttpHost: "127.0.0.1", localHttpPort: 13773 };
+
+  it("issues a proof for a request addressed to the desktop's configured renderer host", () => {
+    expect(
+      isAllowedEndpointOrigin({
+        origin: loopbackOrigin,
+        requestUrl: "http://192.168.65.182:13773/api/t3-cloud/link-proof",
+        allowedRendererHost: "192.168.65.182",
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects a request addressed to a different non-loopback host", () => {
+    expect(
+      isAllowedEndpointOrigin({
+        origin: loopbackOrigin,
+        requestUrl: "http://10.0.0.9:13773/api/t3-cloud/link-proof",
+        allowedRendererHost: "192.168.65.182",
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects a request to the renderer host whose proof origin is not loopback", () => {
+    expect(
+      isAllowedEndpointOrigin({
+        origin: { localHttpHost: "192.168.65.182", localHttpPort: 13773 },
+        requestUrl: "http://192.168.65.182:13773/api/t3-cloud/link-proof",
+        allowedRendererHost: "192.168.65.182",
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects every non-loopback request when no renderer host is configured", () => {
+    expect(
+      isAllowedEndpointOrigin({
+        origin: loopbackOrigin,
+        requestUrl: "http://192.168.65.182:13773/api/t3-cloud/link-proof",
+        allowedRendererHost: undefined,
+      }),
+    ).toBe(false);
+  });
+
+  it("still requires the port to match on the allowed renderer host", () => {
+    expect(
+      isAllowedEndpointOrigin({
+        origin: loopbackOrigin,
+        requestUrl: "http://192.168.65.182:9999/api/t3-cloud/link-proof",
+        allowedRendererHost: "192.168.65.182",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("hasForwardedAuthorityHeaders", () => {
+  // The forwarded-header rejection in cloudLinkProofHandler runs before
+  // isAllowedEndpointOrigin, so a request carrying X-Forwarded-Host is
+  // rejected even when its hostname matches the configured renderer host.
+  it("flags a request to the renderer host that also carries X-Forwarded-Host", () => {
+    const request = HttpServerRequest.fromWeb(
+      new Request("http://192.168.65.182:13773/api/t3-cloud/link-proof", {
+        headers: { "x-forwarded-host": "attacker.example.test" },
+      }),
+    );
+
+    expect(hasForwardedAuthorityHeaders(request)).toBe(true);
+  });
+
+  it("does not flag a plain request to the renderer host", () => {
+    const request = HttpServerRequest.fromWeb(
+      new Request("http://192.168.65.182:13773/api/t3-cloud/link-proof"),
+    );
+
+    expect(hasForwardedAuthorityHeaders(request)).toBe(false);
   });
 });

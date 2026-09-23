@@ -286,7 +286,9 @@ function requestAbsoluteUrl(request: HttpServerRequest.HttpServerRequest): strin
   }
 }
 
-function hasForwardedAuthorityHeaders(request: HttpServerRequest.HttpServerRequest): boolean {
+export function hasForwardedAuthorityHeaders(
+  request: HttpServerRequest.HttpServerRequest,
+): boolean {
   return (
     firstForwardedHeaderValue(request.headers["x-forwarded-host"]) !== undefined ||
     firstForwardedHeaderValue(request.headers["x-forwarded-proto"]) !== undefined
@@ -297,16 +299,26 @@ function endpointRequestPort(url: URL): number {
   return Number(url.port || (url.protocol === "https:" ? 443 : 80));
 }
 
-function isAllowedEndpointOrigin(input: {
+// The tunnel target (origin.localHttpHost) must always be loopback. The
+// request's own hostname may additionally be the desktop's configured
+// renderer host (a WSL distro IP in NAT mode) so the desktop's own renderer
+// can reach its own backend — everything else about the check (port match,
+// forwarded-header rejection, scope requirement) is unchanged.
+export function isAllowedEndpointOrigin(input: {
   readonly origin: RelayManagedEndpointOrigin;
   readonly requestUrl: string;
+  readonly allowedRendererHost: string | undefined;
 }): boolean {
   if (!isLoopbackHostname(input.origin.localHttpHost)) {
     return false;
   }
 
   const url = new URL(input.requestUrl);
-  if (!isLoopbackHostname(url.hostname)) {
+  const isRequestHostnameAllowed =
+    isLoopbackHostname(url.hostname) ||
+    (input.allowedRendererHost !== undefined &&
+      normalizeHostname(url.hostname) === normalizeHostname(input.allowedRendererHost));
+  if (!isRequestHostnameAllowed) {
     return false;
   }
 
@@ -380,11 +392,13 @@ const makeCloudLinkProof = Effect.fn("environment.cloud.makeLinkProof")(function
   requestUrl: string,
 ) {
   const keyPair = yield* getOrCreateEnvironmentKeyPairFromSecretStore(dependencies.secrets);
+  const config = yield* ServerConfig.ServerConfig;
   if (
     !isSupportedLinkProviderKind(request) ||
     !isAllowedEndpointOrigin({
       origin: request.origin,
       requestUrl,
+      allowedRendererHost: config.localRendererHost,
     })
   ) {
     return yield* new EnvironmentHttpBadRequestError({

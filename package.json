@@ -55,6 +55,8 @@
     "sync:repos": "node scripts/sync-reference-repos.ts"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
     "@effect/tsgo": "catalog:",
     "@shadcn/lint": "0.1.5",
     "@types/node": "catalog:",

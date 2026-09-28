@@ -27,4 +27,12 @@ Contract-managed files:
 
 `.husky/` is intentionally absent — this fork uses vite-plus hooks, not husky.
 
+Managed files are exempt from `vp fmt`/`vp lint` via `vite.config.ts`'s `fmt.ignorePatterns` and
+`lint.ignorePatterns` — the fork's only edit to that upstream-owned config — so the vite-plus
+pre-commit hook cannot reformat a managed file out of sync with its template.
+
+`.delivery-contract.json` omits `.husky/commit-msg` from the managed set: `.vite-hooks/commit-msg`
+carries that responsibility here, so the contract never writes a file this fork intentionally
+deleted.
+
 ADRs live in `docs/adr`; manage them with `node scripts/adr.mjs`.

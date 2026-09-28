@@ -76,7 +76,11 @@ import { fileURLToPath } from "node:url";
  * `.github/pull_request_template.md` to derive them from (see `deriveRequiredSections` below).
  * Kept exported and unchanged for any consumer still relying on the constant directly.
  */
-export const REQUIRED_SECTIONS = ["Summary", "How it was verified", "Notes for Reviewers"];
+export const REQUIRED_SECTIONS = [
+  "Summary",
+  "How it was verified",
+  "Notes for Reviewers",
+];
 export const DEMONSTRATION_SECTION = "Demonstration";
 export const STILL_OPEN_SECTION = "Still open";
 export const DEMONSTRATION_TYPES = new Set(["feat", "fix", "perf", "refactor"]);
@@ -93,7 +97,10 @@ export const NON_FINAL_STATUSES = new Set([
 /** Default ADR directory when `.delivery-contract.json` is absent or names none. */
 export const DEFAULT_ADR_DIR = "docs/adr";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const REPO_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 
 // ---------------------------------------------------------------------------------------------
 // Plan row lifecycle primitive — vendored from the plan-row-tracking gate rather than imported
@@ -114,7 +121,8 @@ const TERMINAL_MARKS = [DONE_MARK, CLOSED_MARK, KILLED_MARK];
 function cellsOf(line) {
   const trimmed = line.trim();
   const inner = trimmed.startsWith("|") ? trimmed.slice(1) : trimmed;
-  const body = inner.endsWith("|") && !inner.endsWith("\\|") ? inner.slice(0, -1) : inner;
+  const body =
+    inner.endsWith("|") && !inner.endsWith("\\|") ? inner.slice(0, -1) : inner;
   return body.split(/(?<!\\)\|/).map((cell) => cell.trim());
 }
 
@@ -157,7 +165,8 @@ function statusColumnByLine(lines) {
     if (isSeparatorRow(line)) continue;
 
     const next = lines[index + 1];
-    const isHeader = next !== undefined && next.trim().startsWith("|") && isSeparatorRow(next);
+    const isHeader =
+      next !== undefined && next.trim().startsWith("|") && isSeparatorRow(next);
     if (isHeader) {
       const found = cellsOf(line).findIndex((cell) => STATUS_HEADER.test(cell));
       current = found === -1 ? undefined : found;
@@ -260,7 +269,10 @@ function stripFences(text) {
  * looks like, and a collapsed appendix may quote an example body that names one too.
  */
 function stripTrailerNoise(text) {
-  return stripFences(stripComments(text)).replace(/<details>[\s\S]*?<\/details>/gi, "");
+  return stripFences(stripComments(text)).replace(
+    /<details>[\s\S]*?<\/details>/gi,
+    "",
+  );
 }
 
 /** Section name → body text, HTML comments stripped so an untouched template reads as empty. */
@@ -304,7 +316,8 @@ function aboveTheFoldWords(body) {
  * this is the validator reading that same SSOT instead of hardcoding a second copy of it.
  */
 function readTemplateHeadings(repoRoot, templatePath) {
-  const resolved = templatePath ?? path.join(repoRoot, ".github", "pull_request_template.md");
+  const resolved =
+    templatePath ?? path.join(repoRoot, ".github", "pull_request_template.md");
   if (!existsSync(resolved)) return null;
 
   const lines = readFileSync(resolved, "utf8").split("\n");
@@ -340,7 +353,8 @@ function readTemplateHeadings(repoRoot, templatePath) {
 function deriveRequiredSections(templateHeadings) {
   if (templateHeadings === null) return REQUIRED_SECTIONS;
   return templateHeadings.names.filter((name) => {
-    if (name === DEMONSTRATION_SECTION || name === STILL_OPEN_SECTION) return false;
+    if (name === DEMONSTRATION_SECTION || name === STILL_OPEN_SECTION)
+      return false;
     return !/optional/i.test(templateHeadings.comments.get(name) ?? "");
   });
 }
@@ -348,11 +362,17 @@ function deriveRequiredSections(templateHeadings) {
 function checkRequiredSections(sections, failures, requiredSections) {
   for (const name of requiredSections) {
     if (!(name in sections)) failures.push(`missing section \`## ${name}\``);
-    else if (isEmpty(sections[name])) failures.push(`section \`## ${name}\` is present but empty`);
+    else if (isEmpty(sections[name]))
+      failures.push(`section \`## ${name}\` is present but empty`);
   }
 }
 
-function checkDemonstration(sections, title, failures, hasDemonstrationHeading) {
+function checkDemonstration(
+  sections,
+  title,
+  failures,
+  hasDemonstrationHeading,
+) {
   if (!hasDemonstrationHeading) return;
   const type = commitType(title);
   if (type === null || !DEMONSTRATION_TYPES.has(type)) return;
@@ -385,7 +405,11 @@ function checkVerificationRows(sections, failures, hasVerifiedHeading) {
       .split("|")
       .slice(1, -1)
       .map((c) => c.trim());
-    if (cells.length >= 2 && !isEmpty(cells[0]) && cells.slice(1).every(isEmpty)) {
+    if (
+      cells.length >= 2 &&
+      !isEmpty(cells[0]) &&
+      cells.slice(1).every(isEmpty)
+    ) {
       failures.push(
         `verification row \`${cells[0].slice(0, 60)}\` has no probe, baseline, or mutation — an ` +
           "unfilled skeleton row is a claim without evidence",
@@ -414,7 +438,8 @@ function resolveMergeBase(repoRoot) {
 
   if (git(["rev-parse", "--is-shallow-repository"]).trim() === "true") {
     return {
-      error: "the checkout is shallow, so there is no merge base to compare against",
+      error:
+        "the checkout is shallow, so there is no merge base to compare against",
     };
   }
 
@@ -463,14 +488,18 @@ function checkPlanFooter(body, failures, repoRoot, readPlanAtMergeBase) {
   const relPath = match[1];
   const planPath = path.join(repoRoot, relPath);
   if (!existsSync(planPath)) {
-    failures.push(`\`Plan:\` footer names \`${relPath}\`, which does not exist at this checkout`);
+    failures.push(
+      `\`Plan:\` footer names \`${relPath}\`, which does not exist at this checkout`,
+    );
     return;
   }
 
   const head = readFileSync(planPath, "utf8");
   const status = /^status:\s*(\S+)/m.exec(head)?.[1]?.toLowerCase();
   if (status === undefined) {
-    failures.push(`\`Plan:\` footer names \`${relPath}\`, which declares no \`status:\``);
+    failures.push(
+      `\`Plan:\` footer names \`${relPath}\`, which declares no \`status:\``,
+    );
     return;
   }
 
@@ -513,13 +542,17 @@ function checkPlanFooter(body, failures, repoRoot, readPlanAtMergeBase) {
 
   if (base.text === null) return;
 
-  const baseState = new Map(planRowStates(base.text).map((row) => [row.id, row.state]));
+  const baseState = new Map(
+    planRowStates(base.text).map((row) => [row.id, row.state]),
+  );
   if (![...baseState.values()].includes("open")) {
     mustFinalize();
     return;
   }
 
-  const closed = rows.filter((row) => row.state === "terminal" && baseState.get(row.id) === "open");
+  const closed = rows.filter(
+    (row) => row.state === "terminal" && baseState.get(row.id) === "open",
+  );
   if (closed.length === 0) {
     failures.push(
       `\`Plan:\` footer names \`${relPath}\` with status \`${status}\` and ${unfinished.length} ` +
@@ -571,7 +604,9 @@ function checkDecisionTrailer(body, failures, repoRoot, adrDir) {
   const files = existsSync(dir) ? readdirSync(dir) : [];
   for (const match of matches) {
     const number = match[2];
-    const found = files.some((f) => f.startsWith(`${number}-`) && f.endsWith(".md"));
+    const found = files.some(
+      (f) => f.startsWith(`${number}-`) && f.endsWith(".md"),
+    );
     if (!found) {
       failures.push(
         `\`Decision: ${match[1] ?? ""}${number}\` names no ADR file under \`${adrDir}\` — ` +
@@ -591,7 +626,11 @@ function collectWarnings(body, sections) {
     );
   }
   const verified = sections["How it was verified"];
-  if (!isEmpty(verified) && !/^\s*\|/m.test(verified) && !/```/.test(verified)) {
+  if (
+    !isEmpty(verified) &&
+    !/^\s*\|/m.test(verified) &&
+    !/```/.test(verified)
+  ) {
     warnings.push(
       "`## How it was verified` has no table and no fenced block — the template asks for one row " +
         "per claim (claim · probe · baseline → measured · mutation that fails it).",
@@ -608,14 +647,17 @@ export function checkBody(body, title, options = {}) {
   // Injected so the self-test drives the plan rules off fixtures rather than a real git history,
   // which keeps every rule in this file pure and replayable.
   const readPlanAtMergeBase =
-    options.readPlanAtMergeBase ?? ((relPath) => planAtMergeBase(repoRoot, relPath));
+    options.readPlanAtMergeBase ??
+    ((relPath) => planAtMergeBase(repoRoot, relPath));
   const adrDir = options.adrDir ?? defaultAdrDir(repoRoot);
   const templateHeadings = readTemplateHeadings(repoRoot, options.templatePath);
   const requiredSections = deriveRequiredSections(templateHeadings);
   const hasDemonstrationHeading =
-    templateHeadings === null || templateHeadings.names.includes(DEMONSTRATION_SECTION);
+    templateHeadings === null ||
+    templateHeadings.names.includes(DEMONSTRATION_SECTION);
   const hasVerifiedHeading =
-    templateHeadings === null || templateHeadings.names.includes("How it was verified");
+    templateHeadings === null ||
+    templateHeadings.names.includes("How it was verified");
   const sections = splitSections(body);
   const failures = [];
   checkRequiredSections(sections, failures, requiredSections);
@@ -635,7 +677,9 @@ function readArg(flag) {
 
 /** A minimal plan whose table carries the `St` column `planRowStates` grades. */
 function fixturePlan(status, rows) {
-  const body = rows.map(([id, mark]) => `| ${id} | ${mark} | change |`).join("\n");
+  const body = rows
+    .map(([id, mark]) => `| ${id} | ${mark} | change |`)
+    .join("\n");
   return `---\nstatus: ${status}\n---\n\n| Id | St | Change |\n|---|---|---|\n${body}\n`;
 }
 
@@ -679,7 +723,10 @@ const PLAN_FIXTURES = {
     fixturePlan("active", OPEN_PAIR),
   ],
   // PROGRESS, converse: nothing moved.
-  "plans/stalled.md": [fixturePlan("active", OPEN_PAIR), fixturePlan("active", OPEN_PAIR)],
+  "plans/stalled.md": [
+    fixturePlan("active", OPEN_PAIR),
+    fixturePlan("active", OPEN_PAIR),
+  ],
   // CLOSURE, both directions.
   "plans/all-terminal-active.md": [
     fixturePlan("active", [
@@ -724,7 +771,8 @@ const PLAN_FIXTURES = {
       ["R2", "☐"],
     ]),
     {
-      error: "the checkout is shallow, so there is no merge base to compare against",
+      error:
+        "the checkout is shallow, so there is no merge base to compare against",
     },
   ],
   // Absent at the merge base: this PR introduces the plan, which is itself the advance.
@@ -745,7 +793,10 @@ function selfTestFixtures() {
   }
   // An ADR fixture for the Decision trailer rule: 0007 exists, 0008 deliberately does not.
   mkdirSync(path.join(root, "docs", "adr"), { recursive: true });
-  writeFileSync(path.join(root, "docs", "adr", "0007-vendor-plan-row-states.md"), "# ADR 0007\n");
+  writeFileSync(
+    path.join(root, "docs", "adr", "0007-vendor-plan-row-states.md"),
+    "# ADR 0007\n",
+  );
   return root;
 }
 
@@ -828,7 +879,10 @@ function selfTest() {
     },
     {
       name: "placeholder inside a comment is fine",
-      body: filled.replace("After this merges, x.", "After this merges, x. <!-- fill ___ -->"),
+      body: filled.replace(
+        "After this merges, x.",
+        "After this merges, x. <!-- fill ___ -->",
+      ),
       title: "feat(chains): x",
       expect: noFail,
     },
@@ -896,7 +950,8 @@ function selfTest() {
       name: "an unmarked row is unfinished, so closure does not demand retirement",
       body: `${filled}${withPlanFooter("plans/unmarked-row.md")}`,
       title: "feat(chains): x",
-      expect: (r) => noFail(r) && !r.failures.some((f) => f.includes("retires the")),
+      expect: (r) =>
+        noFail(r) && !r.failures.some((f) => f.includes("retires the")),
     },
     {
       name: "a plan graded by words keeps the original finalize-in-this-PR rule",
@@ -909,8 +964,9 @@ function selfTest() {
       body: `${filled}${withPlanFooter("plans/unreadable-base.md")}`,
       title: "feat(chains): x",
       expect: (r) =>
-        r.failures.some((f) => f.includes("shallow") && f.includes("fetch-depth")) &&
-        !r.failures.some((f) => f.includes("closes none of them")),
+        r.failures.some(
+          (f) => f.includes("shallow") && f.includes("fetch-depth"),
+        ) && !r.failures.some((f) => f.includes("closes none of them")),
     },
     {
       name: "a plan this PR introduces needs no prior row to close",
@@ -921,10 +977,15 @@ function selfTest() {
     {
       name: "prose over budget warns, transcripts and details do not count",
       body:
-        filled.replace("After this merges, x.", `${"word ".repeat(WORD_BUDGET + 1)}`) +
+        filled.replace(
+          "After this merges, x.",
+          `${"word ".repeat(WORD_BUDGET + 1)}`,
+        ) +
         `\n<details><summary>appendix</summary>\n\n${"archive ".repeat(2000)}\n</details>\n`,
       title: "feat(chains): x",
-      expect: (r) => noFail(r) && r.warnings.filter((w) => w.includes("budget")).length === 1,
+      expect: (r) =>
+        noFail(r) &&
+        r.warnings.filter((w) => w.includes("budget")).length === 1,
     },
     {
       name: "details-only bulk stays under budget",
@@ -934,7 +995,10 @@ function selfTest() {
     },
     {
       name: "prose verification warns",
-      body: filled.replace("| Claim | Probe |\n|---|---|\n| a | b |", "ran the suite, 2823 passed"),
+      body: filled.replace(
+        "| Claim | Probe |\n|---|---|\n| a | b |",
+        "ran the suite, 2823 passed",
+      ),
       title: "feat(chains): x",
       expect: (r) => r.warnings.some((w) => w.includes("no table")),
     },
@@ -1000,7 +1064,8 @@ function selfTest() {
         "## What Changed\n\n<!-- what changed -->\n\n## Why\n\n<!-- why -->\n\n## Checklist\n\n<!-- checklist -->\n",
       ),
       expect: (r) =>
-        r.failures.some((f) => f.includes("Why")) && !r.failures.some((f) => f.includes("Summary")),
+        r.failures.some((f) => f.includes("Why")) &&
+        !r.failures.some((f) => f.includes("Summary")),
     },
     {
       name: "a template with no Demonstration heading does not demand one for a feat title",
@@ -1084,13 +1149,18 @@ function main() {
     process.exit(assertBaseMeasurable() ? 0 : 1);
   }
   const bodyFile = readArg("--body-file");
-  const body = bodyFile ? readFileSync(bodyFile, "utf8") : (process.env.PR_BODY ?? "");
+  const body = bodyFile
+    ? readFileSync(bodyFile, "utf8")
+    : (process.env.PR_BODY ?? "");
   const title = readArg("--title") ?? process.env.PR_TITLE ?? "";
   const { failures, warnings } = checkBody(body, title);
-  const requiredCount = deriveRequiredSections(readTemplateHeadings(REPO_ROOT)).length;
+  const requiredCount = deriveRequiredSections(
+    readTemplateHeadings(REPO_ROOT),
+  ).length;
   const ci = process.env.GITHUB_ACTIONS === "true";
 
-  for (const w of warnings) console.log(ci ? `::warning::${w}` : `warning: ${w}`);
+  for (const w of warnings)
+    console.log(ci ? `::warning::${w}` : `warning: ${w}`);
   for (const f of failures) console.log(ci ? `::error::${f}` : `error: ${f}`);
 
   if (failures.length > 0) {
@@ -1106,6 +1176,9 @@ function main() {
   );
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === new URL(`file://${process.argv[1]}`).href
+) {
   main();
 }

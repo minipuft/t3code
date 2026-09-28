@@ -37,7 +37,10 @@ import { fileURLToPath } from "node:url";
 
 import { checkBody, DEFAULT_ADR_DIR } from "./validate-pr-body.mjs";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const REPO_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 const TEMPLATE = path.join(REPO_ROOT, ".github", "pull_request_template.md");
 
 function git(...args) {
@@ -52,7 +55,9 @@ function readArg(flag, fallback) {
 /** Ranges are `base...HEAD` so a stale local base still measures only this branch. */
 function branchFacts(base) {
   const range = `${base}...HEAD`;
-  const subjects = git("log", "--no-merges", "--format=%s", range).split("\n").filter(Boolean);
+  const subjects = git("log", "--no-merges", "--format=%s", range)
+    .split("\n")
+    .filter(Boolean);
   const files = git("diff", "--name-only", range).split("\n").filter(Boolean);
   const numstat = git("diff", "--numstat", range)
     .split("\n")
@@ -75,14 +80,19 @@ function branchFacts(base) {
 function detectPlan(files, explicit) {
   if (explicit) return explicit;
   return files.find(
-    (f) => f.startsWith("plans/") && f.endsWith(".md") && !f.includes("implementation-notes"),
+    (f) =>
+      f.startsWith("plans/") &&
+      f.endsWith(".md") &&
+      !f.includes("implementation-notes"),
   );
 }
 
 /** Plan filename → initiative slug: no dir, no `.md`, no `-implementation-notes`, no trailing date. */
 function initiativeSlug(planPath) {
   const base = path.basename(planPath, ".md");
-  return base.replace(/-implementation-notes$/, "").replace(/-\d{4}-\d{2}-\d{2}$/, "");
+  return base
+    .replace(/-implementation-notes$/, "")
+    .replace(/-\d{4}-\d{2}-\d{2}$/, "");
 }
 
 function escapeRegExp(s) {
@@ -136,7 +146,19 @@ function summary({ subjects }) {
 
 function demonstration({ files }) {
   const drives = files.filter((f) => /verify-.*\.mjs$/.test(f));
-  const lines = ["**Before**", "", "```", "___", "```", "", "**After**", "", "```", "___", "```"];
+  const lines = [
+    "**Before**",
+    "",
+    "```",
+    "___",
+    "```",
+    "",
+    "**After**",
+    "",
+    "```",
+    "___",
+    "```",
+  ];
   if (drives.length > 0) {
     lines.push("", "Capture from:", ...drives.map((d) => `- \`node ${d}\``));
   }
@@ -145,7 +167,9 @@ function demonstration({ files }) {
 
 function verified({ files }) {
   const tests = files.filter(
-    (f) => /\.(test|spec)\.[cm]?[jt]s$/.test(f) || /(^|\/)scripts\/validate-/.test(f),
+    (f) =>
+      /\.(test|spec)\.[cm]?[jt]s$/.test(f) ||
+      /(^|\/)scripts\/validate-/.test(f),
   );
   const rows = tests.length > 0 ? tests : ["<claim>"];
   return [
@@ -158,7 +182,10 @@ function verified({ files }) {
 function notes({ numstat }) {
   return numstat
     .slice(0, 3)
-    .map((n) => `- \`${n.file}\` (${n.churn} lines changed) — distrust because ___`);
+    .map(
+      (n) =>
+        `- \`${n.file}\` (${n.churn} lines changed) — distrust because ___`,
+    );
 }
 
 function stillOpen(plan) {
@@ -185,7 +212,9 @@ function appendix({ files }) {
   for (const n of notes) {
     const notePath = path.join(REPO_ROOT, n);
     if (!existsSync(notePath)) continue;
-    const deviations = /## Deviations[\s\S]*?(?=\n## |$)/.exec(readFileSync(notePath, "utf8"));
+    const deviations = /## Deviations[\s\S]*?(?=\n## |$)/.exec(
+      readFileSync(notePath, "utf8"),
+    );
     if (deviations) parts.push(`From \`${n}\`:`, "", deviations[0].trim(), "");
   }
   parts.push(
@@ -234,7 +263,8 @@ function main() {
   });
   const decisions = adrDecisions(facts.addedOrModified, resolveAdrDir());
   const trailers = [];
-  if (plan) trailers.push(`Plan: \`${plan}\``, `Initiative: ${initiativeSlug(plan)}`);
+  if (plan)
+    trailers.push(`Plan: \`${plan}\``, `Initiative: ${initiativeSlug(plan)}`);
   trailers.push(...decisions.map((d) => `Decision: ${d}`));
 
   const tail = [""];

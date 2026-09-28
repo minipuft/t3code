@@ -27,13 +27,27 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const KNOWN_STATUSES = new Set(["accepted", "proposed", "superseded", "deprecated", "rejected"]);
+const KNOWN_STATUSES = new Set([
+  "accepted",
+  "proposed",
+  "superseded",
+  "deprecated",
+  "rejected",
+]);
 const ADR_FILE = /^(\d{4})-.+\.md$/;
 const TEMPLATE_FILE = "0000-template.md";
 const INDEX_FILE = "README.md";
 const START_MARKER = "<!-- adr-index:start -->";
 const END_MARKER = "<!-- adr-index:end -->";
-const HEADER = ["#", "Title", "Status", "Date", "Supersedes", "Superseded by", "Initiative"];
+const HEADER = [
+  "#",
+  "Title",
+  "Status",
+  "Date",
+  "Supersedes",
+  "Superseded by",
+  "Initiative",
+];
 const DEFAULT_BODY = "## Context\n\n## Decision\n\n## Consequences\n";
 
 // ---------------------------------------------------------------- parsing (pure)
@@ -72,7 +86,9 @@ function firstH1(text) {
 /** Lines of the `## <name>` section, up to the next H1/H2. */
 function sectionLines(text, name) {
   const lines = text.split(/\r?\n/);
-  const start = lines.findIndex((l) => new RegExp(`^##[ \\t]+${name}[ \\t]*$`, "i").test(l));
+  const start = lines.findIndex((l) =>
+    new RegExp(`^##[ \\t]+${name}[ \\t]*$`, "i").test(l),
+  );
   if (start === -1) return null;
   const rest = lines.slice(start + 1);
   const end = rest.findIndex((l) => /^#{1,2}[ \t]/.test(l));
@@ -164,8 +180,11 @@ const width = (value) => [...value].length;
 
 /** Table aligned the way prettier aligns markdown tables, so a formatter pass is a no-op. */
 function alignedTable(rows) {
-  const widths = HEADER.map((_, i) => Math.max(3, ...[HEADER, ...rows].map((r) => width(r[i]))));
-  const line = (r) => `| ${r.map((c, i) => c + " ".repeat(widths[i] - width(c))).join(" | ")} |`;
+  const widths = HEADER.map((_, i) =>
+    Math.max(3, ...[HEADER, ...rows].map((r) => width(r[i]))),
+  );
+  const line = (r) =>
+    `| ${r.map((c, i) => c + " ".repeat(widths[i] - width(c))).join(" | ")} |`;
   const rule = `| ${widths.map((w) => "-".repeat(w)).join(" | ")} |`;
   return [line(HEADER), rule, ...rows.map(line)].join("\n");
 }
@@ -193,7 +212,9 @@ export function renderReadme(current, block) {
     const start = current.indexOf(START_MARKER);
     const end = current.indexOf(END_MARKER);
     if (start !== -1 && end > start) {
-      return current.slice(0, start) + block + current.slice(end + END_MARKER.length);
+      return (
+        current.slice(0, start) + block + current.slice(end + END_MARKER.length)
+      );
     }
   }
   return (
@@ -209,7 +230,10 @@ function supersessionFindings(adr, byNumber) {
   const findings = [];
   for (const next of adr.supersededBy) {
     const successor = byNumber.get(next);
-    if (!successor) findings.push(`${adr.number}: superseded_by ${next}, which does not exist`);
+    if (!successor)
+      findings.push(
+        `${adr.number}: superseded_by ${next}, which does not exist`,
+      );
     else if (!successor.supersedes.includes(adr.number))
       findings.push(
         `${adr.number}: asymmetric supersession — says superseded_by ${next}, but ${next} does not say supersedes ${adr.number}`,
@@ -227,7 +251,8 @@ function supersessionFindings(adr, byNumber) {
       );
     const replacesAccepted =
       predecessor.status === "accepted" ||
-      (predecessor.status === "superseded" && predecessor.supersededBy.includes(adr.number));
+      (predecessor.status === "superseded" &&
+        predecessor.supersededBy.includes(adr.number));
     if (adr.status === "proposed" && replacesAccepted)
       findings.push(
         `${adr.number}: proposed ADR supersedes ${prev}, an accepted decision — only an accepted ADR may replace it`,
@@ -239,7 +264,9 @@ function supersessionFindings(adr, byNumber) {
 function adrFindings(adr, byNumber) {
   const findings = [];
   if (adr.status === "unknown")
-    findings.push(`${adr.number}: unknown status "${adr.rawStatus}" (${adr.file})`);
+    findings.push(
+      `${adr.number}: unknown status "${adr.rawStatus}" (${adr.file})`,
+    );
   if (adr.status === "superseded" && adr.supersededBy.length === 0)
     findings.push(`${adr.number}: status superseded but no superseded_by`);
   return [...findings, ...supersessionFindings(adr, byNumber)];
@@ -250,7 +277,9 @@ function numberingFindings(adrs, deleted) {
   const seen = new Map();
   for (const adr of adrs) {
     if (seen.has(adr.number))
-      findings.push(`${adr.number}: number used twice (${seen.get(adr.number)}, ${adr.file})`);
+      findings.push(
+        `${adr.number}: number used twice (${seen.get(adr.number)}, ${adr.file})`,
+      );
     seen.set(adr.number, adr.file);
   }
   if (adrs.length === 0) return findings;
@@ -272,7 +301,8 @@ export function checkSet(adrs, readme) {
     ...numberingFindings(adrs, deleted),
   ];
   const expected = renderReadme(readme, renderIndex(adrs, deleted));
-  if (readme === null) findings.push(`${INDEX_FILE}: missing — run \`adr.mjs index\``);
+  if (readme === null)
+    findings.push(`${INDEX_FILE}: missing — run \`adr.mjs index\``);
   else if (expected !== readme)
     findings.push(`${INDEX_FILE}: index is stale — run \`adr.mjs index\``);
   return findings;
@@ -306,9 +336,18 @@ function templateBody(template) {
   return body.endsWith("\n") ? body : `${body}\n`;
 }
 
-const yamlString = (value) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+const yamlString = (value) =>
+  `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
-export function renderNewAdr({ number, title, status, date, initiative, supersedes, template }) {
+export function renderNewAdr({
+  number,
+  title,
+  status,
+  date,
+  initiative,
+  supersedes,
+  template,
+}) {
   return [
     "---",
     `number: ${number}`,
@@ -332,11 +371,17 @@ export function markSuperseded(adr, successor) {
   const lines = adr.text.split(/\r?\n/);
   if (adr.style === "A") return markFrontMatter(lines, successor).join(eol);
   const index =
-    adr.style === "C" ? lines.findIndex((l) => /^-[ \t]*Status:/i.test(l)) : firstStatusLine(lines);
-  if (index === -1) throw new Error(`${adr.file}: no status line to mark superseded`);
+    adr.style === "C"
+      ? lines.findIndex((l) => /^-[ \t]*Status:/i.test(l))
+      : firstStatusLine(lines);
+  if (index === -1)
+    throw new Error(`${adr.file}: no status line to mark superseded`);
   lines[index] =
     adr.style === "C"
-      ? lines[index].replace(/^(-[ \t]*Status:[ \t]*).*$/i, `$1superseded by ADR-${successor}`)
+      ? lines[index].replace(
+          /^(-[ \t]*Status:[ \t]*).*$/i,
+          `$1superseded by ADR-${successor}`,
+        )
       : `Superseded by ADR-${successor}`;
   return lines.join(eol);
 }
@@ -351,7 +396,9 @@ function firstStatusLine(lines) {
 function markFrontMatter(lines, successor) {
   const close = lines.indexOf("---", 1);
   const set = (key, value) => {
-    const at = lines.findIndex((l, i) => i > 0 && i < close && new RegExp(`^${key}\\s*:`).test(l));
+    const at = lines.findIndex(
+      (l, i) => i > 0 && i < close && new RegExp(`^${key}\\s*:`).test(l),
+    );
     if (at !== -1) lines[at] = `${key}: ${value}`;
     else lines.splice(lines.indexOf("---", 1), 0, `${key}: ${value}`);
   };
@@ -386,7 +433,8 @@ class AdrDirectory {
     const readme = this.readOptional(INDEX_FILE);
     const block = renderIndex(this.load(), deletedNumbers(readme));
     const next = renderReadme(readme, block);
-    if (next !== readme) fs.writeFileSync(path.join(this.dir, INDEX_FILE), next);
+    if (next !== readme)
+      fs.writeFileSync(path.join(this.dir, INDEX_FILE), next);
     return next;
   }
 
@@ -425,7 +473,10 @@ class AdrDirectory {
       status: options.status ?? "accepted",
       supersedes: old.number,
     });
-    fs.writeFileSync(path.join(this.dir, old.file), markSuperseded(old, created.number));
+    fs.writeFileSync(
+      path.join(this.dir, old.file),
+      markSuperseded(old, created.number),
+    );
     return created;
   }
 }
@@ -448,7 +499,13 @@ Options:
 
 function parseArgs(argv) {
   const options = { positional: [] };
-  const valued = new Set(["--dir", "--initiative", "--status", "--supersedes", "--date"]);
+  const valued = new Set([
+    "--dir",
+    "--initiative",
+    "--status",
+    "--supersedes",
+    "--date",
+  ]);
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (valued.has(arg)) {
@@ -464,7 +521,9 @@ function parseArgs(argv) {
 
 function validateStatus(status) {
   if (status !== undefined && !KNOWN_STATUSES.has(status))
-    throw new Error(`--status must be one of ${[...KNOWN_STATUSES].join(", ")}`);
+    throw new Error(
+      `--status must be one of ${[...KNOWN_STATUSES].join(", ")}`,
+    );
 }
 
 function runCommand(options) {
@@ -488,7 +547,11 @@ function runCommand(options) {
     console.log(path.relative(process.cwd(), created.file));
     return 0;
   }
-  if (command === "supersede" && rest.length === 2 && /^\d{1,4}$/.test(rest[0])) {
+  if (
+    command === "supersede" &&
+    rest.length === 2 &&
+    /^\d{1,4}$/.test(rest[0])
+  ) {
     const created = adrs.supersede(rest[0], rest[1], options);
     adrs.index();
     console.log(path.relative(process.cwd(), created.file));
@@ -529,8 +592,10 @@ function selfTest() {
     }).status;
   const read = (name) => fs.readFileSync(path.join(dir, name), "utf8");
   const legacyIntact = () =>
-    read("0001-front-matter-decision.md") === SELF_TEST_FILES["0001-front-matter-decision.md"] &&
-    read("0003-list-metadata-decision.md") === SELF_TEST_FILES["0003-list-metadata-decision.md"];
+    read("0001-front-matter-decision.md") ===
+      SELF_TEST_FILES["0001-front-matter-decision.md"] &&
+    read("0003-list-metadata-decision.md") ===
+      SELF_TEST_FILES["0003-list-metadata-decision.md"];
   const cases = [];
   const expect = (name, ok) => {
     cases.push(ok);
@@ -539,11 +604,15 @@ function selfTest() {
   try {
     expect(
       "index lists one row per style",
-      run(dir, "index") === 0 && (read(INDEX_FILE).match(/^\| 000\d /gm) ?? []).length === 3,
+      run(dir, "index") === 0 &&
+        (read(INDEX_FILE).match(/^\| 000\d /gm) ?? []).length === 3,
     );
     expect("check passes on a consistent set", run(dir, "check") === 0);
     const before = read("0002-numbered-heading-decision.md");
-    expect("supersede exits 0", run(dir, "supersede", "0002", "Replacement decision") === 0);
+    expect(
+      "supersede exits 0",
+      run(dir, "supersede", "0002", "Replacement decision") === 0,
+    );
     expect(
       "supersede changes exactly one line of the style-B file",
       changedLines(before, read("0002-numbered-heading-decision.md")) === 1,
@@ -554,9 +623,14 @@ function selfTest() {
     const successor = path.join(forged, "0004-replacement-decision.md");
     fs.writeFileSync(
       successor,
-      fs.readFileSync(successor, "utf8").replace(/^supersedes: .*$/m, "supersedes:"),
+      fs
+        .readFileSync(successor, "utf8")
+        .replace(/^supersedes: .*$/m, "supersedes:"),
     );
-    expect("check fails on a forged asymmetric link", run(forged, "check") === 1);
+    expect(
+      "check fails on a forged asymmetric link",
+      run(forged, "check") === 1,
+    );
     expect("style-A and style-C files byte-identical", legacyIntact());
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -579,5 +653,8 @@ function main(argv) {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url))
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+)
   process.exitCode = main(process.argv.slice(2));

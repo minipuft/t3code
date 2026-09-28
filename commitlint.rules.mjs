@@ -34,7 +34,10 @@ const ACTIVITY_VERBS = [
   "wip",
 ];
 
-const activityVerb = new RegExp(`(^|\\s)(${ACTIVITY_VERBS.join("|")})(\\s|$)`, "i");
+const activityVerb = new RegExp(
+  `(^|\\s)(${ACTIVITY_VERBS.join("|")})(\\s|$)`,
+  "i",
+);
 const secondOutcome = /\s(and|—|--)\s/;
 
 const plugins = [

@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/minipuft/repository-standards/main/contracts/delivery-contract.schema.json",
-  "templateVersion": "1.5.0",
+  "templateVersion": "1.6.0",
   "answers": {
     "scopes": [
       "web",
@@ -27,5 +27,6 @@
     "adrDir": "docs/adr",
     "defaultBranch": "main",
     "packageManager": "pnpm"
-  }
+  },
+  "omit": [".husky/commit-msg"]
 }

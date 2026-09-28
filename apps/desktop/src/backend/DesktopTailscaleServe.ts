@@ -100,7 +100,7 @@ const reachableDaemons = (
  * Wraps a bare `tailscale` invocation so it runs inside the distro through
  * `wsl.exe --exec`, skipping the login shell. Other commands pass through.
  */
-export const wrapWslTailscaleCommand = (
+const wrapWslTailscaleCommand = (
   command: ChildProcess.Command,
   distro: string,
 ): ChildProcess.Command => {

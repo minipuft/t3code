@@ -28,6 +28,7 @@ const DesktopSettingsPatch = Schema.Struct({
   serverExposureMode: Schema.optionalKey(Schema.Literals(["local-only", "network-accessible"])),
   tailscaleServeEnabled: Schema.optionalKey(Schema.Boolean),
   tailscaleServePort: Schema.optionalKey(Schema.Number),
+  tailscaleServeDevice: Schema.optionalKey(Schema.Literals(["auto", "wsl", "native", "both"])),
   updateChannel: Schema.optionalKey(Schema.Literals(["latest", "nightly"])),
   updateChannelConfiguredByUser: Schema.optionalKey(Schema.Boolean),
   wslBackendEnabled: Schema.optionalKey(Schema.Boolean),
@@ -130,6 +131,7 @@ describe("DesktopSettings", () => {
         serverExposureMode: "local-only",
         tailscaleServeEnabled: false,
         tailscaleServePort: 443,
+        tailscaleServeDevice: "auto",
         updateChannel: "nightly",
         updateChannelConfiguredByUser: false,
         wslBackendEnabled: false,
@@ -160,6 +162,7 @@ describe("DesktopSettings", () => {
           serverExposureMode: "network-accessible",
           tailscaleServeEnabled: true,
           tailscaleServePort: 8443,
+          tailscaleServeDevice: "auto",
           updateChannel: "latest",
           updateChannelConfiguredByUser: true,
           wslBackendEnabled: false,
@@ -174,6 +177,7 @@ describe("DesktopSettings", () => {
         const tailscale = yield* settings.setTailscaleServe({
           enabled: true,
           port: Option.some(9443),
+          device: Option.none(),
         });
         assert.isTrue(tailscale.changed);
         assert.equal(tailscale.settings.tailscaleServePort, 9443);
@@ -218,6 +222,7 @@ describe("DesktopSettings", () => {
         const tailscale = yield* settings.setTailscaleServe({
           enabled: false,
           port: Option.none(),
+          device: Option.none(),
         });
         assert.isFalse(tailscale.changed);
 
@@ -268,6 +273,7 @@ describe("DesktopSettings", () => {
           serverExposureMode: "network-accessible",
           tailscaleServeEnabled: true,
           tailscaleServePort: 8443,
+          tailscaleServeDevice: "auto",
           updateChannel: "latest",
           updateChannelConfiguredByUser: false,
           wslBackendEnabled: false,
@@ -325,6 +331,7 @@ describe("DesktopSettings", () => {
             serverExposureMode: "network-accessible",
             tailscaleServeEnabled: true,
             tailscaleServePort: 8443,
+            tailscaleServeDevice: "auto",
             updateChannel: "nightly",
             updateChannelConfiguredByUser: true,
             wslBackendEnabled: false,
@@ -374,6 +381,7 @@ describe("DesktopSettings", () => {
           serverExposureMode: "local-only",
           tailscaleServeEnabled: false,
           tailscaleServePort: 443,
+          tailscaleServeDevice: "auto",
           updateChannel: "nightly",
           updateChannelConfiguredByUser: false,
           wslBackendEnabled: false,
@@ -403,6 +411,7 @@ describe("DesktopSettings", () => {
           serverExposureMode: "local-only",
           tailscaleServeEnabled: false,
           tailscaleServePort: 443,
+          tailscaleServeDevice: "auto",
           updateChannel: "latest",
           updateChannelConfiguredByUser: true,
           wslBackendEnabled: false,
@@ -431,12 +440,87 @@ describe("DesktopSettings", () => {
           serverExposureMode: "local-only",
           tailscaleServeEnabled: true,
           tailscaleServePort: 443,
+          tailscaleServeDevice: "auto",
           updateChannel: "latest",
           updateChannelConfiguredByUser: false,
           wslBackendEnabled: false,
           wslOnly: false,
           wslDistro: null,
         } satisfies DesktopAppSettings.DesktopSettings);
+      }),
+    ),
+  );
+
+  it.effect("persists a non-default Tailscale Serve device and omits the default from disk", () =>
+    withSettings(
+      Effect.gen(function* () {
+        const environment = yield* DesktopEnvironment.DesktopEnvironment;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const settings = yield* DesktopAppSettings.DesktopAppSettings;
+
+        const changedToWsl = yield* settings.setTailscaleServe({
+          enabled: false,
+          port: Option.none(),
+          device: Option.some("wsl"),
+        });
+        assert.isTrue(changedToWsl.changed);
+        assert.equal(changedToWsl.settings.tailscaleServeDevice, "wsl");
+        assert.equal((yield* settings.load).tailscaleServeDevice, "wsl");
+
+        const persistedWithDevice = yield* decodeDesktopSettingsPatch(
+          yield* fileSystem.readFileString(environment.desktopSettingsPath),
+        );
+        assert.equal(persistedWithDevice.tailscaleServeDevice, "wsl");
+
+        yield* settings.setTailscaleServe({
+          enabled: false,
+          port: Option.none(),
+          device: Option.some("auto"),
+        });
+        const persistedAtDefault = yield* decodeDesktopSettingsPatch(
+          yield* fileSystem.readFileString(environment.desktopSettingsPath),
+        );
+        assert.notProperty(persistedAtDefault, "tailscaleServeDevice");
+      }),
+    ),
+  );
+
+  it.effect("normalizes an unknown persisted Tailscale Serve device to auto", () =>
+    withSettings(
+      Effect.gen(function* () {
+        const environment = yield* DesktopEnvironment.DesktopEnvironment;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const settings = yield* DesktopAppSettings.DesktopAppSettings;
+        yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
+        yield* fileSystem.writeFileString(
+          environment.desktopSettingsPath,
+          `{
+            "tailscaleServeDevice": "bogus"
+          }\n`,
+        );
+
+        assert.equal((yield* settings.load).tailscaleServeDevice, "auto");
+      }),
+    ),
+  );
+
+  it.effect("reports changed when only the Tailscale Serve device changes", () =>
+    withSettings(
+      Effect.gen(function* () {
+        const settings = yield* DesktopAppSettings.DesktopAppSettings;
+
+        const result = yield* settings.setTailscaleServe({
+          enabled: false,
+          port: Option.none(),
+          device: Option.some("native"),
+        });
+        assert.isTrue(result.changed);
+        assert.equal(result.settings.tailscaleServeDevice, "native");
+        assert.equal(result.settings.tailscaleServeEnabled, false);
+        assert.equal(
+          result.settings.tailscaleServePort,
+          DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS.tailscaleServePort,
+        );
       }),
     ),
   );

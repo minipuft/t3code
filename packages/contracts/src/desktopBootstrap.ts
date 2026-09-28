@@ -20,6 +20,11 @@ export const DesktopBackendBootstrap = Schema.Struct({
   desktopTelemetryFd: Schema.optionalKey(PositiveInt),
   desktopTelemetryControlFd: Schema.optionalKey(PositiveInt),
   resourceMonitorPath: Schema.optionalKey(TrimmedNonEmptyString),
+  // The non-loopback host the desktop's own renderer uses to reach this
+  // backend (a WSL distro IP in NAT mode). The server treats requests
+  // addressed to it like loopback for local-only endpoints such as T3
+  // Connect link proofs.
+  localRendererHost: Schema.optionalKey(TrimmedNonEmptyString),
 });
 
 export type DesktopBackendBootstrap = typeof DesktopBackendBootstrap.Type;

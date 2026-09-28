@@ -82,8 +82,23 @@ Mobile keeps its manual environment selection.
 
 ### Tailscale HTTPS
 
-Join both devices to the same tailnet. In the desktop app, enable **Tailscale
-HTTPS** in **Settings → Connections**. Turn it off there to remove that route.
+Join both devices to the same tailnet. In the desktop app, turn on **Tailscale
+HTTPS** in **Settings → Connections**; it takes effect without restarting T3
+Code. Turn it off there to remove the route. The first connection can take up
+to a minute while Tailscale issues the HTTPS certificate. If setup fails, the
+reason appears under **Tailscale HTTPS** (for example, Tailscale not logged
+in, or Serve not yet enabled for your tailnet); fix it and choose **Retry**.
+
+When the desktop app runs its backend in WSL, **Serve from** chooses which
+Tailscale serves it:
+
+- **Automatic** — WSL's Tailscale if it's running, otherwise Windows'
+- **WSL** or **Windows** — pin to one of the two
+- **Both** — gives you two HTTPS addresses, one per device, so pairing a
+  device with each keeps one route working if the other Tailscale stops
+
+WSL and Windows are separate devices on your tailnet with separate
+addresses.
 
 To start a command-line server with Tailscale HTTPS:
 

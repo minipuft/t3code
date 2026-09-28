@@ -1,7 +1,9 @@
 import {
   DesktopServerExposureModeSchema,
+  DesktopTailscaleServeDeviceSchema,
   DesktopUpdateChannelSchema,
   type DesktopServerExposureMode,
+  type DesktopTailscaleServeDevice,
   type DesktopUpdateChannel,
 } from "@t3tools/contracts";
 import { fromLenientJson } from "@t3tools/shared/schemaJson";
@@ -32,6 +34,10 @@ export interface DesktopSettings {
   readonly serverExposureMode: DesktopServerExposureMode;
   readonly tailscaleServeEnabled: boolean;
   readonly tailscaleServePort: number;
+  // Which Tailscale daemon serves the advertised HTTPS address. "wsl"/"both"
+  // only apply when the primary backend runs in WSL; "native" is the host
+  // OS daemon. Defaults to "auto".
+  readonly tailscaleServeDevice: DesktopTailscaleServeDevice;
   readonly updateChannel: DesktopUpdateChannel;
   readonly updateChannelConfiguredByUser: boolean;
   // Was a "local" | "wsl" swap mode in an earlier iteration of the WSL
@@ -81,6 +87,7 @@ export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   serverExposureMode: "local-only",
   tailscaleServeEnabled: false,
   tailscaleServePort: DEFAULT_TAILSCALE_SERVE_PORT,
+  tailscaleServeDevice: "auto",
   updateChannel: "latest",
   updateChannelConfiguredByUser: false,
   wslBackendEnabled: false,
@@ -103,6 +110,7 @@ const DesktopSettingsDocument = Schema.Struct({
   serverExposureMode: Schema.optionalKey(DesktopServerExposureModeSchema),
   tailscaleServeEnabled: Schema.optionalKey(Schema.Boolean),
   tailscaleServePort: Schema.optionalKey(Schema.Number),
+  tailscaleServeDevice: Schema.optionalKey(DesktopTailscaleServeDeviceSchema),
   updateChannel: Schema.optionalKey(DesktopUpdateChannelSchema),
   updateChannelConfiguredByUser: Schema.optionalKey(Schema.Boolean),
   // Newer form of the WSL toggle. `wslMode` is still accepted on load so
@@ -168,6 +176,7 @@ export class DesktopAppSettings extends Context.Service<
     readonly setTailscaleServe: (input: {
       readonly enabled: boolean;
       readonly port: Option.Option<number>;
+      readonly device: Option.Option<DesktopTailscaleServeDevice>;
     }) => Effect.Effect<DesktopSettingsChange, DesktopSettingsWriteError>;
     readonly setUpdateChannel: (
       channel: DesktopUpdateChannel,
@@ -200,6 +209,10 @@ function normalizeTailscaleServePort(value: unknown): number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 65_535
     ? value
     : DEFAULT_TAILSCALE_SERVE_PORT;
+}
+
+function normalizeTailscaleServeDevice(value: unknown): DesktopTailscaleServeDevice {
+  return value === "wsl" || value === "native" || value === "both" ? value : "auto";
 }
 
 function normalizeWslDistro(value: unknown): string | null {
@@ -238,6 +251,7 @@ function normalizeDesktopSettingsDocument(
       parsed.serverExposureMode === "network-accessible" ? "network-accessible" : "local-only",
     tailscaleServeEnabled: parsed.tailscaleServeEnabled === true,
     tailscaleServePort: normalizeTailscaleServePort(parsed.tailscaleServePort),
+    tailscaleServeDevice: normalizeTailscaleServeDevice(parsed.tailscaleServeDevice),
     updateChannel: updateChannelConfiguredByUser
       ? Option.getOrElse(parsedUpdateChannel, () => defaultSettings.updateChannel)
       : defaultSettings.updateChannel,
@@ -275,6 +289,9 @@ function toDesktopSettingsDocument(
   }
   if (settings.tailscaleServePort !== defaults.tailscaleServePort) {
     document.tailscaleServePort = settings.tailscaleServePort;
+  }
+  if (settings.tailscaleServeDevice !== defaults.tailscaleServeDevice) {
+    document.tailscaleServeDevice = settings.tailscaleServeDevice;
   }
   if (settings.updateChannel !== defaults.updateChannel) {
     document.updateChannel = settings.updateChannel;
@@ -325,18 +342,29 @@ function setMainWindowBounds(
 
 function setTailscaleServe(
   settings: DesktopSettings,
-  input: { readonly enabled: boolean; readonly port: Option.Option<number> },
+  input: {
+    readonly enabled: boolean;
+    readonly port: Option.Option<number>;
+    readonly device: Option.Option<DesktopTailscaleServeDevice>;
+  },
 ): DesktopSettings {
   const port = Option.match(input.port, {
     onNone: () => settings.tailscaleServePort,
     onSome: normalizeTailscaleServePort,
   });
-  return settings.tailscaleServeEnabled === input.enabled && settings.tailscaleServePort === port
+  const device = Option.match(input.device, {
+    onNone: () => settings.tailscaleServeDevice,
+    onSome: normalizeTailscaleServeDevice,
+  });
+  return settings.tailscaleServeEnabled === input.enabled &&
+    settings.tailscaleServePort === port &&
+    settings.tailscaleServeDevice === device
     ? settings
     : {
         ...settings,
         tailscaleServeEnabled: input.enabled,
         tailscaleServePort: port,
+        tailscaleServeDevice: device,
       };
 }
 

@@ -486,12 +486,45 @@ export const DesktopServerExposureModeSchema = Schema.Literals([
   "network-accessible",
 ]);
 
+/**
+ * Which Tailscale daemon serves the primary backend's advertised HTTPS
+ * address. "wsl" and "both" only apply when the primary backend runs inside
+ * WSL (a distro carries its own `tailscaled`, separate from the host);
+ * "native" is the host OS daemon and "auto" lets the backend pick.
+ */
+export type DesktopTailscaleServeDevice = "auto" | "wsl" | "native" | "both";
+
+export const DesktopTailscaleServeDeviceSchema = Schema.Literals(["auto", "wsl", "native", "both"]);
+
+/**
+ * Per-daemon Tailscale Serve status for the primary backend, surfaced
+ * alongside the state so the UI can show apply progress and failures
+ * without a separate poll. `device` matches DesktopTailscaleServe's
+ * `TailscaleServeDaemon`.
+ */
+export const DesktopTailscaleServeStatusSchema = Schema.Struct({
+  device: Schema.Literals(["wsl", "native"]),
+  outcome: Schema.Literals(["applying", "active", "failed"]),
+  message: Schema.NullOr(Schema.String),
+  // The MagicDNS HTTPS base URL Tailscale Serve publishes for this device,
+  // matching a Tailscale endpoint's httpBaseUrl exactly. Null when the
+  // device hasn't resolved a MagicDNS name yet.
+  httpBaseUrl: Schema.NullOr(Schema.String),
+});
+export type DesktopTailscaleServeStatus = typeof DesktopTailscaleServeStatusSchema.Type;
+
 export interface DesktopServerExposureState {
   mode: DesktopServerExposureMode;
   endpointUrl: string | null;
   advertisedHost: string | null;
   tailscaleServeEnabled: boolean;
   tailscaleServePort: number;
+  tailscaleServeDevice: DesktopTailscaleServeDevice;
+  tailscaleServeStatuses: ReadonlyArray<DesktopTailscaleServeStatus>;
+  // True when the running primary backend is a WSL backend, so the
+  // WSL/Windows/Both device choice applies. A native primary can only
+  // ever be served by the native daemon.
+  tailscaleServeDeviceSelectable: boolean;
 }
 
 export const DesktopServerExposureStateSchema = Schema.Struct({
@@ -500,6 +533,9 @@ export const DesktopServerExposureStateSchema = Schema.Struct({
   advertisedHost: Schema.NullOr(Schema.String),
   tailscaleServeEnabled: Schema.Boolean,
   tailscaleServePort: Schema.Number,
+  tailscaleServeDevice: DesktopTailscaleServeDeviceSchema,
+  tailscaleServeStatuses: Schema.Array(DesktopTailscaleServeStatusSchema),
+  tailscaleServeDeviceSelectable: Schema.Boolean,
 });
 
 export interface PickFolderOptions {
@@ -1187,6 +1223,7 @@ export interface DesktopBridge {
   setTailscaleServeEnabled: (input: {
     readonly enabled: boolean;
     readonly port?: number;
+    readonly device?: DesktopTailscaleServeDevice;
   }) => Promise<DesktopServerExposureState>;
   getAdvertisedEndpoints: () => Promise<readonly AdvertisedEndpoint[]>;
   getWslState: () => Promise<DesktopWslState>;

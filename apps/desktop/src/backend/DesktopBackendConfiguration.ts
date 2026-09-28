@@ -514,6 +514,16 @@ const buildObservabilityFragment = (observabilitySettings: BackendObservabilityS
   }),
 });
 
+// The desktop owns Tailscale Serve for its primary backend
+// (DesktopTailscaleServe); the server's own Serve layer is for headless
+// `t3 --tailscale-serve`. The bootstrap schema still requires both fields
+// and PortSchema rejects 0, so every desktop-spawned backend gets Serve off
+// with the default port, which it never reads.
+const DESKTOP_BACKEND_TAILSCALE_SERVE_OFF = {
+  tailscaleServeEnabled: false,
+  tailscaleServePort: 443,
+} as const;
+
 const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolvePrimary")(
   function* (
     input: SharedBootstrapInput & {
@@ -535,8 +545,7 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       t3Home: environment.baseDir,
       host: backendExposure.bindHost,
       desktopBootstrapToken: input.bootstrapToken,
-      tailscaleServeEnabled: backendExposure.tailscaleServeEnabled,
-      tailscaleServePort: backendExposure.tailscaleServePort,
+      ...DESKTOP_BACKEND_TAILSCALE_SERVE_OFF,
       desktopTelemetryFd: 4,
       desktopTelemetryControlFd: 5,
       ...Option.match(input.resourceMonitorPath, {
@@ -591,9 +600,10 @@ const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl
   // fetch both saw "Failed to fetch" when the backend only bound to
   // 127.0.0.1 inside WSL. Binding to 0.0.0.0 plus advertising the
   // WSL IP as the renderer-visible URL avoids that dependency.
-  // Security-wise this is acceptable for the local-only WSL backend:
-  // the network it exposes on is the WSL-vEthernet network, not the
-  // LAN; the primary owns LAN exposure when the user opts in.
+  // Exposure: the WSL vEthernet network always, and the tailnet too when
+  // tailscaled runs inside the distro (the distro is then its own tailnet
+  // node, reachable at its tailnet IP) — not the LAN. The primary owns LAN
+  // exposure when the user opts in.
   const wslBindHost = "0.0.0.0";
 
   const bootstrap = {
@@ -605,12 +615,7 @@ const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl
     // the SQLite file with the primary).
     host: wslBindHost,
     desktopBootstrapToken: input.bootstrapToken,
-    // PortSchema rejects 0, so when tailscale serve is disabled we still
-    // need a valid number in this slot. The backend reads tailscaleServePort
-    // only when tailscaleServeEnabled is true, so the actual value here is
-    // inert.
-    tailscaleServeEnabled: false,
-    tailscaleServePort: 443,
+    ...DESKTOP_BACKEND_TAILSCALE_SERVE_OFF,
     // The packaged sidecar is a Windows executable and cannot run inside the
     // Linux WSL backend. Keep the field absent instead of passing an unusable
     // `/mnt/.../*.exe` path; WSL resource telemetry is reported unavailable.
@@ -686,6 +691,15 @@ const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl
     : Option.getOrElse(distroIp, () => "127.0.0.1");
   const httpBaseUrl = new URL(`http://${rendererHost}:${input.port}`);
 
+  // The renderer reaches this backend at rendererHost instead of loopback
+  // only in NAT mode with a resolved distro IP. Tell the server so it
+  // accepts T3 Connect link-proof requests addressed to that host too;
+  // mirrored mode and a failed probe both resolve rendererHost to loopback
+  // already, so the field stays absent and the server's default (loopback
+  // only) applies.
+  const wslBootstrap =
+    rendererHost === "127.0.0.1" ? bootstrap : { ...bootstrap, localRendererHost: rendererHost };
+
   const distroArgs = distroForConfig ? ["-d", distroForConfig] : [];
   const forwardedEnv: Record<string, string> = {};
   const forwardedEnvNames: string[] = [];
@@ -723,7 +737,7 @@ const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl
     // env is already a complete process.env minus T3CODE_HOME; pass it
     // verbatim instead of letting the spawner re-merge process.env on top.
     extendEnv: false,
-    bootstrap,
+    bootstrap: wslBootstrap,
     bootstrapDelivery: "stdin" as const,
     httpBaseUrl,
     captureOutput: true,

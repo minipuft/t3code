@@ -32,6 +32,8 @@ import type { ChildProcessSpawner } from "effect/unstable/process";
  */
 const DIAGNOSTIC_EXPLANATIONS: Record<TailscaleStderrDiagnostic, string | undefined> = {
   "no-existing-handler": "no mapping existed for that port",
+  "serve-not-enabled":
+    "Tailscale Serve isn't enabled on this tailnet — run `tailscale serve` once by hand to approve it",
   "not-logged-in": "this machine is not logged into a tailnet — run `tailscale up`",
   "permission-denied": "permission denied — `tailscale serve` may need elevated privileges",
   unknown: undefined,

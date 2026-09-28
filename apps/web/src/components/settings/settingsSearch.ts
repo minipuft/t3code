@@ -740,7 +740,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Tailscale HTTPS",
     to: "/settings/connections",
     targetId: "connections-environment",
-    searchTerms: ["serve magicdns endpoint remote secure network"],
+    searchTerms: ["serve magicdns endpoint remote secure network wsl windows both device"],
     desktopOnly: true,
     localBackendManagementOnly: true,
   },

@@ -2,18 +2,21 @@ import {
   AdvertisedEndpoint,
   DesktopServerExposureModeSchema,
   DesktopServerExposureStateSchema,
+  DesktopTailscaleServeDeviceSchema,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import * as DesktopLifecycle from "../../app/DesktopLifecycle.ts";
 import * as DesktopServerExposure from "../../backend/DesktopServerExposure.ts";
+import * as DesktopTailscaleServe from "../../backend/DesktopTailscaleServe.ts";
 import * as IpcChannels from "../channels.ts";
 import * as DesktopIpc from "../DesktopIpc.ts";
 
 const SetTailscaleServeEnabledInput = Schema.Struct({
   enabled: Schema.Boolean,
   port: Schema.optionalKey(Schema.Number),
+  device: Schema.optionalKey(DesktopTailscaleServeDeviceSchema),
 });
 
 export const getServerExposureState = DesktopIpc.makeIpcMethod({
@@ -46,15 +49,13 @@ export const setTailscaleServeEnabled = DesktopIpc.makeIpcMethod({
   payload: SetTailscaleServeEnabledInput,
   result: DesktopServerExposureStateSchema,
   handler: Effect.fn("desktop.ipc.serverExposure.setTailscaleServeEnabled")(function* (input) {
-    const lifecycle = yield* DesktopLifecycle.DesktopLifecycle;
     const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
-    const change = yield* serverExposure.setTailscaleServeEnabled(input);
-    if (change.requiresRelaunch) {
-      yield* lifecycle.relaunch(
-        change.state.tailscaleServeEnabled ? "tailscale-serve-enabled" : "tailscale-serve-disabled",
-      );
-    }
-    return change.state;
+    const tailscaleServe = yield* DesktopTailscaleServe.DesktopTailscaleServe;
+    yield* serverExposure.setTailscaleServeEnabled(input);
+    yield* tailscaleServe.reconcile;
+    // Re-read state after reconcile: it carries the fresh per-daemon
+    // statuses reconcile just produced, not the pre-reconcile snapshot.
+    return yield* serverExposure.getState;
   }),
 });
 

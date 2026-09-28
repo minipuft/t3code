@@ -10,9 +10,10 @@
 //     when the user enables it.
 //   - The primary spec wires `configResolve` to
 //     `DesktopBackendConfiguration.resolvePrimary` and the
-//     `onReady`/`onShutdown` callbacks to the window service. WSL
-//     instances wire `configResolve: configuration.resolveWsl(...)`
-//     and skip onReady/onShutdown — the window only follows the primary.
+//     `onReady`/`onShutdown` callbacks to the window service and
+//     Tailscale Serve. WSL instances wire
+//     `configResolve: configuration.resolveWsl(...)` and skip
+//     onReady/onShutdown — the window and Serve only follow the primary.
 //   - The pool exposes `register(spec)` and `unregister(id)`. Each
 //     registered instance gets its own child scope, so unregister can
 //     stop it cleanly without tearing down the pool. The primary's id
@@ -95,6 +96,7 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 
 import * as DesktopBackendConfiguration from "./DesktopBackendConfiguration.ts";
 import * as DesktopBackendManager from "./DesktopBackendManager.ts";
+import * as DesktopTailscaleServe from "./DesktopTailscaleServe.ts";
 import * as DesktopObservability from "../app/DesktopObservability.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopTelemetryPublisher from "../telemetry/DesktopTelemetryPublisher.ts";
@@ -212,6 +214,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
     const desktopWindow = yield* DesktopWindow.DesktopWindow;
+    const tailscaleServe = yield* DesktopTailscaleServe.DesktopTailscaleServe;
     const electronDialog = yield* ElectronDialog.ElectronDialog;
     const appSettings = yield* DesktopAppSettings.DesktopAppSettings;
     // Anchor the pool's lifetime to its layer scope so registered
@@ -291,15 +294,25 @@ export const layer = Layer.effect(
       // logs on success, so log the failure here before swallowing it —
       // otherwise a post-readiness window-open failure vanishes silently and
       // is near-impossible to diagnose in production.
-      onReady: (httpBaseUrl) =>
+      //
+      // Tailscale Serve follows the primary only: the desktop owns it here
+      // rather than asking the backend to run it (see DesktopTailscaleServe).
+      onReady: (httpBaseUrl, config) =>
         desktopWindow.handleBackendReady(httpBaseUrl).pipe(
           Effect.catch((error) =>
             logBackendPoolWarning("failed to open main window after backend readiness", {
               error: error.message,
             }),
           ),
+          Effect.andThen(
+            tailscaleServe.primaryReady({
+              port: config.bootstrap.port,
+              distro: config.runningDistro ?? null,
+            }),
+          ),
         ),
-      onShutdown: () => desktopWindow.handleBackendNotReady,
+      onShutdown: () =>
+        desktopWindow.handleBackendNotReady.pipe(Effect.andThen(tailscaleServe.primaryStopped)),
       onPreflightFailed: handlePrimaryPreflightFailure,
     });
 

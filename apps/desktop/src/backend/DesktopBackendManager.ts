@@ -288,12 +288,13 @@ export interface BackendInstanceSpec {
   // bootstrap-token closure inside DesktopBackendConfiguration uses
   // crypto.randomBytes (Effect 4 beta.73 migration).
   readonly configResolve: Effect.Effect<DesktopBackendStartConfig, PlatformError.PlatformError>;
-  // Receives the *resolved* httpBaseUrl of the run that just became
-  // ready. The window service uses this to decide what URL to load
-  // (the WSL backend reports its distro IP, the Windows backend reports
-  // 127.0.0.1). Splitting this off from configResolve avoids races
-  // between "fired onReady" and "currentConfig already advanced".
-  readonly onReady?: (httpBaseUrl: URL) => Effect.Effect<void>;
+  // Receives the *resolved* httpBaseUrl and start config of the run that
+  // just became ready. The window service uses the URL to decide what to
+  // load (the WSL backend reports its distro IP, the Windows backend
+  // reports 127.0.0.1); Tailscale Serve reads the port and WSL distro from
+  // the config. Passing the run's own values avoids races between "fired
+  // onReady" and "currentConfig already advanced".
+  readonly onReady?: (httpBaseUrl: URL, config: DesktopBackendStartConfig) => Effect.Effect<void>;
   readonly onShutdown?: () => Effect.Effect<void>;
   // Fired once when a fatal or bounded preflight failure has exhausted its
   // retries. Returns true when the callback changed configuration and the
@@ -943,7 +944,7 @@ export const makeBackendInstance = Effect.fn("makeBackendInstance")(function* (
               return;
             }
 
-            yield* spec.onReady?.(config.value.httpBaseUrl) ?? Effect.void;
+            yield* spec.onReady?.(config.value.httpBaseUrl, config.value) ?? Effect.void;
             if (
               config.value.runningDistro !== undefined &&
               config.value.wslRuntimeId !== undefined

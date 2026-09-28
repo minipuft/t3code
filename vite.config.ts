@@ -83,6 +83,13 @@ export default defineConfig({
       "apps/mobile/ios/**",
       "apps/mobile/uniwind-types.d.ts",
       "*.icon/**",
+      // delivery contract: managed copies, byte-identical to their template
+      "commitlint.rules.mjs",
+      "scripts/pr-check.mjs",
+      "scripts/pr-body.mjs",
+      "scripts/validate-pr-body.mjs",
+      "scripts/adr.mjs",
+      ".github/workflows/pr-conventions.yml",
     ],
     sortPackageJson: {},
     overrides: [
@@ -107,6 +114,13 @@ export default defineConfig({
       "apps/mobile/android/**",
       "apps/mobile/ios/**",
       "apps/mobile/uniwind-types.d.ts",
+      // delivery contract: managed copies, byte-identical to their template
+      "commitlint.rules.mjs",
+      "scripts/pr-check.mjs",
+      "scripts/pr-body.mjs",
+      "scripts/validate-pr-body.mjs",
+      "scripts/adr.mjs",
+      ".github/workflows/pr-conventions.yml",
     ],
     plugins: ["eslint", "oxc", "react", "unicorn", "typescript"],
     jsPlugins: ["./oxlint-plugin-t3code/index.ts", "@shadcn/lint"],

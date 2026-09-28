@@ -8,24 +8,27 @@ import {
   type AdvertisedEndpointProvider,
   type DesktopServerExposureMode,
   type DesktopServerExposureState,
+  type DesktopTailscaleServeDevice,
+  type DesktopTailscaleServeStatus,
 } from "@t3tools/contracts";
-import { isTailscaleIpv4Address, readTailscaleStatus } from "@t3tools/tailscale";
+import { buildTailscaleHttpsBaseUrl, isTailscaleIpv4Address } from "@t3tools/tailscale";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Context from "effect/Context";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopConfig from "../app/DesktopConfig.ts";
 import * as DesktopNetworkInterfaces from "./DesktopNetworkInterfaces.ts";
-import { resolveTailscaleAdvertisedEndpoints } from "./tailscaleEndpointProvider.ts";
-
-const TAILSCALE_STATUS_CACHE_TTL = Duration.seconds(60);
+import * as DesktopTailscaleServe from "./DesktopTailscaleServe.ts";
+import {
+  resolveTailscaleAdvertisedEndpoints,
+  type TailscaleServeMagicDnsEntry,
+} from "./tailscaleEndpointProvider.ts";
 
 const DESKTOP_LOOPBACK_HOST = "127.0.0.1";
 const DESKTOP_LAN_BIND_HOST = "0.0.0.0";
@@ -258,8 +261,6 @@ export interface DesktopServerExposureBackendConfig {
   readonly port: number;
   readonly bindHost: string;
   readonly httpBaseUrl: URL;
-  readonly tailscaleServeEnabled: boolean;
-  readonly tailscaleServePort: number;
 }
 
 export interface DesktopServerExposureChange {
@@ -278,10 +279,13 @@ export class DesktopServerExposure extends Context.Service<
     readonly setMode: (
       mode: DesktopServerExposureMode,
     ) => Effect.Effect<DesktopServerExposureChange, DesktopServerExposureSetModeError>;
+    // Persists only. Serve is applied by DesktopTailscaleServe.reconcile,
+    // with no backend relaunch.
     readonly setTailscaleServeEnabled: (input: {
       readonly enabled: boolean;
       readonly port?: number;
-    }) => Effect.Effect<DesktopServerExposureChange, DesktopTailscaleServePersistenceError>;
+      readonly device?: DesktopTailscaleServeDevice;
+    }) => Effect.Effect<DesktopServerExposureState, DesktopTailscaleServePersistenceError>;
     readonly getAdvertisedEndpoints: Effect.Effect<readonly AdvertisedEndpoint[]>;
   }
 >()("@t3tools/desktop/backend/DesktopServerExposure") {}
@@ -298,6 +302,7 @@ interface RuntimeState {
   readonly advertisedHost: Option.Option<string>;
   readonly tailscaleServeEnabled: boolean;
   readonly tailscaleServePort: number;
+  readonly tailscaleServeDevice: DesktopTailscaleServeDevice;
 }
 
 interface ResolvedRuntimeState {
@@ -317,20 +322,29 @@ const initialRuntimeState = (): RuntimeState =>
     port: 0,
   });
 
-const toContractState = (state: RuntimeState): DesktopServerExposureState => ({
+interface TailscaleServeContractExtras {
+  readonly tailscaleServeStatuses: ReadonlyArray<DesktopTailscaleServeStatus>;
+  readonly tailscaleServeDeviceSelectable: boolean;
+}
+
+const toContractState = (
+  state: RuntimeState,
+  extras: TailscaleServeContractExtras,
+): DesktopServerExposureState => ({
   mode: state.mode,
   endpointUrl: Option.getOrNull(state.endpointUrl),
   advertisedHost: Option.getOrNull(state.advertisedHost),
   tailscaleServeEnabled: state.tailscaleServeEnabled,
   tailscaleServePort: state.tailscaleServePort,
+  tailscaleServeDevice: state.tailscaleServeDevice,
+  tailscaleServeStatuses: extras.tailscaleServeStatuses,
+  tailscaleServeDeviceSelectable: extras.tailscaleServeDeviceSelectable,
 });
 
 const toBackendConfig = (state: RuntimeState): DesktopServerExposureBackendConfig => ({
   port: state.port,
   bindHost: state.bindHost,
   httpBaseUrl: state.httpBaseUrl,
-  tailscaleServeEnabled: state.tailscaleServeEnabled,
-  tailscaleServePort: state.tailscaleServePort,
 });
 
 const toResolvedExposure = (state: RuntimeState): ResolvedDesktopServerExposure => ({
@@ -360,6 +374,7 @@ function runtimeStateFromResolvedExposure(input: {
     advertisedHost: Option.fromNullishOr(input.exposure.advertisedHost),
     tailscaleServeEnabled: input.settings.tailscaleServeEnabled,
     tailscaleServePort: input.settings.tailscaleServePort,
+    tailscaleServeDevice: input.settings.tailscaleServeDevice,
   };
 }
 
@@ -411,30 +426,150 @@ const requiresBackendRelaunch = (previous: RuntimeState, next: RuntimeState): bo
   previous.bindHost !== next.bindHost ||
   previous.localHttpUrl !== next.localHttpUrl;
 
+const nativeDeviceLabel = (platform: NodeJS.Platform): string => {
+  if (platform === "win32") return "Windows";
+  if (platform === "darwin") return "macOS";
+  return "This computer";
+};
+
+const collectTailnetIpv4AddressesFromInterfaces = (
+  networkInterfaces: DesktopNetworkInterfaces.NetworkInterfaces,
+): readonly string[] => {
+  const seen = new Set<string>();
+  const addresses: string[] = [];
+  for (const interfaceAddresses of Object.values(networkInterfaces)) {
+    if (!interfaceAddresses) continue;
+    for (const address of interfaceAddresses) {
+      if (address.internal) continue;
+      if (address.family !== "IPv4") continue;
+      if (!isTailscaleIpv4Address(address.address)) continue;
+      if (seen.has(address.address)) continue;
+      seen.add(address.address);
+      addresses.push(address.address);
+    }
+  }
+  return addresses;
+};
+
+type TailscaleServeService = DesktopTailscaleServe.DesktopTailscaleServe["Service"];
+
+const readMagicDnsNameOf = (
+  tailscaleServe: TailscaleServeService,
+  daemon: DesktopTailscaleServe.TailscaleServeDaemon,
+): Effect.Effect<string | null> =>
+  tailscaleServe
+    .readStatus(daemon)
+    .pipe(
+      Effect.map((status) =>
+        Option.match(status, { onNone: () => null, onSome: (s) => s.magicDnsName }),
+      ),
+    );
+
+// Serve disabled: at most one "requires-configuration" entry, for the
+// daemon the setup dialog should point at.
+const resolveDisabledMagicDnsEntries = Effect.fn(
+  "desktop.serverExposure.resolveDisabledMagicDnsEntries",
+)(function* (input: {
+  readonly tailscaleServe: TailscaleServeService;
+  readonly isWslPrimary: boolean;
+  readonly servePort: number;
+}): Effect.fn.Return<readonly TailscaleServeMagicDnsEntry[]> {
+  const preferredDaemon: DesktopTailscaleServe.TailscaleServeDaemon = input.isWslPrimary
+    ? (yield* readMagicDnsNameOf(input.tailscaleServe, "wsl")) !== null
+      ? "wsl"
+      : "native"
+    : "native";
+  const dnsName = yield* readMagicDnsNameOf(input.tailscaleServe, preferredDaemon);
+  if (dnsName === null) return [];
+  return [
+    {
+      dnsName,
+      servePort: input.servePort,
+      label: "Tailscale HTTPS",
+      phase: "disabled",
+      failureMessage: null,
+    },
+  ];
+});
+
+// Serve enabled: one entry per applied/applying/failed daemon. An entry
+// with no resolved MagicDNS name yet is dropped -- its status is still
+// visible via tailscaleServeStatuses.
+const resolveEnabledMagicDnsEntries = Effect.fn(
+  "desktop.serverExposure.resolveEnabledMagicDnsEntries",
+)(function* (input: {
+  readonly tailscaleServe: TailscaleServeService;
+  readonly platform: NodeJS.Platform;
+}): Effect.fn.Return<readonly TailscaleServeMagicDnsEntry[]> {
+  const results = yield* input.tailscaleServe.results;
+  const label = (daemon: DesktopTailscaleServe.TailscaleServeDaemon): string => {
+    if (results.length <= 1) return "Tailscale HTTPS";
+    return daemon === "wsl"
+      ? "Tailscale HTTPS (WSL)"
+      : `Tailscale HTTPS (${nativeDeviceLabel(input.platform)})`;
+  };
+  const entries: Array<TailscaleServeMagicDnsEntry> = [];
+  for (const result of results) {
+    const dnsName = yield* readMagicDnsNameOf(input.tailscaleServe, result.daemon);
+    if (dnsName === null) continue;
+    entries.push({
+      dnsName,
+      servePort: result.servePort,
+      label: label(result.daemon),
+      phase: result.outcome,
+      failureMessage: result.message,
+    });
+  }
+  return entries;
+});
+
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
   const config = yield* DesktopConfig.DesktopConfig;
   const networkInterfaces = yield* DesktopNetworkInterfaces.DesktopNetworkInterfaces;
-  const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const httpClient = yield* HttpClient.HttpClient;
   const desktopSettings = yield* DesktopAppSettings.DesktopAppSettings;
+  const tailscaleServe = yield* DesktopTailscaleServe.DesktopTailscaleServe;
+  const platform = yield* HostProcessPlatform;
   const stateRef = yield* Ref.make(initialRuntimeState());
-
-  // Cache the `tailscale status` spawn for the TTL. On macOS, the Mac App
-  // Store Tailscale CLI lives inside Tailscale's sandbox container, so each
-  // spawn re-triggers the "Other apps" TCC prompt.
-  const cachedReadMagicDnsName = yield* Effect.cachedWithTTL(
-    readTailscaleStatus.pipe(
-      Effect.map((status) => status.magicDnsName),
-      Effect.orElseSucceed(() => null),
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, childProcessSpawner),
-    ),
-    TAILSCALE_STATUS_CACHE_TTL,
-  );
 
   const readNetworkInterfaces = networkInterfaces.read;
 
-  const getState = Ref.get(stateRef).pipe(Effect.map(toContractState));
+  const readTailscaleServeContractExtras: Effect.Effect<TailscaleServeContractExtras> = Effect.gen(
+    function* () {
+      const results = yield* tailscaleServe.results;
+      const primaryTarget = yield* tailscaleServe.primaryTarget;
+      const statuses = yield* Effect.forEach(results, (result) =>
+        readMagicDnsNameOf(tailscaleServe, result.daemon).pipe(
+          Effect.map((dnsName): DesktopTailscaleServeStatus => ({
+            device: result.daemon,
+            outcome: result.outcome,
+            message: result.message,
+            httpBaseUrl:
+              dnsName === null
+                ? null
+                : buildTailscaleHttpsBaseUrl({
+                    magicDnsName: dnsName,
+                    servePort: result.servePort,
+                  }),
+          })),
+        ),
+      );
+      return {
+        tailscaleServeStatuses: statuses,
+        tailscaleServeDeviceSelectable: Option.exists(
+          primaryTarget,
+          (target) => target.distro !== null,
+        ),
+      };
+    },
+  );
+
+  const getState = Effect.gen(function* () {
+    const state = yield* Ref.get(stateRef);
+    const extras = yield* readTailscaleServeContractExtras;
+    return toContractState(state, extras);
+  });
   const backendConfig = Ref.get(stateRef).pipe(Effect.map(toBackendConfig));
 
   const configureFromSettings = Effect.fn("desktop.serverExposure.configureFromSettings")(
@@ -450,7 +585,8 @@ export const make = Effect.gen(function* () {
         advertisedHostOverride: config.desktopLanHostOverride,
       });
       yield* Ref.set(stateRef, resolved.state);
-      return toContractState(resolved.state);
+      const extras = yield* readTailscaleServeContractExtras;
+      return toContractState(resolved.state, extras);
     },
   );
 
@@ -488,22 +624,29 @@ export const make = Effect.gen(function* () {
     );
 
     yield* Ref.set(stateRef, resolved.state);
+    const extras = yield* readTailscaleServeContractExtras;
     return {
-      state: toContractState(resolved.state),
+      state: toContractState(resolved.state, extras),
       requiresRelaunch: change.changed || requiresBackendRelaunch(previous, resolved.state),
     };
   });
 
   const setTailscaleServeEnabled = Effect.fn("desktop.serverExposure.setTailscaleServeEnabled")(
-    function* (input: { readonly enabled: boolean; readonly port?: number }) {
+    function* (input: {
+      readonly enabled: boolean;
+      readonly port?: number;
+      readonly device?: DesktopTailscaleServeDevice;
+    }) {
       yield* Effect.annotateCurrentSpan({
         enabled: input.enabled,
         ...(input.port === undefined ? {} : { port: input.port }),
+        ...(input.device === undefined ? {} : { device: input.device }),
       });
       const result = yield* desktopSettings
         .setTailscaleServe({
           enabled: input.enabled,
           port: Option.fromNullishOr(input.port),
+          device: Option.fromNullishOr(input.device),
         })
         .pipe(
           Effect.mapError(
@@ -520,12 +663,11 @@ export const make = Effect.gen(function* () {
         ...current,
         tailscaleServeEnabled: result.settings.tailscaleServeEnabled,
         tailscaleServePort: result.settings.tailscaleServePort,
+        tailscaleServeDevice: result.settings.tailscaleServeDevice,
       }));
 
-      return {
-        state: toContractState(nextState),
-        requiresRelaunch: result.changed,
-      };
+      const extras = yield* readTailscaleServeContractExtras;
+      return toContractState(nextState, extras);
     },
   );
 
@@ -545,16 +687,35 @@ export const make = Effect.gen(function* () {
       return coreEndpoints;
     }
 
+    const primaryTarget = yield* tailscaleServe.primaryTarget;
+    const isWslPrimary = Option.exists(primaryTarget, (target) => target.distro !== null);
+
+    // A WSL primary's tailnet IP lives on the distro's own node; the native
+    // interfaces' tailnet IPs cannot reach it. Only offered once the user
+    // opted into network access -- a local-only WSL primary with Serve
+    // enabled (for MagicDNS) still advertises no tailnet IP endpoint.
+    const tailnetIpv4Addresses = isWslPrimary
+      ? state.mode === "network-accessible"
+        ? Option.match(yield* tailscaleServe.readStatus("wsl"), {
+            onNone: (): readonly string[] => [],
+            onSome: (status) => status.tailnetIpv4Addresses,
+          })
+        : []
+      : collectTailnetIpv4AddressesFromInterfaces(currentNetworkInterfaces);
+
+    const magicDnsEntries = state.tailscaleServeEnabled
+      ? yield* resolveEnabledMagicDnsEntries({ tailscaleServe, platform })
+      : yield* resolveDisabledMagicDnsEntries({
+          tailscaleServe,
+          isWslPrimary,
+          servePort: state.tailscaleServePort,
+        });
+
     const tailscaleEndpoints = yield* resolveTailscaleAdvertisedEndpoints({
       port: state.port,
-      serveEnabled: state.tailscaleServeEnabled,
-      servePort: state.tailscaleServePort,
-      networkInterfaces: currentNetworkInterfaces,
-      readMagicDnsName: cachedReadMagicDnsName,
-    }).pipe(
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, childProcessSpawner),
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-    );
+      tailnetIpv4Addresses,
+      magicDnsEntries,
+    }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
     return [...coreEndpoints, ...tailscaleEndpoints];
   }).pipe(Effect.withSpan("desktop.serverExposure.getAdvertisedEndpoints"));
 

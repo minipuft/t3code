@@ -36,3 +36,5 @@ carries that responsibility here, so the contract never writes a file this fork 
 deleted.
 
 ADRs live in `docs/adr`; manage them with `node scripts/adr.mjs`.
+
+`knip.jsonc`'s `scripts` workspace `entry` list is the fork's second upstream-owned config edit — additive, covering the four managed scripts knip cannot otherwise see as entry points.

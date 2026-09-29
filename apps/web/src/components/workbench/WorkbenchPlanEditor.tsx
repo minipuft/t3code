@@ -145,7 +145,7 @@ export function PlanEditor(props: {
           <h3 className="truncate font-semibold">{props.summary.name}</h3>
           <p className="truncate text-muted-foreground text-xs">{props.summary.path}</p>
           {props.summary.binding ? (
-            <p className="mt-1 text-emerald-600 text-xs dark:text-emerald-400">
+            <p className="mt-1 text-success text-xs ">
               Bound to {props.summary.binding.title ?? "an active thread"}
               {props.summary.binding.confirmed ? " · confirmed" : ""}
               {props.summary.binding.deviations
@@ -210,7 +210,7 @@ export function PlanEditor(props: {
       </div>
 
       {externalChange ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-sm">
           <span>
             This plan changed outside this editor. Refresh before saving to avoid overwrite.
           </span>
@@ -231,7 +231,7 @@ export function PlanEditor(props: {
         <Textarea
           ref={textareaRef}
           aria-label="Plan Markdown"
-          className="font-mono"
+          variant="mono"
           style={{ minHeight: "28rem" }}
           value={draft}
           onChange={(event) => setDraft(event.currentTarget.value)}

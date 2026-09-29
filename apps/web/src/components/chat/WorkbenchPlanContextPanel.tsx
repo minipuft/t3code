@@ -359,16 +359,14 @@ function AssociationRow(props: {
       >
         <span className="flex items-center gap-2">
           <span className="truncate font-medium text-xs">{association.planPath}</span>
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+          <span className="rounded bg-muted px-1.5 py-0.5 text-3xs uppercase tracking-wide text-muted-foreground">
             {association.role}
           </span>
         </span>
         <span
           className={cn(
-            "mt-1 block text-[11px]",
-            association.state === "current"
-              ? "text-emerald-600 dark:text-emerald-400"
-              : "text-amber-600 dark:text-amber-400",
+            "mt-1 block text-2xs",
+            association.state === "current" ? "text-success" : "text-warning",
           )}
         >
           {association.state} · {association.source}
@@ -426,7 +424,7 @@ function PlanSuggestions(props: {
             onClick={() => props.onSelect(item.path)}
           >
             <span className="block truncate font-medium text-xs">{item.title}</span>
-            <span className="mt-0.5 block truncate text-muted-foreground text-[11px]">
+            <span className="mt-0.5 block truncate text-muted-foreground text-2xs">
               {item.project}
             </span>
           </button>

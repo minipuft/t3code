@@ -255,7 +255,7 @@ export function PlanList(props: {
                       <span className="flex min-w-0 items-center gap-2">
                         {item.binding ? (
                           <span
-                            className="size-1.5 shrink-0 rounded-full bg-emerald-400"
+                            className="size-1.5 shrink-0 rounded-full bg-success"
                             aria-label="Bound"
                           />
                         ) : null}
@@ -270,7 +270,7 @@ export function PlanList(props: {
                         ) : null}
                       </span>
                       {item.binding ? (
-                        <span className="truncate text-emerald-600 text-xs dark:text-emerald-400">
+                        <span className="truncate text-success text-xs ">
                           {item.binding.title ?? "Active thread"}
                           {item.binding.threads > 1 ? ` · ${item.binding.threads} threads` : ""}
                         </span>

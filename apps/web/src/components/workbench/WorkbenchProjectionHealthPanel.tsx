@@ -107,7 +107,7 @@ export function WorkbenchProjectionHealthPanel(props: {
             Per-environment source and target health. Repairs require review.
           </p>
           {!props.directLocal ? (
-            <p className="text-amber-600 text-sm">
+            <p className="text-warning text-sm">
               Remote read-only: mutations require a direct local administrative connection.
             </p>
           ) : null}

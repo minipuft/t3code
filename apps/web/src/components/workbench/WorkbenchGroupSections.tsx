@@ -94,7 +94,7 @@ export function WorkbenchGroupSection(props: {
   readonly children: ReactNode;
 }) {
   return (
-    <Collapsible open={props.open} onOpenChange={props.onOpenChange} className="grid gap-1">
+    <Collapsible open={props.open} onOpenChange={props.onOpenChange}>
       <CollapsibleTrigger className="flex min-w-0 items-center gap-1.5 rounded-md px-3 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <ChevronRightIcon
           aria-hidden
@@ -103,10 +103,10 @@ export function WorkbenchGroupSection(props: {
             props.open && "rotate-90",
           )}
         />
-        <span className="min-w-0 truncate text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <span className="min-w-0 truncate text-3xs font-medium uppercase tracking-wider text-muted-foreground">
           {props.label}
         </span>
-        <span className="ms-auto shrink-0 text-[10px] text-muted-foreground">{props.count}</span>
+        <span className="ms-auto shrink-0 text-3xs text-muted-foreground">{props.count}</span>
       </CollapsibleTrigger>
       <CollapsiblePanel>
         <div className="grid gap-1 pt-1">{props.children}</div>

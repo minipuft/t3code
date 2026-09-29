@@ -13,6 +13,7 @@ const rates: RateTable = new Map([
       outputCostPerToken: 5e-5,
       cacheReadCostPerToken: 1e-6,
       cacheCreationCostPerToken: 1.25e-5,
+      fastMultiplier: 1,
     },
   ],
 ]);
@@ -34,6 +35,7 @@ function record(overrides: Partial<UsageRecord> = {}): UsageRecord {
       reasoningTokens: 0,
     },
     reportedCostUsd: null,
+    fast: false,
     dedupeKey: null,
     ...overrides,
   };
@@ -110,6 +112,33 @@ describe("UsageAggregator", () => {
       [null, "missingEvidence", 1],
     ]);
   });
+  it("keeps project attribution separate within each provider source", () => {
+    const aggregator = new UsageAggregator({
+      timeZone: "UTC",
+      sinceDay: "2026-08-01",
+      untilDay: "2026-08-31",
+      rates,
+      projectRoots: [{ projectId: ProjectId.make("project-a"), path: "/work/a" }],
+    });
+    aggregator.add(record({ workspacePath: "/work/a" }), "/home/one");
+    aggregator.add(record({ workspacePath: "/work/a" }), "/home/two");
+    aggregator.add(record({ workspacePath: null }), "/home/one");
+    expect(
+      aggregator
+        .finish()
+        .buckets.map((bucket) => [
+          bucket.sourcePath,
+          bucket.projectId,
+          bucket.attributionStatus,
+          bucket.records,
+        ]),
+    ).toEqual([
+      ["/home/one", "project-a", "attributed", 1],
+      ["/home/two", "project-a", "attributed", 1],
+      ["/home/one", null, "missingEvidence", 1],
+    ]);
+  });
+
   it("requires exact bounds for hourly aggregation", () => {
     expect(
       () =>

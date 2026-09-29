@@ -9,9 +9,16 @@ import { cn } from "~/lib/utils";
 type TextareaProps = React.ComponentProps<"textarea"> & {
   size?: "sm" | "default" | "lg" | number;
   unstyled?: boolean;
+  variant?: "default" | "mono";
 };
 
-function Textarea({ className, size = "default", unstyled = false, ...props }: TextareaProps) {
+function Textarea({
+  className,
+  size = "default",
+  variant = "default",
+  unstyled = false,
+  ...props
+}: TextareaProps) {
   return (
     <span
       className={
@@ -28,10 +35,12 @@ function Textarea({ className, size = "default", unstyled = false, ...props }: T
         render={(defaultProps) => (
           <textarea
             className={cn(
-              "field-sizing-content min-h-17.5 w-full rounded-[inherit] px-[calc(--spacing(3)-1px)] py-[calc(--spacing(1.5)-1px)] outline-none max-sm:min-h-20.5",
+              // Auto-grows with content up to one cap, then scrolls.
+              "field-sizing-content min-h-17.5 max-h-64 w-full rounded-[inherit] px-[calc(--spacing(3)-1px)] py-[calc(--spacing(1.5)-1px)] outline-none max-sm:min-h-20.5",
               size === "sm" &&
                 "min-h-16.5 px-[calc(--spacing(2.5)-1px)] py-[calc(--spacing(1)-1px)] max-sm:min-h-19.5",
               size === "lg" && "min-h-18.5 py-[calc(--spacing(2)-1px)] max-sm:min-h-21.5",
+              variant === "mono" && "font-mono",
             )}
             data-slot="textarea"
             {...mergeProps(defaultProps, props)}

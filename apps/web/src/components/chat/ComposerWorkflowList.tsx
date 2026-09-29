@@ -207,7 +207,7 @@ export function ComposerWorkflowList(props: {
           }
         }}
       />
-      <p className="px-1 text-[10px] text-secondary-label">
+      <p className="px-1 text-3xs text-secondary-label">
         ↑↓ navigate · Enter details · Shift+Enter run with inferred defaults
       </p>
       {message ? (
@@ -312,7 +312,7 @@ function WorkflowItemSection(props: {
   if (props.items.length === 0) return null;
   return (
     <section aria-label={props.title} className="mb-2 last:mb-0">
-      <h3 className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-secondary-label">
+      <h3 className="px-3 py-1.5 text-3xs uppercase tracking-wide text-secondary-label">
         {props.title}
       </h3>
       {props.items.map((item) => (
@@ -337,9 +337,7 @@ function WorkflowPresetSection(props: {
 }) {
   return (
     <section aria-label="Presets" className="mb-2">
-      <h3 className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-secondary-label">
-        Presets
-      </h3>
+      <h3 className="px-3 py-1.5 text-3xs uppercase tracking-wide text-secondary-label">Presets</h3>
       {props.entries.map((entry) => (
         <button
           key={entry.preset.id}
@@ -351,7 +349,7 @@ function WorkflowPresetSection(props: {
           <span className="min-w-0 flex-1">
             <span className="flex items-baseline justify-between gap-3">
               <span className="truncate font-medium text-xs">{entry.preset.label}</span>
-              <span className="shrink-0 text-[10px] uppercase tracking-wide text-secondary-label">
+              <span className="shrink-0 text-3xs uppercase tracking-wide text-secondary-label">
                 preset
               </span>
             </span>
@@ -397,7 +395,7 @@ function WorkflowItemRow(props: {
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline justify-between gap-3">
             <span className="truncate font-medium text-xs">{props.item.name}</span>
-            <span className="shrink-0 text-[10px] uppercase tracking-wide text-secondary-label">
+            <span className="shrink-0 text-3xs uppercase tracking-wide text-secondary-label">
               {props.item.kind}
             </span>
           </span>

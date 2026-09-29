@@ -111,7 +111,7 @@ export const ComposerWorkflowPicker = memo(function ComposerWorkflowPicker(
   return (
     <section
       aria-label="Agent Actions"
-      className="chat-composer-drawer-surface chat-composer-drawer-attached overflow-hidden"
+      className="flex min-h-0 w-full flex-col overflow-hidden"
       data-composer-workflow-picker="true"
     >
       <header className="flex items-center gap-2 border-b border-border/50 px-3 py-2.5">
@@ -244,7 +244,7 @@ function WorkflowDetail(props: {
     >
       <div className="grid gap-1">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[10px] uppercase tracking-wide text-secondary-label">
+          <span className="text-3xs uppercase tracking-wide text-secondary-label">
             {props.item.kind}
           </span>
           {props.canMutatePreferences ? (

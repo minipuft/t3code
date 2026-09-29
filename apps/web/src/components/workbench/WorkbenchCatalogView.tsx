@@ -296,9 +296,7 @@ function CatalogDetail(props: {
       )}
     >
       <div className="grid gap-2">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          {item.kind}
-        </span>
+        <span className="text-3xs uppercase tracking-wider text-muted-foreground">{item.kind}</span>
         <h3 className="font-semibold text-lg">{item.name}</h3>
         <p className="text-muted-foreground text-sm leading-6">
           {item.description ?? "No description provided."}
@@ -358,7 +356,7 @@ function PromptMetadata({ prompt }: { readonly prompt: WorkflowPromptSummary }) 
               <div key={argument.name} className="rounded-lg border border-border/50 px-3 py-2">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <code className="text-xs">{argument.name}</code>
-                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <span className="text-3xs uppercase tracking-wide text-muted-foreground">
                     {argument.type} · {argument.required ? "required" : "optional"}
                   </span>
                 </div>
@@ -432,7 +430,7 @@ function MetadataGrid({ rows }: { readonly rows: ReadonlyArray<readonly [string,
     <dl className="grid gap-3 sm:grid-cols-2">
       {rows.map(([label, value]) => (
         <div key={label} className="min-w-0">
-          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</dt>
+          <dt className="text-3xs uppercase tracking-wide text-muted-foreground">{label}</dt>
           <dd className="mt-1 break-words text-xs">{value}</dd>
         </div>
       ))}

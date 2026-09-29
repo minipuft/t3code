@@ -19,9 +19,9 @@ import type { UsageProviderKind } from "@t3tools/contracts";
 import { GUARD_LENGTH, type TranscriptParsePosition } from "./usageTranscriptReader.ts";
 import type { CodexScanState, UsageRecord } from "./usageTranscripts.ts";
 
-// v4 combines workspace provenance with incremental resume and tail records.
-// Both incompatible v3 formats must be rescanned.
-const USAGE_SCAN_CACHE_VERSION = 4 as const;
+// v5 combines workspace provenance, incremental resume, and Claude fast mode.
+// Both incompatible v4 formats must be rescanned.
+const USAGE_SCAN_CACHE_VERSION = 5 as const;
 
 export interface CachedFile {
   readonly size: number;
@@ -58,6 +58,7 @@ type SerializedRecord = readonly [
   reportedCostUsd: number | null,
   workspacePath: string | null,
   workspaceSource: UsageRecord["workspaceSource"],
+  fast: 0 | 1,
 ];
 
 interface SerializedFile {
@@ -111,6 +112,7 @@ export function encodeScanCache(cache: ScanCache): SerializedCache {
     record.reportedCostUsd,
     record.workspacePath,
     record.workspaceSource,
+    record.fast ? 1 : 0,
   ];
 
   const files: Record<string, SerializedFile> = {};
@@ -167,7 +169,7 @@ export function decodeScanCache(document: unknown): ScanCache {
   ): UsageRecord[] | null => {
     const records: UsageRecord[] = [];
     for (const row of rows) {
-      if (!isRecordArray(row) || row.length < 12) return null;
+      if (!isRecordArray(row) || row.length < 13) return null;
       const [
         timestampMs,
         modelIndex,
@@ -181,6 +183,7 @@ export function decodeScanCache(document: unknown): ScanCache {
         reportedCostUsd,
         workspacePath,
         workspaceSource,
+        fast,
       ] = row as SerializedRecord;
 
       const model = typeof modelIndex === "number" ? models[modelIndex] : undefined;
@@ -196,7 +199,8 @@ export function decodeScanCache(document: unknown): ScanCache {
         (workspacePath !== null && typeof workspacePath !== "string") ||
         (workspaceSource !== "claudeCwd" &&
           workspaceSource !== "codexSessionMeta" &&
-          workspaceSource !== "none")
+          workspaceSource !== "none") ||
+        (fast !== 0 && fast !== 1)
       ) {
         return null;
       }
@@ -214,6 +218,7 @@ export function decodeScanCache(document: unknown): ScanCache {
           reasoningTokens: reasoning,
         },
         reportedCostUsd: typeof reportedCostUsd === "number" ? reportedCostUsd : null,
+        fast: fast === 1,
         dedupeKey: typeof dedupeKey === "string" ? dedupeKey : null,
         workspacePath,
         workspaceSource,

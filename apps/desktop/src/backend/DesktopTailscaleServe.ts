@@ -1,5 +1,5 @@
 import type { DesktopTailscaleServeDevice } from "@t3tools/contracts";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import {
   disableTailscaleServe,
   ensureTailscaleServe,
@@ -18,8 +18,8 @@ import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 
@@ -215,7 +215,7 @@ const upsertResult = (
 export const make = Effect.gen(function* () {
   const desktopSettings = yield* DesktopAppSettings.DesktopAppSettings;
   const baseSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const platform = yield* HostProcessPlatform;
+  const platform = yield* HostProcess.Platform;
   const scope = yield* Effect.scope;
   // Held around each tailscale mutation so removals never interleave with an
   // attempt. Never held across a retry backoff.
@@ -244,7 +244,7 @@ export const make = Effect.gen(function* () {
         ChildProcessSpawner.ChildProcessSpawner,
         makeWslTailscaleSpawner(baseSpawner, target.distro),
       ),
-      Effect.provideService(HostProcessPlatform, "linux"),
+      Effect.provideService(HostProcess.Platform, "linux"),
     );
   };
 
@@ -373,9 +373,10 @@ export const make = Effect.gen(function* () {
       disableTailscaleServe({ servePort: placement.servePort }),
     ).pipe(
       // Nothing mapped on that port is the state we wanted.
-      Effect.catchTag("TailscaleCommandExitError", (error) =>
-        error.stderrDiagnostic === "no-existing-handler" ? Effect.void : Effect.fail(error),
-      ),
+      Effect.catchTags({
+        TailscaleCommandExitError: (error) =>
+          error.stderrDiagnostic === "no-existing-handler" ? Effect.void : Effect.fail(error),
+      }),
       Effect.andThen(Effect.logInfo("Tailscale Serve removed")),
       Effect.catch((error) =>
         Effect.logWarning("Tailscale Serve removal failed").pipe(

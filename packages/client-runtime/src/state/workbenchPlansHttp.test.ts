@@ -5,7 +5,7 @@ import * as Option from "effect/Option";
 
 import { PrimaryConnectionTarget, type PreparedConnection } from "../connection/model.ts";
 import { ManagedRelayDpopSigner } from "../relay/managedRelay.ts";
-import { remoteHttpClientLayer } from "../rpc/http.ts";
+import { layerRemoteHttpClient } from "../rpc/http.ts";
 import {
   associateEnvironmentWorkbenchPlan,
   fetchEnvironmentWorkbenchPlanAssociations,
@@ -124,7 +124,7 @@ describe("Workbench plan environment HTTP", () => {
         }
         return Promise.resolve(Response.json(health));
       }) satisfies typeof fetch;
-      const layer = remoteHttpClientLayer(fetchFn);
+      const layer = layerRemoteHttpClient(fetchFn);
       const context = { prepared: PREPARED, signer: Option.none() };
 
       yield* fetchEnvironmentWorkbenchProjectionHealth(context).pipe(Effect.provide(layer));
@@ -219,7 +219,7 @@ describe("Workbench plan environment HTTP", () => {
           }),
         );
       }) satisfies typeof fetch;
-      const layer = remoteHttpClientLayer(fetchFn);
+      const layer = layerRemoteHttpClient(fetchFn);
 
       yield* fetchEnvironmentWorkbenchTopology({
         prepared: PREPARED,
@@ -265,7 +265,7 @@ describe("Workbench plan environment HTTP", () => {
       const result = yield* fetchEnvironmentWorkbenchPlans({
         prepared: PREPARED,
         signer: Option.none(),
-      }).pipe(Effect.provide(remoteHttpClientLayer(fetchFn)));
+      }).pipe(Effect.provide(layerRemoteHttpClient(fetchFn)));
 
       expect(result.items).toEqual([]);
       expect(String(calls[0]?.[0])).toBe("https://environment.example.test/api/workbench/plans");
@@ -290,7 +290,7 @@ describe("Workbench plan environment HTTP", () => {
           Response.json({ path: WorkbenchPlanPath.make("t3code/archive/phase 4.md") }),
         );
       }) satisfies typeof fetch;
-      const layer = remoteHttpClientLayer(fetchFn);
+      const layer = layerRemoteHttpClient(fetchFn);
 
       yield* fetchEnvironmentWorkbenchPlanAnnotations({
         prepared: PREPARED,
@@ -349,7 +349,7 @@ describe("Workbench plan environment HTTP", () => {
         },
         path: PLAN_PATH,
         signer: Option.some(signer),
-      }).pipe(Effect.provide(remoteHttpClientLayer(fetchFn)));
+      }).pipe(Effect.provide(layerRemoteHttpClient(fetchFn)));
 
       const requestUrl = String(calls[0]?.[0]);
       expect(proofInputs).toEqual([{ method: "GET", url: requestUrl }]);
@@ -385,7 +385,7 @@ describe("Workbench plan environment HTTP", () => {
         }
         return Promise.resolve(Response.json(associationSnapshot));
       }) satisfies typeof fetch;
-      const layer = remoteHttpClientLayer(fetchFn);
+      const layer = layerRemoteHttpClient(fetchFn);
 
       yield* fetchEnvironmentWorkbenchPlanAssociations({
         prepared: PREPARED,
@@ -484,7 +484,7 @@ describe("Workbench plan environment HTTP", () => {
             }),
           );
         }) satisfies typeof fetch;
-        const layer = remoteHttpClientLayer(fetchFn);
+        const layer = layerRemoteHttpClient(fetchFn);
 
         yield* fetchEnvironmentWorkbenchResourceSource({
           prepared: PREPARED,

@@ -12,14 +12,15 @@ import {
   type DesktopTailscaleServeStatus,
 } from "@t3tools/contracts";
 import { buildTailscaleHttpsBaseUrl, isTailscaleIpv4Address } from "@t3tools/tailscale";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Semaphore from "effect/Semaphore";
+import * as HttpClient from "effect/http/HttpClient";
 
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopConfig from "../app/DesktopConfig.ts";
@@ -530,8 +531,12 @@ export const make = Effect.gen(function* () {
   const httpClient = yield* HttpClient.HttpClient;
   const desktopSettings = yield* DesktopAppSettings.DesktopAppSettings;
   const tailscaleServe = yield* DesktopTailscaleServe.DesktopTailscaleServe;
-  const platform = yield* HostProcessPlatform;
+  const platform = yield* HostProcess.Platform;
   const stateRef = yield* Ref.make(initialRuntimeState());
+  // Each change reads the runtime state, persists settings, then writes the
+  // state back. Run them one at a time so a change never writes over another
+  // with values it read before that change persisted.
+  const changePermit = yield* Semaphore.make(1);
 
   const readNetworkInterfaces = networkInterfaces.read;
 
@@ -629,7 +634,7 @@ export const make = Effect.gen(function* () {
       state: toContractState(resolved.state, extras),
       requiresRelaunch: change.changed || requiresBackendRelaunch(previous, resolved.state),
     };
-  });
+  }, changePermit.withPermit);
 
   const setTailscaleServeEnabled = Effect.fn("desktop.serverExposure.setTailscaleServeEnabled")(
     function* (input: {
@@ -669,6 +674,7 @@ export const make = Effect.gen(function* () {
       const extras = yield* readTailscaleServeContractExtras;
       return toContractState(nextState, extras);
     },
+    changePermit.withPermit,
   );
 
   const getAdvertisedEndpoints = Effect.gen(function* () {

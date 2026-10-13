@@ -7,7 +7,7 @@ import remarkFrontmatter from "remark-frontmatter";
 import ChatMarkdown from "../ChatMarkdown";
 import { Button } from "../ui/button";
 import { cn } from "../../lib/utils";
-import { resolvePathLinkTarget } from "../../terminal-links";
+import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
 
 export type WorkbenchMarkdownSegment =
   | { readonly kind: "markdown"; readonly offset: number; readonly text: string }

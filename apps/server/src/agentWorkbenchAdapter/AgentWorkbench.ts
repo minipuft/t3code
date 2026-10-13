@@ -1,3 +1,4 @@
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- synchronous catalog identity mapping must retain SHA-256 without adding an Effect context.
 import * as NodeCrypto from "node:crypto";
 
 import {
@@ -36,8 +37,8 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import { ServerEnvironment } from "../environment/ServerEnvironment.ts";
-import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
-import { ProviderSessionDirectory } from "../provider/Services/ProviderSessionDirectory.ts";
+import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
+import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import {
   AgentWorkbenchConnection,
   AgentWorkbenchConnectionError,
@@ -502,8 +503,8 @@ export function makeAgentWorkbench(
 
 const make = Effect.gen(function* () {
   const environment = yield* ServerEnvironment;
-  const providers = yield* ProviderRegistry;
-  const sessions = yield* Effect.serviceOption(ProviderSessionDirectory);
+  const providers = yield* ProviderRegistry.ProviderRegistry;
+  const sessions = yield* Effect.serviceOption(ProjectionStore.ProjectionStoreV2);
   const connection = new AgentWorkbenchConnection(makeAgentWorkbenchConnectionDependencies());
   yield* Effect.addFinalizer(() => Effect.promise(() => connection.close()));
   return makeAgentWorkbench(connection, {
@@ -513,9 +514,10 @@ const make = Effect.gen(function* () {
       Option.match(sessions, {
         onNone: () => Effect.succeed([]),
         onSome: (directory) =>
-          directory.getBinding(ThreadId.make(threadId)).pipe(
-            Effect.map((binding) => Option.flatMap(binding, projectHarnessAlias)),
-            Effect.map(Option.toArray),
+          directory.getThreadRecords(ThreadId.make(threadId), ["providerThreads"]).pipe(
+            Effect.map(({ providerThreads }) =>
+              providerThreads.flatMap((thread) => Option.toArray(projectHarnessAlias(thread))),
+            ),
             Effect.orElseSucceed(() => []),
           ),
       }),
@@ -590,22 +592,12 @@ function resourceTargetQuery(value: AgentWorkbenchResourceTargetInput) {
   return query.toString();
 }
 
-export function projectHarnessAlias(binding: {
-  readonly provider: string;
-  readonly resumeCursor?: unknown | null;
+export function projectHarnessAlias(thread: {
+  readonly driver: string;
+  readonly nativeThreadRef: { readonly nativeId: string | null } | null;
 }) {
-  const cursor = binding.resumeCursor;
-  if (cursor === null || typeof cursor !== "object" || Array.isArray(cursor)) return Option.none();
-  const value = cursor as Record<string, unknown>;
-  const provider = binding.provider === "claudeAgent" ? "claude" : binding.provider;
-  const sessionId =
-    binding.provider === "codex"
-      ? value["threadId"]
-      : binding.provider === "claudeAgent"
-        ? value["resume"]
-        : binding.provider === "opencode"
-          ? value["sessionId"]
-          : undefined;
+  const sessionId = thread.nativeThreadRef?.nativeId;
+  const provider = thread.driver === "claudeAgent" ? "claude" : thread.driver;
   return typeof sessionId === "string" && sessionId.length > 0
     ? Option.some({ provider, sessionId })
     : Option.none();

@@ -5,7 +5,7 @@ import * as Option from "effect/Option";
 
 import { PrimaryConnectionTarget, type PreparedConnection } from "../connection/model.ts";
 import { ManagedRelayDpopSigner } from "../relay/managedRelay.ts";
-import { remoteHttpClientLayer } from "../rpc/http.ts";
+import { layerRemoteHttpClient } from "../rpc/http.ts";
 import {
   applyEnvironmentWorkflowPrompt,
   fetchEnvironmentWorkflowCatalog,
@@ -59,7 +59,7 @@ describe("fetchEnvironmentWorkflowCatalog", () => {
       const result = yield* fetchEnvironmentWorkflowCatalog({
         prepared: PREPARED,
         signer: Option.none(),
-      }).pipe(Effect.provide(remoteHttpClientLayer(fetchFn)));
+      }).pipe(Effect.provide(layerRemoteHttpClient(fetchFn)));
 
       expect(result.items).toHaveLength(1);
       expect(result.items[0]?.id).toBe("strategicImplement");
@@ -90,7 +90,7 @@ describe("fetchEnvironmentWorkflowCatalog", () => {
           httpAuthorization: { _tag: "Bearer", token: "test-environment-token" },
         },
         signer: Option.none(),
-      }).pipe(Effect.provide(remoteHttpClientLayer(fetchFn)));
+      }).pipe(Effect.provide(layerRemoteHttpClient(fetchFn)));
 
       const [, init] = calls[0]!;
       expect(new Headers(init.headers).get("authorization")).toBe("Bearer test-environment-token");
@@ -132,7 +132,7 @@ describe("fetchEnvironmentWorkflowCatalog", () => {
         },
         signer: Option.none(),
         itemId,
-      }).pipe(Effect.provide(remoteHttpClientLayer(fetchFn)));
+      }).pipe(Effect.provide(layerRemoteHttpClient(fetchFn)));
 
       expect("summary" in detail ? detail.userMessageTemplate : null).toBe("Implement {{ task }}");
       const [request, init] = calls[0]!;
@@ -174,7 +174,7 @@ describe("fetchEnvironmentWorkflowCatalog", () => {
           },
         },
         signer: Option.some(signer),
-      }).pipe(Effect.provide(remoteHttpClientLayer(fetchFn)));
+      }).pipe(Effect.provide(layerRemoteHttpClient(fetchFn)));
 
       expect(proofInputs).toEqual([
         { method: "GET", url: "https://environment.example.test/api/workflows" },
@@ -206,7 +206,7 @@ describe("fetchEnvironmentWorkflowCatalog", () => {
           ...PREPARED,
           httpAuthorization: { _tag: "Bearer" as const, token: "test-environment-token" },
         };
-        const layer = remoteHttpClientLayer(fetchFn);
+        const layer = layerRemoteHttpClient(fetchFn);
 
         yield* fetchEnvironmentWorkflowPromptHistory({
           prepared,

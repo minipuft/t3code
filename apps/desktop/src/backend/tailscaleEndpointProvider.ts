@@ -3,7 +3,7 @@ import type { AdvertisedEndpoint, AdvertisedEndpointProvider } from "@t3tools/co
 import { buildTailscaleHttpsBaseUrl, probeTailscaleHttpsEndpoint } from "@t3tools/tailscale";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 
 export { parseTailscaleMagicDnsName } from "@t3tools/tailscale";
 

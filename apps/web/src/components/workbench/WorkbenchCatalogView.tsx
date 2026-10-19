@@ -7,7 +7,7 @@ import type {
   WorkflowSkillSummary,
 } from "@t3tools/contracts";
 import { CheckIcon, CopyIcon, RefreshCwIcon, BlocksIcon, BracesIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { useWorkflowCatalog, useWorkflowCatalogDetail } from "../../state/workflowCatalog";
@@ -54,18 +54,14 @@ export function WorkbenchCatalogView(props: {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(
     props.initialSelectedItemId ?? null,
   );
-  const items = useMemo(
-    () =>
-      projectWorkbenchCatalog({
-        items: props.data?.items ?? [],
-        module: props.module,
-        query,
-      }),
-    [props.data?.items, props.module, query],
-  );
+  const items = projectWorkbenchCatalog({
+    items: props.data?.items ?? [],
+    module: props.module,
+    query,
+  });
   const usableSelectionId = retainWorkbenchSelection(selectedItemId, items);
   const selectedItem = items.find((item) => item.id === usableSelectionId) ?? null;
-  const groups = useMemo(() => groupCatalogItems(items), [items]);
+  const groups = groupCatalogItems(items);
   const { isGroupOpen, setGroupOpen } = useWorkbenchGroupOpenState(
     `catalog:${props.module}`,
     props.environmentId ?? null,
@@ -246,7 +242,7 @@ function CatalogRow(props: {
       type="button"
       aria-pressed={props.selected}
       className={cn(
-        "grid min-w-0 gap-1 border text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+        "grid min-w-0 gap-1 border text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         props.compact ? "rounded-lg px-3 py-2" : "rounded-xl px-4 py-3",
         props.selected
           ? "border-primary/35 bg-primary/8"

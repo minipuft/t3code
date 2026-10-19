@@ -10,6 +10,7 @@ import type {
 } from "@t3tools/contracts";
 import { Code2Icon, EyeIcon, RefreshCwIcon, SaveIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useStableCallback } from "../../hooks/useStableCallback";
 
 import {
   useWorkbenchPlanActions,
@@ -46,35 +47,40 @@ export function PlanEditor(props: {
   const [draft, setDraft] = useState("");
   const [baseText, setBaseText] = useState("");
   const [baseMtimeMs, setBaseMtimeMs] = useState(0);
-  const [externalChange, setExternalChange] = useState(false);
   const [saving, setSaving] = useState(false);
   const [rename, setRename] = useState("");
   const [view, setView] = useState<"rendered" | "source">("rendered");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const dirty = draft !== baseText;
 
+  const reportDirtyChange = useStableCallback(props.onDirtyChange);
   useEffect(() => {
-    props.onDirtyChange(dirty ? props.summary.path : null);
-    return () => props.onDirtyChange(null);
-  }, [dirty, props.onDirtyChange, props.summary.path]);
+    reportDirtyChange(dirty ? props.summary.path : null);
+    return () => reportDirtyChange(null);
+  }, [dirty, props.summary.path, reportDirtyChange]);
 
-  useEffect(() => {
-    if (source.data === null) return;
-    if (dirty && source.data.mtimeMs !== baseMtimeMs) {
-      setExternalChange(true);
-      return;
+  const [previousSource, setPreviousSource] = useState<typeof source.data>(null);
+  if (
+    source.data !== previousSource ||
+    (!dirty &&
+      source.data !== null &&
+      (source.data.text !== baseText || source.data.mtimeMs !== baseMtimeMs))
+  ) {
+    setPreviousSource(source.data);
+    if (source.data !== null && !dirty) {
+      setDraft(source.data.text);
+      setBaseText(source.data.text);
+      setBaseMtimeMs(source.data.mtimeMs);
     }
-    setDraft(source.data.text);
-    setBaseText(source.data.text);
-    setBaseMtimeMs(source.data.mtimeMs);
-    setExternalChange(false);
-  }, [baseMtimeMs, dirty, source.data]);
-
+  }
+  const externalChange =
+    dirty &&
+    (props.summary.mtimeMs !== baseMtimeMs ||
+      (source.data !== null && source.data.mtimeMs !== baseMtimeMs));
+  const refreshSource = useStableCallback(source.refresh);
   useEffect(() => {
-    if (props.summary.mtimeMs === baseMtimeMs) return;
-    if (dirty) setExternalChange(true);
-    else source.refresh();
-  }, [baseMtimeMs, dirty, props.summary.mtimeMs, source.refresh]);
+    if (props.summary.mtimeMs !== baseMtimeMs && !dirty) refreshSource();
+  }, [baseMtimeMs, dirty, props.summary.mtimeMs, refreshSource]);
 
   const save = async () => {
     setSaving(true);
@@ -83,7 +89,6 @@ export function PlanEditor(props: {
     if (result._tag === "Success") {
       setBaseText(draft);
       setBaseMtimeMs(result.value.mtimeMs);
-      setExternalChange(false);
       source.refresh();
       props.onListRefresh();
       toastManager.add({ type: "success", title: "Plan saved" });
@@ -120,7 +125,6 @@ export function PlanEditor(props: {
 
   const discardDraft = () => {
     setDraft(baseText);
-    setExternalChange(false);
   };
 
   if (source.isPending && source.data === null) {

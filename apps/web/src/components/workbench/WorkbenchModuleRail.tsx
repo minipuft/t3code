@@ -31,7 +31,7 @@ export function WorkbenchModuleRail(props: {
             type="button"
             aria-current={props.activeModule === module.id ? "page" : undefined}
             className={cn(
-              "flex h-8 items-center gap-2 rounded-md px-3 font-medium text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+              "flex h-8 items-center gap-2 rounded-md px-3 font-medium text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
               props.activeModule === module.id
                 ? "bg-primary/12 text-foreground [&_svg]:text-primary"
                 : "text-muted-foreground hover:bg-accent hover:text-foreground",

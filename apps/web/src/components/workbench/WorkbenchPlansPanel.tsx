@@ -5,7 +5,7 @@ import type {
   WorkbenchPlanSummary,
 } from "@t3tools/contracts";
 import { FilePlus2Icon, RefreshCwIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { useProjects } from "../../state/entities";
@@ -92,23 +92,18 @@ export function resolveEnvironmentCwd(
 export function WorkbenchPlansPanel(props: { readonly environmentId: EnvironmentId }) {
   const plans = useWorkbenchPlans(props.environmentId);
   const projects = useProjects();
-  const cwd = useMemo(
-    () => resolveEnvironmentCwd(projects, props.environmentId),
-    [projects, props.environmentId],
-  );
+  const cwd = resolveEnvironmentCwd(projects, props.environmentId);
   const [query, setQuery] = useState("");
   const [selectedPath, setSelectedPath] = useState<WorkbenchPlanPath | null>(null);
   const [dirtyPath, setDirtyPath] = useState<WorkbenchPlanPath | null>(null);
-  const items = useMemo(
-    () => filterWorkbenchPlans(plans.data?.items ?? [], query),
-    [plans.data?.items, query],
-  );
+  const items = filterWorkbenchPlans(plans.data?.items ?? [], query);
 
-  useEffect(() => {
-    if (dirtyPath !== null) return;
-    if (selectedPath !== null && items.some((item) => item.path === selectedPath)) return;
-    setSelectedPath(items[0]?.path ?? null);
-  }, [dirtyPath, items, selectedPath]);
+  const nextSelectedPath =
+    dirtyPath !== null ||
+    (selectedPath !== null && items.some((item) => item.path === selectedPath))
+      ? selectedPath
+      : (items[0]?.path ?? null);
+  if (nextSelectedPath !== selectedPath) setSelectedPath(nextSelectedPath);
 
   const selectedSummary =
     plans.data?.items.find((item) => item.path === selectedPath) ?? items[0] ?? null;
@@ -246,7 +241,7 @@ export function PlanList(props: {
                       disabled={props.lockedPath != null && props.lockedPath !== item.path}
                       aria-current={props.selectedPath === item.path ? "true" : undefined}
                       className={cn(
-                        "grid w-full gap-1 rounded-lg px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        "grid w-full gap-1 rounded-lg px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                         props.selectedPath === item.path ? "bg-primary/10" : "hover:bg-muted/56",
                         "disabled:cursor-not-allowed disabled:opacity-45",
                       )}

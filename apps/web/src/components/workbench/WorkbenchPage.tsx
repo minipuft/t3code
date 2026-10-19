@@ -1,5 +1,5 @@
 import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 
 import { isElectron } from "../../env";
 import { useProjects } from "../../state/entities";
@@ -40,18 +40,15 @@ export function WorkbenchPage(props: {
     environments,
   });
 
-  useEffect(() => {
-    if (selectedEnvironmentId !== effectiveEnvironmentId) {
-      setSelectedEnvironmentId(effectiveEnvironmentId);
-    }
-  }, [effectiveEnvironmentId, selectedEnvironmentId]);
+  if (selectedEnvironmentId !== effectiveEnvironmentId) {
+    setSelectedEnvironmentId(effectiveEnvironmentId);
+  }
 
   const selectedEnvironment =
     environments.find((environment) => environment.environmentId === effectiveEnvironmentId) ??
     null;
-  const environmentProjects = useMemo(
-    () => projects.filter((project) => project.environmentId === effectiveEnvironmentId),
-    [effectiveEnvironmentId, projects],
+  const environmentProjects = projects.filter(
+    (project) => project.environmentId === effectiveEnvironmentId,
   );
   const { selectedProjectId, pinnedProjectIds, selectProject, togglePin } = useWorkbenchProjectLens(
     {

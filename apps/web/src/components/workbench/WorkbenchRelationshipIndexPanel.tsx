@@ -226,7 +226,7 @@ export function RelationshipIndexCards(props: {
                   }}
                   type="button"
                   tabIndex={selected?.id === node.id ? 0 : -1}
-                  className={`w-full rounded px-2 py-2 text-left text-sm focus-visible:ring-2 focus-visible:ring-ring ${selected?.id === node.id ? "bg-primary/12" : "hover:bg-accent"}`}
+                  className={`w-full rounded px-2 py-2 text-left text-sm focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${selected?.id === node.id ? "bg-primary/12" : "hover:bg-accent"}`}
                   aria-current={selected?.id === node.id ? "true" : undefined}
                   onClick={() => props.onSelect(node.id)}
                   onKeyDown={(event) => {

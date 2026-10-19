@@ -68,9 +68,14 @@ function MermaidDiagram(props: { readonly source: string }) {
   const [showSource, setShowSource] = useState(false);
   const [state, setState] = useState<MermaidRenderState>({ tag: "loading" });
 
+  const [renderInput, setRenderInput] = useState({ source: props.source, attempt });
+  if (renderInput.source !== props.source || renderInput.attempt !== attempt) {
+    setRenderInput({ source: props.source, attempt });
+    setState({ tag: "loading" });
+  }
+
   useEffect(() => {
     let active = true;
-    setState({ tag: "loading" });
     const renderId = `workbench-mermaid-${reactId.replaceAll(":", "")}-${attempt}`;
     void loadMermaid()
       .then((mermaid) => mermaid.render(renderId, props.source))

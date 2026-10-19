@@ -4,7 +4,7 @@ import type {
   WorkflowCatalogList,
 } from "@t3tools/contracts";
 import { BlocksIcon, BracesIcon, PinIcon, RefreshCwIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { cn } from "../../lib/utils";
 import {
@@ -92,37 +92,23 @@ export function ComposerWorkflowList(props: {
         : null;
   const message =
     props.error ?? capabilityMessage ?? (props.isPending ? "Loading Agent Actions…" : null);
-  const kindItems = useMemo(
-    () => (props.catalog?.items ?? []).filter((item) => item.kind === props.kind),
-    [props.catalog?.items, props.kind],
-  );
-  const searchItems = useMemo(
-    () => searchWorkflowCatalog(kindItems, props.query),
-    [kindItems, props.query],
-  );
-  const projectedLibrary = useMemo(
-    () => projectWorkflowKind(props.library, props.kind),
-    [props.kind, props.library],
-  );
-  const pinnedIds = useMemo(
-    () => new Set(projectedLibrary.pinned.map((item) => item.id)),
-    [projectedLibrary.pinned],
-  );
+  const kindItems = (props.catalog?.items ?? []).filter((item) => item.kind === props.kind);
+  const searchItems = searchWorkflowCatalog(kindItems, props.query);
+  const projectedLibrary = projectWorkflowKind(props.library, props.kind);
+  const pinnedIds = new Set(projectedLibrary.pinned.map((item) => item.id));
   const showSearchResults = props.query.trim().length > 0;
   const hasItems = kindItems.length > 0;
-  const navigableItems = useMemo(
-    () =>
-      showSearchResults
-        ? searchItems
-        : [...projectedLibrary.pinned, ...projectedLibrary.recent, ...projectedLibrary.all],
-    [projectedLibrary, searchItems, showSearchResults],
-  );
+  const navigableItems = showSearchResults
+    ? searchItems
+    : [...projectedLibrary.pinned, ...projectedLibrary.recent, ...projectedLibrary.all];
   const [highlightedItemId, setHighlightedItemId] = useState<WorkflowCatalogItemId | null>(null);
 
-  useEffect(() => {
-    if (navigableItems.some((item) => item.id === highlightedItemId)) return;
-    setHighlightedItemId(navigableItems[0]?.id ?? null);
-  }, [highlightedItemId, navigableItems]);
+  const usableHighlightedItemId = navigableItems.some((item) => item.id === highlightedItemId)
+    ? highlightedItemId
+    : (navigableItems[0]?.id ?? null);
+  if (usableHighlightedItemId !== highlightedItemId) {
+    setHighlightedItemId(usableHighlightedItemId);
+  }
 
   useEffect(() => {
     if (highlightedItemId === null) return;
@@ -160,7 +146,7 @@ export function ComposerWorkflowList(props: {
     };
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [highlightedItemId, navigableItems, props.onClose, props.onSelect, props.onSubmit]);
+  }, [highlightedItemId, navigableItems, props]);
 
   return (
     <div className="grid gap-2 p-3">
@@ -176,7 +162,7 @@ export function ComposerWorkflowList(props: {
             role="tab"
             aria-selected={props.kind === itemKind}
             className={cn(
-              "rounded-full px-3 py-1 font-medium text-xs capitalize outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+              "rounded-full px-3 py-1 font-medium text-xs capitalize outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
               props.kind === itemKind
                 ? "bg-background text-foreground shadow-sm"
                 : "text-secondary-label hover:text-foreground",

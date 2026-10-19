@@ -12,7 +12,7 @@ import {
   RotateCcwIcon,
   UnlockIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { randomUUID } from "../../lib/utils";
 
 import {
@@ -89,15 +89,13 @@ export function WorkbenchSystemPanel(props: {
   const editable = selected?.kind === "rule" || selected?.kind === "hook";
   const target = editable && selected.relativePath ? resourceTarget(selected) : null;
 
-  useEffect(() => {
-    const firstProject = library.data?.projects[0];
-    if (project === undefined && firstProject !== undefined) setProject(firstProject);
-  }, [library.data?.projects, project]);
+  const firstProject = library.data?.projects[0];
+  if (project === undefined && firstProject !== undefined) setProject(firstProject);
 
-  const groups = useMemo(
-    () =>
-      groupWorkbenchItems(library.data?.entries ?? [], (entry) => entry.kind, RESOURCE_KIND_ORDER),
-    [library.data?.entries],
+  const groups = groupWorkbenchItems(
+    library.data?.entries ?? [],
+    (entry) => entry.kind,
+    RESOURCE_KIND_ORDER,
   );
   const refreshAll = () => {
     library.refresh();
@@ -257,7 +255,7 @@ export function WorkbenchSystemPanel(props: {
                     <button
                       key={entry.id}
                       type="button"
-                      className={`grid gap-1 rounded-lg border px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected?.id === entry.id ? "border-primary/35 bg-primary/8" : "border-transparent hover:border-border/60 hover:bg-muted/32"}`}
+                      className={`grid gap-1 rounded-lg border px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${selected?.id === entry.id ? "border-primary/35 bg-primary/8" : "border-transparent hover:border-border/60 hover:bg-muted/32"}`}
                       onClick={() => setSelected(entry)}
                     >
                       <span className="flex items-center gap-2">
@@ -465,9 +463,11 @@ function ResourceEditor(props: {
   const [checkpoint, setCheckpoint] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  useEffect(() => {
+  const [previousSource, setPreviousSource] = useState<typeof source.data>(null);
+  if (source.data !== previousSource) {
+    setPreviousSource(source.data);
     if (source.data) setDraft(source.data.content);
-  }, [source.data]);
+  }
   if (source.error)
     return <WorkbenchEmptyState title="Source unavailable" description={source.error} />;
   if (!source.data)

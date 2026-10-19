@@ -42,12 +42,13 @@ const tailnetNetworkInterfaces: DesktopNetworkInterfaces.NetworkInterfaces = {
   ],
 };
 
-function layerMockSpawner(statusJson = "{}") {
+function layerMockSpawner(statusJson = "{}", onSpawn?: () => void) {
   return Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make(() =>
-      Effect.succeed(
-        ChildProcessSpawner.makeHandle({
+      Effect.sync(() => {
+        onSpawn?.();
+        return ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(1),
           exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
           isRunning: Effect.succeed(false),
@@ -59,8 +60,8 @@ function layerMockSpawner(statusJson = "{}") {
           all: Stream.empty,
           getInputFd: () => Sink.drain,
           getOutputFd: () => Stream.empty,
-        }),
-      ),
+        });
+      }),
     ),
   );
 }
@@ -74,14 +75,17 @@ function layerDieOnSpawn() {
 
 // No primary registered yet -- getAdvertisedEndpoints treats this like a
 // native primary (today's behaviour) and getState reports nothing to show.
-function nativeTailscaleServeLayer(): Layer.Layer<DesktopTailscaleServe.DesktopTailscaleServe> {
+function nativeTailscaleServeLayer(status?: {
+  readonly magicDnsName: string | null;
+  readonly tailnetIpv4Addresses: readonly string[];
+}): Layer.Layer<DesktopTailscaleServe.DesktopTailscaleServe> {
   return Layer.succeed(DesktopTailscaleServe.DesktopTailscaleServe, {
     primaryReady: () => Effect.void,
     primaryStopped: Effect.void,
     reconcile: Effect.void,
     results: Effect.succeed([]),
     primaryTarget: Effect.succeed(Option.none()),
-    readStatus: () => Effect.succeed(Option.none()),
+    readStatus: () => Effect.succeed(Option.fromNullishOr(status)),
   } satisfies DesktopTailscaleServe.DesktopTailscaleServe["Service"]);
 }
 
@@ -188,6 +192,40 @@ const withHarness = <A, E, R>(
   }).pipe(Effect.provide(NodeServices.layer), Effect.scoped);
 
 describe("DesktopServerExposure", () => {
+  it.effect("uses cached Tailscale identity to exclude another VPN's pairing address", () => {
+    let statusReads = 0;
+    const spawnerLayer = layerMockSpawner(`{"Self":{"TailscaleIPs":["100.74.126.34"]}}`, () => {
+      statusReads += 1;
+    });
+    return withHarness(
+      {
+        ...lanNetworkInterfaces,
+        pvpnksintrf1: [{ address: "100.85.0.1", family: "IPv4", internal: false }],
+        vpn0: [{ address: "100.74.126.34", family: "IPv4", internal: false }],
+      },
+      Effect.gen(function* () {
+        const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
+        yield* serverExposure.configureFromSettings({ port: 4173 });
+        yield* serverExposure.setMode("network-accessible");
+
+        const endpoints = yield* serverExposure.getAdvertisedEndpoints;
+        assert.deepEqual(
+          endpoints.map((endpoint) => endpoint.httpBaseUrl),
+          ["http://127.0.0.1:4173/", "http://192.168.1.20:4173/", "http://100.74.126.34:4173/"],
+        );
+        assert.deepEqual(yield* serverExposure.getAdvertisedEndpoints, endpoints);
+        assert.equal(statusReads, 1);
+      }),
+      {},
+      spawnerLayer,
+      undefined,
+      DesktopTailscaleServe.layer.pipe(
+        Layer.provide(DesktopAppSettings.layerTest()),
+        Layer.provide(spawnerLayer),
+      ),
+    );
+  });
+
   it.effect("falls back to local-only without losing the requested network preference", () =>
     withHarness(
       emptyNetworkInterfaces,
@@ -252,6 +290,39 @@ describe("DesktopServerExposure", () => {
 
         const persisted = yield* settings.get;
         assert.equal(persisted.serverExposureMode, "network-accessible");
+      }),
+    ),
+  );
+
+  it.effect("advertises the Wi-Fi or Ethernet address ahead of bridges and tunnels", () =>
+    withHarness(
+      {
+        bridge0: [{ address: "192.168.2.1", family: "IPv4", internal: false }],
+        utun4: [{ address: "10.8.0.2", family: "IPv4", internal: false }],
+        en0: [{ address: "192.168.1.20", family: "IPv4", internal: false }],
+      },
+      Effect.gen(function* () {
+        const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
+        yield* serverExposure.configureFromSettings({ port: 4173 });
+
+        const change = yield* serverExposure.setMode("network-accessible");
+        assert.equal(change.state.advertisedHost, "192.168.1.20");
+      }),
+    ),
+  );
+
+  it.effect("keeps a host bridge's LAN address ahead of later adapters", () =>
+    withHarness(
+      {
+        vmbr0: [{ address: "192.168.1.30", family: "IPv4", internal: false }],
+        enx00e04c680001: [{ address: "192.168.42.10", family: "IPv4", internal: false }],
+      },
+      Effect.gen(function* () {
+        const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
+        yield* serverExposure.configureFromSettings({ port: 4173 });
+
+        const change = yield* serverExposure.setMode("network-accessible");
+        assert.equal(change.state.advertisedHost, "192.168.1.30");
       }),
     ),
   );
@@ -356,7 +427,6 @@ describe("DesktopServerExposure", () => {
           const settings = yield* DesktopAppSettings.DesktopAppSettings;
           return DesktopAppSettings.DesktopAppSettings.of({
             ...settings,
-            // Hold the mode write the way a slow disk would.
             setServerExposureMode: (mode) =>
               Deferred.succeed(modeWriteStarted, undefined).pipe(
                 Effect.andThen(Deferred.await(releaseModeWrite)),
@@ -412,6 +482,96 @@ describe("DesktopServerExposure", () => {
     ),
   );
 
+  it.effect.each([
+    {
+      name: "excludes unrelated VPN addresses even when Tailscale is present",
+      interfaces: {
+        pvpnksintrf1: [{ address: "100.85.0.1", family: "IPv4", internal: false }],
+        tailscale0: [{ address: "100.74.126.34", family: "IPv4", internal: false }],
+      },
+      assigned: ["100.74.126.34"],
+      expected: ["http://100.74.126.34:4173/"],
+    },
+    {
+      name: "excludes CGNAT VPN addresses when Tailscale has no assigned addresses",
+      interfaces: {
+        pvpnksintrf1: [{ address: "100.85.0.1", family: "IPv4", internal: false }],
+      },
+      assigned: [],
+      expected: [],
+    },
+    {
+      name: "keeps a named Tailscale interface when its status is unavailable",
+      interfaces: {
+        tailscale0: [{ address: "100.74.126.34", family: "IPv4", internal: false }],
+      },
+      assigned: null,
+      expected: ["http://100.74.126.34:4173/"],
+    },
+    {
+      name: "keeps a Windows Tailscale interface with stale status",
+      interfaces: {
+        Tailscale: [{ address: "100.74.126.34", family: "IPv4", internal: false }],
+      },
+      assigned: [],
+      expected: ["http://100.74.126.34:4173/"],
+    },
+    {
+      name: "identifies a macOS Tailscale tunnel by its IPv6 address without status",
+      interfaces: {
+        utun3: [{ address: "100.85.0.1", family: "IPv4", internal: false }],
+        utun4: [
+          { address: "100.74.126.34", family: "IPv4", internal: false },
+          { address: "fd7a:115c:a1e0::1234", family: "IPv6", internal: false },
+        ],
+      },
+      assigned: null,
+      expected: ["http://100.74.126.34:4173/"],
+    },
+    {
+      name: "recognizes an assigned address on a renamed adapter without IPv6",
+      interfaces: {
+        vpn0: [{ address: "100.74.126.34", family: "IPv4", internal: false }],
+      },
+      assigned: ["100.74.126.34"],
+      expected: ["http://100.74.126.34:4173/"],
+    },
+    {
+      name: "does not advertise cached Tailscale addresses absent from native interfaces",
+      interfaces: {
+        pvpnksintrf1: [{ address: "100.85.0.1", family: "IPv4", internal: false }],
+      },
+      assigned: ["100.74.126.35"],
+      expected: [],
+    },
+  ])("$name", (scenario) =>
+    withHarness(
+      scenario.interfaces,
+      Effect.gen(function* () {
+        const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
+        const settings = yield* DesktopAppSettings.DesktopAppSettings;
+        yield* settings.setServerExposureMode("network-accessible");
+        yield* serverExposure.configureFromSettings({ port: 4173 });
+
+        const endpoints = yield* serverExposure.getAdvertisedEndpoints;
+        assert.deepEqual(
+          endpoints
+            .filter((endpoint) => endpoint.id.startsWith("tailscale-ip:"))
+            .map((endpoint) => endpoint.httpBaseUrl),
+          scenario.expected,
+        );
+      }),
+      {},
+      layerDieOnSpawn(),
+      undefined,
+      nativeTailscaleServeLayer(
+        scenario.assigned === null
+          ? undefined
+          : { magicDnsName: null, tailnetIpv4Addresses: scenario.assigned },
+      ),
+    ),
+  );
+
   it.effect("keeps Tailscale-only hosts network-accessible", () =>
     withHarness(
       tailnetNetworkInterfaces,
@@ -444,11 +604,8 @@ describe("DesktopServerExposure", () => {
       Effect.gen(function* () {
         const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
         yield* serverExposure.configureFromSettings({ port: 4173 });
-        // mode stays at default "local-only", tailscaleServeEnabled stays false.
 
         const endpoints = yield* serverExposure.getAdvertisedEndpoints;
-        // Only the loopback endpoint; no tailscale spawn means the dieOnSpawnLayer
-        // would have crashed the test if the gate was missing.
         assert.deepEqual(
           endpoints.map((endpoint) => endpoint.httpBaseUrl),
           ["http://127.0.0.1:4173/"],

@@ -6,7 +6,7 @@ import type {
   WorkflowPromptSummary,
 } from "@t3tools/contracts";
 import { ArrowLeftIcon, BlocksIcon, PinIcon, Trash2Icon, XIcon } from "lucide-react";
-import { memo, type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, type ChangeEvent, useState } from "react";
 
 import {
   buildWorkflowInvocation,
@@ -54,28 +54,24 @@ export const ComposerWorkflowPicker = memo(function ComposerWorkflowPicker(
   const [presetLabel, setPresetLabel] = useState("");
   const [argumentValues, setArgumentValues] = useState<Readonly<Record<string, string>>>({});
 
-  useEffect(() => {
+  const [previousInitialQuery, setPreviousInitialQuery] = useState(props.initialQuery);
+  if (previousInitialQuery !== props.initialQuery) {
+    setPreviousInitialQuery(props.initialQuery);
     setQuery(props.initialQuery ?? "");
-  }, [props.initialQuery]);
+  }
 
-  const selectedItem = useMemo(
-    () => props.catalog?.items.find((item) => item.id === selectedItemId) ?? null,
-    [props.catalog?.items, selectedItemId],
-  );
-  useEffect(() => {
-    if (selectedItem !== null) setKind(selectedItem.kind);
-  }, [selectedItem]);
-  const invocation = useMemo(
-    () =>
-      selectedItem === null
-        ? null
-        : buildWorkflowInvocation({
-            item: selectedItem,
-            draftText: props.draftText,
-            values: argumentValues,
-          }),
-    [argumentValues, props.draftText, selectedItem],
-  );
+  const selectedItem = props.catalog?.items.find((item) => item.id === selectedItemId) ?? null;
+  if (selectedItem !== null && kind !== selectedItem.kind) {
+    setKind(selectedItem.kind);
+  }
+  const invocation =
+    selectedItem === null
+      ? null
+      : buildWorkflowInvocation({
+          item: selectedItem,
+          draftText: props.draftText,
+          values: argumentValues,
+        });
 
   const resetSelection = () => {
     setSelectedItemId(null);
@@ -83,30 +79,27 @@ export const ComposerWorkflowPicker = memo(function ComposerWorkflowPicker(
     setPresetLabel("");
     setArgumentValues({});
   };
-  const selectItem = useCallback((itemId: WorkflowCatalogItemId) => {
+  const selectItem = (itemId: WorkflowCatalogItemId) => {
     setSelectedItemId(itemId);
     setSelectedPresetId(null);
     setPresetLabel("");
     setArgumentValues({});
-  }, []);
-  const submitItem = useCallback(
-    (item: WorkflowCatalogItem) => {
-      const directInvocation = buildWorkflowInvocation({
-        item,
-        draftText: props.draftText,
-        values: {},
-      });
-      if (Object.keys(directInvocation.errors).length > 0) return;
-      props.onSubmit({ item, text: directInvocation.text });
-    },
-    [props.draftText, props.onSubmit],
-  );
-  const selectPreset = useCallback((entry: WorkflowPresetAction) => {
+  };
+  const submitItem = (item: WorkflowCatalogItem) => {
+    const directInvocation = buildWorkflowInvocation({
+      item,
+      draftText: props.draftText,
+      values: {},
+    });
+    if (Object.keys(directInvocation.errors).length > 0) return;
+    props.onSubmit({ item, text: directInvocation.text });
+  };
+  const selectPreset = (entry: WorkflowPresetAction) => {
     setSelectedItemId(entry.item.id);
     setSelectedPresetId(entry.preset.id);
     setPresetLabel(entry.preset.label);
     setArgumentValues(entry.preset.values);
-  }, []);
+  };
 
   return (
     <section

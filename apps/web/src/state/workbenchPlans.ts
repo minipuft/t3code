@@ -20,7 +20,6 @@ import type {
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { AsyncResult } from "effect/reactivity";
-import { useCallback } from "react";
 
 import { connectionAtomRuntime } from "../connection/runtime";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -42,7 +41,7 @@ export function useWorkbenchPlans(environmentId: EnvironmentId): {
 } {
   const atom = workbenchPlansEnvironment.list({ environmentId, input: null });
   const result = useAtomValue(atom);
-  const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
+  const refresh = () => appAtomRegistry.refresh(atom);
   return {
     data: queryValue(result),
     error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
@@ -67,7 +66,7 @@ export function useWorkbenchRelationshipIndex(environmentId: EnvironmentId): {
 } {
   const atom = workbenchPlansEnvironment.topology({ environmentId, input: null });
   const result = useAtomValue(atom);
-  const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
+  const refresh = () => appAtomRegistry.refresh(atom);
   const reviewCommand = useAtomCommand(workbenchPlansEnvironment.reviewRelationship, {
     reportFailure: false,
   });
@@ -76,10 +75,8 @@ export function useWorkbenchRelationshipIndex(environmentId: EnvironmentId): {
     error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
     isPending: result.waiting,
     refresh,
-    review: useCallback(
-      (input) => reviewCommand({ environmentId, input }),
-      [environmentId, reviewCommand],
-    ) as (
+    review: ((input: WorkbenchRelationshipReviewInput) =>
+      reviewCommand({ environmentId, input })) as (
       input: WorkbenchRelationshipReviewInput,
     ) => Promise<
       import("@t3tools/client-runtime/state/runtime").AtomCommandResult<
@@ -101,7 +98,7 @@ export function useWorkbenchPlanAssociations(
 } {
   const atom = workbenchPlansEnvironment.associations({ environmentId, input });
   const result = useAtomValue(atom);
-  const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
+  const refresh = () => appAtomRegistry.refresh(atom);
   return {
     data: queryValue(result),
     error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
@@ -121,7 +118,7 @@ export function useWorkbenchPlanSuggestions(
 } {
   const atom = workbenchPlansEnvironment.suggestions({ environmentId, input });
   const result = useAtomValue(atom);
-  const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
+  const refresh = () => appAtomRegistry.refresh(atom);
   return {
     data: queryValue(result),
     error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
@@ -141,7 +138,7 @@ export function useWorkbenchPlanSource(
 } {
   const atom = workbenchPlansEnvironment.source({ environmentId, input: path });
   const result = useAtomValue(atom);
-  const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
+  const refresh = () => appAtomRegistry.refresh(atom);
   return {
     data: queryValue(result),
     error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
@@ -161,7 +158,7 @@ export function useWorkbenchPlanAnnotations(
 } {
   const atom = workbenchPlansEnvironment.annotations({ environmentId, input: path });
   const result = useAtomValue(atom);
-  const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
+  const refresh = () => appAtomRegistry.refresh(atom);
   return {
     data: queryValue(result),
     error: result._tag === "Failure" ? formatEnvironmentQueryError(result.cause) : null,
@@ -182,21 +179,11 @@ export function useWorkbenchPlanActions(environmentId: EnvironmentId) {
     reportFailure: false,
   });
   return {
-    save: useCallback(
-      (input: WorkbenchPlanSaveInput) => saveCommand({ environmentId, input }),
-      [environmentId, saveCommand],
-    ),
-    mutate: useCallback(
-      (input: WorkbenchPlanMutationInput) => mutateCommand({ environmentId, input }),
-      [environmentId, mutateCommand],
-    ),
-    annotate: useCallback(
-      (input: WorkbenchPlanAnnotationMutationInput) => annotateCommand({ environmentId, input }),
-      [annotateCommand, environmentId],
-    ),
-    associate: useCallback(
-      (input: WorkbenchPlanAssociationMutationInput) => associateCommand({ environmentId, input }),
-      [associateCommand, environmentId],
-    ),
+    save: (input: WorkbenchPlanSaveInput) => saveCommand({ environmentId, input }),
+    mutate: (input: WorkbenchPlanMutationInput) => mutateCommand({ environmentId, input }),
+    annotate: (input: WorkbenchPlanAnnotationMutationInput) =>
+      annotateCommand({ environmentId, input }),
+    associate: (input: WorkbenchPlanAssociationMutationInput) =>
+      associateCommand({ environmentId, input }),
   };
 }

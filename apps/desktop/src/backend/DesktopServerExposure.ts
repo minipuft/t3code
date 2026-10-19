@@ -11,7 +11,11 @@ import {
   type DesktopTailscaleServeDevice,
   type DesktopTailscaleServeStatus,
 } from "@t3tools/contracts";
-import { buildTailscaleHttpsBaseUrl, isTailscaleIpv4Address } from "@t3tools/tailscale";
+import {
+  buildTailscaleHttpsBaseUrl,
+  isTailscaleIpv4Address,
+  type TailscaleStatus,
+} from "@t3tools/tailscale";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -73,6 +77,18 @@ const isUsableLanIpv4Address = (address: string): boolean =>
   !address.startsWith("169.254.") &&
   !isTailscaleIpv4Address(address);
 
+/**
+ * Bridges, tunnels and VM adapters whose private address other devices on the
+ * LAN usually cannot reach: macOS's Thunderbolt Bridge (`bridge0`, which can
+ * keep a manual address while nothing is plugged in) and Internet Sharing
+ * bridges, VPN tunnels, and container or VM networks. Their addresses are only
+ * advertised when no other interface has one. Host bridges such as `br0`,
+ * Proxmox's `vmbr0` and Hyper-V's `vEthernet` external switches often carry
+ * the LAN address, so they are not listed.
+ */
+const HOST_ONLY_INTERFACE =
+  /^(bridge\d|utun|ipsec|ppp|tun|tap|wg|docker|br-|veth|virbr|vmnet|vboxnet|VirtualBox|VMware)/;
+
 const isHttpsEndpointUrl = (value: string): boolean => {
   try {
     return new URL(value).protocol === "https:";
@@ -90,18 +106,17 @@ const resolveLanAdvertisedHost = (
     return normalizedExplicitHost;
   }
 
-  for (const interfaceAddresses of Object.values(networkInterfaces)) {
-    if (!interfaceAddresses) continue;
-
-    for (const address of interfaceAddresses) {
-      if (address.internal) continue;
-      if (address.family !== "IPv4") continue;
-      if (!isUsableLanIpv4Address(address.address)) continue;
-      return address.address;
-    }
-  }
-
-  return null;
+  const lanAddresses = Object.entries(networkInterfaces).flatMap(([name, addresses]) =>
+    (addresses ?? [])
+      .filter(
+        (address) =>
+          !address.internal && address.family === "IPv4" && isUsableLanIpv4Address(address.address),
+      )
+      .map((address) => ({ name, address: address.address })),
+  );
+  const preferred =
+    lanAddresses.find(({ name }) => !HOST_ONLY_INTERFACE.test(name)) ?? lanAddresses[0];
+  return preferred?.address ?? null;
 };
 
 const resolveDesktopServerExposure = (input: {
@@ -201,9 +216,7 @@ const resolveDesktopCoreAdvertisedEndpoints = (
             : "User-configured endpoint for this desktop backend.",
         }),
       );
-    } catch {
-      // Ignore malformed user-configured endpoints without dropping valid endpoints.
-    }
+    } catch {}
   }
 
   return endpoints;
@@ -435,15 +448,29 @@ const nativeDeviceLabel = (platform: NodeJS.Platform): string => {
 
 const collectTailnetIpv4AddressesFromInterfaces = (
   networkInterfaces: DesktopNetworkInterfaces.NetworkInterfaces,
+  status: TailscaleStatus | null,
 ): readonly string[] => {
   const seen = new Set<string>();
   const addresses: string[] = [];
-  for (const interfaceAddresses of Object.values(networkInterfaces)) {
+  for (const [interfaceName, interfaceAddresses] of Object.entries(networkInterfaces)) {
     if (!interfaceAddresses) continue;
+    // CGNAT space is shared with other VPNs. Native adapter identity also
+    // works when the CLI is missing or its cached status predates a connection.
+    const isTailscaleInterface =
+      /^tailscale(?:\d+|ipv[46])?$/iu.test(interfaceName) ||
+      interfaceAddresses.some(
+        (address) =>
+          !address.internal &&
+          address.family === "IPv6" &&
+          /^fd7a:115c:a1e0:/iu.test(address.address),
+      );
     for (const address of interfaceAddresses) {
       if (address.internal) continue;
       if (address.family !== "IPv4") continue;
       if (!isTailscaleIpv4Address(address.address)) continue;
+      if (!isTailscaleInterface && !status?.tailnetIpv4Addresses.includes(address.address)) {
+        continue;
+      }
       if (seen.has(address.address)) continue;
       seen.add(address.address);
       addresses.push(address.address);
@@ -707,7 +734,10 @@ export const make = Effect.gen(function* () {
             onSome: (status) => status.tailnetIpv4Addresses,
           })
         : []
-      : collectTailnetIpv4AddressesFromInterfaces(currentNetworkInterfaces);
+      : collectTailnetIpv4AddressesFromInterfaces(
+          currentNetworkInterfaces,
+          Option.getOrNull(yield* tailscaleServe.readStatus("native")),
+        );
 
     const magicDnsEntries = state.tailscaleServeEnabled
       ? yield* resolveEnabledMagicDnsEntries({ tailscaleServe, platform })

@@ -1,6 +1,6 @@
 import type { EnvironmentId } from "@t3tools/contracts";
 import { ChevronRightIcon } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { cn } from "../../lib/utils";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
@@ -49,25 +49,25 @@ export function groupWorkbenchItems<T>(
  */
 export function useWorkbenchGroupOpenState(tabKey: string, environmentId: EnvironmentId | null) {
   const preferenceKey = environmentId === null ? null : groupOpenStateKey(tabKey, environmentId);
-  const [openState, setOpenState] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    if (preferenceKey === null) return;
-    try {
-      const saved: unknown = JSON.parse(window.localStorage.getItem(preferenceKey) ?? "{}");
-      setOpenState(
-        saved !== null && typeof saved === "object" && !Array.isArray(saved)
-          ? (saved as Record<string, boolean>)
-          : {},
-      );
-    } catch {
-      setOpenState({});
+  const readPreferences = () => {
+    let openState: Record<string, boolean> = {};
+    if (preferenceKey !== null) {
+      try {
+        const saved: unknown = JSON.parse(window.localStorage.getItem(preferenceKey) ?? "{}");
+        if (saved !== null && typeof saved === "object" && !Array.isArray(saved)) {
+          openState = saved as Record<string, boolean>;
+        }
+      } catch {}
     }
-  }, [preferenceKey]);
+    return { preferenceKey, openState };
+  };
+  const [preferences, setPreferences] = useState(readPreferences);
+  if (preferences.preferenceKey !== preferenceKey) setPreferences(readPreferences());
+  const { openState } = preferences;
 
   const setGroupOpen = (groupId: string, open: boolean) => {
     const next = { ...openState, [groupId]: open };
-    setOpenState(next);
+    setPreferences({ preferenceKey, openState: next });
     if (preferenceKey === null) return;
     try {
       window.localStorage.setItem(preferenceKey, JSON.stringify(next));
@@ -95,7 +95,7 @@ export function WorkbenchGroupSection(props: {
 }) {
   return (
     <Collapsible open={props.open} onOpenChange={props.onOpenChange}>
-      <CollapsibleTrigger className="flex min-w-0 items-center gap-1.5 rounded-md px-3 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <CollapsibleTrigger className="flex min-w-0 items-center gap-1.5 rounded-md px-3 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
         <ChevronRightIcon
           aria-hidden
           className={cn(

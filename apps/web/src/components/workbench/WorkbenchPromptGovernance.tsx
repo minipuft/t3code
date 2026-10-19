@@ -6,7 +6,7 @@ import {
   type WorkflowCatalogItemId,
 } from "@t3tools/contracts";
 import { CheckIcon, CopyIcon, HistoryIcon, PencilIcon, RotateCcwIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import {
   useWorkflowPromptActions,
@@ -39,10 +39,8 @@ export function WorkbenchPromptGovernance(props: WorkbenchPromptGovernanceProps)
   const [busy, setBusy] = useState(false);
   const canWrite = session.data?.scopes?.includes(AuthAccessWriteScope) === true;
   const versions = history.data?.versions ?? [];
-  const priorVersion = useMemo(
-    () => versions.find((version) => version.version !== props.currentVersion)?.version ?? null,
-    [props.currentVersion, versions],
-  );
+  const priorVersion =
+    versions.find((version) => version.version !== props.currentVersion)?.version ?? null;
 
   const reviewInput = {
     expected_version: props.currentVersion,

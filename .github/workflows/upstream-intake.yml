@@ -204,7 +204,8 @@ jobs:
             apps/server/src/workflowCatalog/WorkflowCatalog.test.ts \
             apps/server/src/workflowCatalog/http.test.ts \
             apps/server/src/serverSettings.test.ts \
-            apps/server/src/server.test.ts \
+            apps/server/src/orchestration-v2/runtimeLayer.test.ts \
+            apps/server/src/ws.test.ts \
             apps/web/src/components/chat/ComposerWorkflowActionsControl.test.tsx \
             apps/web/src/components/chat/ComposerWorkflowPicker.test.tsx \
             apps/web/src/workflowInvocation.test.ts \

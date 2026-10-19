@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import type { DesktopTailscaleServeDevice } from "@t3tools/contracts";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import {
   ensureTailscaleServe,
   TailscaleCommandExitError,
@@ -14,8 +14,8 @@ import * as Option from "effect/Option";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopTailscaleServe from "./DesktopTailscaleServe.ts";
@@ -98,7 +98,7 @@ const makeServeLayer = (
     Layer.provideMerge(Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner)),
     // The native executable name follows the host (`tailscale.exe` on
     // Windows); pin the posix spelling these assertions use.
-    Layer.provideMerge(Layer.succeed(HostProcessPlatform, "linux")),
+    Layer.provideMerge(Layer.succeed(HostProcess.Platform, "linux")),
   );
 
 // Background applies run on a forked fiber with no receipt of their own, so
@@ -129,7 +129,7 @@ describe("makeWslTailscaleSpawner", () => {
         localHost: "127.0.0.1",
       }).pipe(
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, wrapped),
-        Effect.provideService(HostProcessPlatform, "linux"),
+        Effect.provideService(HostProcess.Platform, "linux"),
       );
       yield* Effect.scoped(wrapped.spawn(ChildProcess.make("git", ["status"])));
 

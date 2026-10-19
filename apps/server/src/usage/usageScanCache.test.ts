@@ -9,12 +9,16 @@ import {
   decodeScanCache,
   dedupeWithinFile,
   encodeScanCache,
+  makeScanCacheWriter,
   pruneScanCache,
   type CachedFile,
   type ScanCache,
 } from "./usageScanCache.ts";
+import type { UsageRecord } from "@t3tools/provider-core/server/usage";
+
 import { readTranscriptRecords } from "./usageTranscriptReader.ts";
-import type { UsageRecord } from "./usageTranscripts.ts";
+import { codexUsageFormat } from "../provider/Drivers/codexUsage.ts";
+import { TEST_FORMAT_MAP } from "./usageTestFormats.ts";
 
 function record(overrides: Partial<UsageRecord> = {}): UsageRecord {
   return {
@@ -32,6 +36,7 @@ function record(overrides: Partial<UsageRecord> = {}): UsageRecord {
       reasoningTokens: 0,
     },
     reportedCostUsd: null,
+    speed: "standard",
     dedupeKey: "msg_1:",
     ...overrides,
   };
@@ -42,7 +47,7 @@ function position(overrides: Partial<CachedFile["position"]> = {}): CachedFile["
     resumeOffset: 120,
     guardLength: 64,
     guardHash: 0xdeadbeef,
-    codexState: null,
+    state: null,
     ...overrides,
   };
 }
@@ -65,7 +70,11 @@ function cacheWith(entries: readonly [string, number, readonly UsageRecord[]][])
 describe("scan cache round trip", () => {
   it("restores records unchanged", () => {
     const original = cacheWith([
-      ["/a.jsonl", 100, [record(), record({ dedupeKey: "msg_2:", model: "claude-opus-5" })]],
+      [
+        "/a.jsonl",
+        100,
+        [record(), record({ dedupeKey: "msg_2:", model: "claude-opus-5-5", speed: "fast" })],
+      ],
       ["/b.jsonl", 200, [record({ sessionId: "session-b", reportedCostUsd: 1.5 })]],
     ]);
     original.set("/grok.jsonl", {
@@ -82,11 +91,14 @@ describe("scan cache round trip", () => {
       size: 80,
       mtimeMs: 400,
       provider: "codex",
-      records: [record({ provider: "codex", model: "gpt-5.2-codex", dedupeKey: null })],
+      records: [
+        record({ provider: "codex", model: "gpt-6-astra", dedupeKey: null, speed: "ultrafast" }),
+      ],
       tailRecords: [],
       position: position({
-        codexState: {
-          model: "gpt-5.2-codex",
+        state: {
+          model: "gpt-6-astra",
+          speed: "ultrafast",
           sessionId: "session-c",
           workspacePath: "/workspace/c",
           lastUsageSignature: '{"input_tokens":1}',
@@ -97,7 +109,10 @@ describe("scan cache round trip", () => {
       }),
     });
 
-    const restored = decodeScanCache(JSON.parse(JSON.stringify(encodeScanCache(original))));
+    const restored = decodeScanCache(
+      JSON.parse(JSON.stringify(encodeScanCache(original))),
+      TEST_FORMAT_MAP,
+    );
 
     expect(restored.size).toBe(4);
     expect(restored.get("/a.jsonl")).toEqual(original.get("/a.jsonl"));
@@ -107,8 +122,6 @@ describe("scan cache round trip", () => {
   });
 
   it("drops an entry whose persisted parse state is corrupt", () => {
-    // Resuming with a bad reducer state would attach appended usage to the
-    // wrong model or replay fork-copied history; that entry must cold parse.
     const encoded = encodeScanCache(cacheWith([["/a.jsonl", 100, [record()]]]));
     const poisoned = {
       ...encoded,
@@ -117,26 +130,65 @@ describe("scan cache round trip", () => {
       },
     };
 
-    expect(decodeScanCache(JSON.parse(JSON.stringify(poisoned))).has("/a.jsonl")).toBe(false);
+    expect(
+      decodeScanCache(JSON.parse(JSON.stringify(poisoned)), TEST_FORMAT_MAP).has("/a.jsonl"),
+    ).toBe(false);
   });
 
   it("drops an entry whose guard length is outside the supported range", () => {
-    // The guard length sizes a Buffer in the reader; a bogus value would make
-    // every parse of that file fail and silently drop its usage.
     const encoded = encodeScanCache(cacheWith([["/a.jsonl", 100, [record()]]]));
     const poisoned = {
       ...encoded,
       files: { "/a.jsonl": { ...encoded.files["/a.jsonl"]!, gl: 1e20 } },
     };
 
-    expect(decodeScanCache(JSON.parse(JSON.stringify(poisoned))).has("/a.jsonl")).toBe(false);
+    expect(
+      decodeScanCache(JSON.parse(JSON.stringify(poisoned)), TEST_FORMAT_MAP).has("/a.jsonl"),
+    ).toBe(false);
   });
 
-  it("rejects a document from the previous cache version", () => {
-    const encoded = encodeScanCache(cacheWith([["/a.jsonl", 100, [record()]]]));
-    const previous = { ...encoded, version: 2 };
+  it("drops an entry whose speed is not a known index", () => {
+    const encoded = encodeScanCache(cacheWith([["/a.jsonl", 100, [record({ speed: "fast" })]]]));
+    const row = encoded.files["/a.jsonl"]!.r[0]!;
+    const poisoned = {
+      ...encoded,
+      files: {
+        "/a.jsonl": {
+          ...encoded.files["/a.jsonl"]!,
+          r: [[...row.slice(0, 10), 999, ...row.slice(11)]],
+        },
+      },
+    };
 
-    expect(decodeScanCache(JSON.parse(JSON.stringify(previous))).size).toBe(0);
+    expect(
+      decodeScanCache(JSON.parse(JSON.stringify(poisoned)), TEST_FORMAT_MAP).has("/a.jsonl"),
+    ).toBe(false);
+  });
+
+  it("rejects a document from before records carried a speed", () => {
+    const encoded = encodeScanCache(cacheWith([["/a.jsonl", 100, [record()]]]));
+    const previous = { ...encoded, version: 4 };
+
+    expect(decodeScanCache(JSON.parse(JSON.stringify(previous)), TEST_FORMAT_MAP).size).toBe(0);
+  });
+
+  it("rewrites only changed entries and still restores the whole cache", () => {
+    const write = makeScanCacheWriter();
+    const cache = cacheWith([
+      ["/a.jsonl", 100, [record()]],
+      ["/b.jsonl", 200, [record({ sessionId: "session-b" })]],
+    ]);
+    const sources = { "claude\u0000/projects": { dir: "/projects", volumeId: "1:2" } };
+    expect(decodeScanCache(JSON.parse(write(cache, { sources })), TEST_FORMAT_MAP)).toEqual(cache);
+
+    cache.set("/b.jsonl", {
+      ...cache.get("/b.jsonl")!,
+      size: 30,
+      records: [record({ sessionId: "session-c", model: "claude-opus-5-5", dedupeKey: "msg_3:" })],
+    });
+    const document = JSON.parse(write(cache, { sources }));
+    expect(decodeScanCache(document, TEST_FORMAT_MAP)).toEqual(cache);
+    expect(document.sources).toEqual(sources);
   });
 
   it("interns repeated model and session strings", () => {
@@ -149,11 +201,11 @@ describe("scan cache round trip", () => {
   });
 
   it("treats a corrupt or foreign document as an empty cache", () => {
-    // A bad cache should cost one cold scan, never a broken page.
-    expect(decodeScanCache(null).size).toBe(0);
-    expect(decodeScanCache("nonsense").size).toBe(0);
-    expect(decodeScanCache({ version: 999, models: [], sessions: [], files: {} }).size).toBe(0);
-    expect(decodeScanCache({ version: 2, models: [], sessions: [], files: {} }).size).toBe(0);
+    expect(decodeScanCache(null, TEST_FORMAT_MAP).size).toBe(0);
+    expect(decodeScanCache("nonsense", TEST_FORMAT_MAP).size).toBe(0);
+    expect(
+      decodeScanCache({ version: 999, models: [], sessions: [], files: {} }, TEST_FORMAT_MAP).size,
+    ).toBe(0);
   });
 
   it("skips malformed file entries but keeps good ones", () => {
@@ -163,22 +215,18 @@ describe("scan cache round trip", () => {
       files: { ...encoded.files, "/bad.jsonl": { s: "nope", m: 1, p: "claude", r: [] } },
     };
 
-    const restored = decodeScanCache(JSON.parse(JSON.stringify(withJunk)));
+    const restored = decodeScanCache(JSON.parse(JSON.stringify(withJunk)), TEST_FORMAT_MAP);
     expect([...restored.keys()]).toEqual(["/good.jsonl"]);
   });
 
   it("rejects the whole cache when an intern table holds a non-string", () => {
-    // models: [1] would pass the undefined guard, put a number in a record's
-    // model, and crash lookupRate at aggregate time.
     const encoded = encodeScanCache(cacheWith([["/a.jsonl", 100, [record()]]]));
     const poisoned = { ...encoded, models: [1] };
 
-    expect(decodeScanCache(JSON.parse(JSON.stringify(poisoned))).size).toBe(0);
+    expect(decodeScanCache(JSON.parse(JSON.stringify(poisoned)), TEST_FORMAT_MAP).size).toBe(0);
   });
 
   it("drops the whole entry when any row is corrupt, forcing a cold re-parse", () => {
-    // Keeping the surviving rows under the original (size, mtime) would read
-    // as a valid warm hit and the file would never be re-parsed.
     const encoded = encodeScanCache(
       cacheWith([["/a.jsonl", 100, [record(), record({ dedupeKey: "msg_2:" })]]]),
     );
@@ -193,7 +241,7 @@ describe("scan cache round trip", () => {
       },
     };
 
-    const restored = decodeScanCache(JSON.parse(JSON.stringify(poisoned)));
+    const restored = decodeScanCache(JSON.parse(JSON.stringify(poisoned)), TEST_FORMAT_MAP);
     expect(restored.has("/a.jsonl")).toBe(false);
   });
 });
@@ -238,7 +286,7 @@ describe("dedupeWithinFile", () => {
   });
 });
 
-describe("combined cache v4", () => {
+describe("combined cache v6", () => {
   it.each(["workspace", "incremental"])("rejects the incompatible %s v3 dialect", (dialect) => {
     const encoded = encodeScanCache(cacheWith([["/a.jsonl", 100, [record()]]]));
     const file = encoded.files["/a.jsonl"]!;
@@ -246,10 +294,32 @@ describe("combined cache v4", () => {
       dialect === "workspace"
         ? { s: file.s, m: file.m, p: file.p, r: file.r }
         : { ...file, r: file.r.map((row) => row.slice(0, 10)) };
-    expect(encoded.version).toBe(4);
+    expect(encoded.version).toBe(6);
     expect(
-      decodeScanCache({ ...encoded, version: 3, files: { "/a.jsonl": legacyFile } }).size,
+      decodeScanCache(
+        { ...encoded, version: 3, files: { "/a.jsonl": legacyFile } },
+        TEST_FORMAT_MAP,
+      ).size,
     ).toBe(0);
+  });
+
+  it.each(["fork", "upstream"])("retains %s v5 history and forces a full reparse", (dialect) => {
+    const encoded = encodeScanCache(cacheWith([["/a.jsonl", 100, [record({ speed: "fast" })]]]));
+    const file = encoded.files["/a.jsonl"]!;
+    const rows = file.r.map((row) =>
+      dialect === "fork" ? [...row.slice(0, 10), "/workspace/a", "claudeCwd", 1] : row.slice(0, 12),
+    );
+    const restored = decodeScanCache(
+      { ...encoded, version: 5, files: { "/a.jsonl": { ...file, r: rows } } },
+      TEST_FORMAT_MAP,
+    );
+    expect(restored.get("/a.jsonl")?.size).toBe(-1);
+    expect(restored.get("/a.jsonl")?.position.resumeOffset).toBe(0);
+    expect(restored.get("/a.jsonl")?.records[0]).toMatchObject({
+      speed: "fast",
+      workspacePath: dialect === "fork" ? "/workspace/a" : null,
+      workspaceSource: dialect === "fork" ? "claudeCwd" : "none",
+    });
   });
 
   it("keeps workspace evidence when resuming a Codex transcript through a persisted cache", async () => {
@@ -267,7 +337,7 @@ describe("combined cache v4", () => {
         payload: { type: "turn_context", model: "test-model" },
       });
       await NodeFSP.writeFile(path, `${meta}\n${model}\n`);
-      const first = await readTranscriptRecords(path, "codex");
+      const first = await readTranscriptRecords(path, codexUsageFormat);
       expect(first).not.toBeNull();
       if (first === null) throw new Error("Initial transcript read failed");
       const stat = await NodeFSP.stat(path);
@@ -284,8 +354,11 @@ describe("combined cache v4", () => {
           },
         ],
       ]);
-      const restored = decodeScanCache(JSON.parse(JSON.stringify(encodeScanCache(original))));
-      expect(restored.get(path)?.position.codexState?.workspacePath).toBe("/workspace/c");
+      const restored = decodeScanCache(
+        JSON.parse(JSON.stringify(encodeScanCache(original))),
+        TEST_FORMAT_MAP,
+      );
+      expect(restored.get(path)?.position.state).toMatchObject({ workspacePath: "/workspace/c" });
       const usage = JSON.stringify({
         type: "event_msg",
         timestamp: "2026-08-01T10:00:05Z",
@@ -295,7 +368,11 @@ describe("combined cache v4", () => {
         },
       });
       await NodeFSP.appendFile(path, `${usage}\n`);
-      const second = await readTranscriptRecords(path, "codex", restored.get(path)?.position);
+      const second = await readTranscriptRecords(
+        path,
+        codexUsageFormat,
+        restored.get(path)?.position,
+      );
       expect(second?.resumed).toBe(true);
       expect(second?.records).toHaveLength(1);
       expect(second?.records[0]).toMatchObject({
@@ -304,7 +381,7 @@ describe("combined cache v4", () => {
         workspacePath: "/workspace/c",
         workspaceSource: "codexSessionMeta",
       });
-      const full = await readTranscriptRecords(path, "codex");
+      const full = await readTranscriptRecords(path, codexUsageFormat);
       expect(second?.records).toEqual(full?.records);
     } finally {
       await NodeFSP.rm(directory, { recursive: true, force: true });

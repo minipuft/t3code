@@ -21,17 +21,17 @@ describe("Agent Workbench adapter", () => {
   it("extracts Codex and Claude resume aliases without treating runtime payload as identity", () => {
     expect(
       Option.getOrNull(
-        projectHarnessAlias({ provider: "codex", resumeCursor: { threadId: "codex-1" } }),
+        projectHarnessAlias({ driver: "codex", nativeThreadRef: { nativeId: "codex-1" } }),
       ),
     ).toEqual({ provider: "codex", sessionId: "codex-1" });
     expect(
       Option.getOrNull(
-        projectHarnessAlias({ provider: "claudeAgent", resumeCursor: { resume: "claude-1" } }),
+        projectHarnessAlias({ driver: "claudeAgent", nativeThreadRef: { nativeId: "claude-1" } }),
       ),
     ).toEqual({ provider: "claude", sessionId: "claude-1" });
-    expect(
-      Option.isNone(projectHarnessAlias({ provider: "codex", resumeCursor: { cwd: "/tmp" } })),
-    ).toBe(true);
+    expect(Option.isNone(projectHarnessAlias({ driver: "codex", nativeThreadRef: null }))).toBe(
+      true,
+    );
   });
 
   it.effect(

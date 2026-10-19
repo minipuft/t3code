@@ -7,7 +7,7 @@ import {
   type WorkflowPresetId as WorkflowPresetIdType,
   type WorkflowPromptSummary,
 } from "@t3tools/contracts";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import { type ComposerTrigger, filterDismissedWorkflowTrigger } from "../../composer-logic";
 import { useWorkflowCatalog, useWorkflowLibraryPreferences } from "../../state/workflowCatalog";
@@ -37,105 +37,86 @@ export function useComposerWorkflowPicker(input: {
   const [openedFromAction, setOpenedFromAction] = useState(false);
   const dismissedTriggerStartRef = useRef<number | null>(null);
   const triggerIsOpen = input.trigger?.kind === "workflow";
-  const library = useMemo(
-    () =>
-      projectWorkflowLibrary({
-        items: catalog.data?.items ?? [],
-        preferences,
-        recentItemIds: recents.map((entry) => entry.itemId),
-      }),
-    [catalog.data?.items, preferences, recents],
-  );
+  const library = projectWorkflowLibrary({
+    items: catalog.data?.items ?? [],
+    preferences,
+    recentItemIds: recents.map((entry) => entry.itemId),
+  });
 
-  const togglePin = useCallback(
-    (itemId: WorkflowCatalogItemId) => {
-      if (!canMutatePreferences) return;
-      const pinned = preferences.pinnedItemIds.includes(itemId);
-      void mutatePreferences({
-        type: pinned ? "workflow.unpin" : "workflow.pin",
-        itemId,
-      });
-    },
-    [canMutatePreferences, mutatePreferences, preferences.pinnedItemIds],
-  );
+  const togglePin = (itemId: WorkflowCatalogItemId) => {
+    if (!canMutatePreferences) return;
+    const pinned = preferences.pinnedItemIds.includes(itemId);
+    void mutatePreferences({
+      type: pinned ? "workflow.unpin" : "workflow.pin",
+      itemId,
+    });
+  };
 
-  const savePreset = useCallback(
-    (preset: {
-      readonly id?: WorkflowPresetIdType;
-      readonly item: WorkflowPromptSummary;
-      readonly label: string;
-      readonly values: Readonly<Record<string, string>>;
-    }) => {
-      if (!canMutatePreferences) return null;
-      const values = Object.fromEntries(
-        Object.entries(preset.values).filter(([, value]) => value.trim().length > 0),
-      );
-      const presetId = preset.id ?? WorkflowPresetId.make(randomUUID());
-      void mutatePreferences({
-        type: "workflow.preset.upsert",
-        preset: {
-          id: presetId,
-          label: preset.label.trim(),
-          itemId: preset.item.id,
-          itemRevision: preset.item.revision,
-          values,
-        },
-      });
-      return presetId;
-    },
-    [canMutatePreferences, mutatePreferences],
-  );
+  const savePreset = (preset: {
+    readonly id?: WorkflowPresetIdType;
+    readonly item: WorkflowPromptSummary;
+    readonly label: string;
+    readonly values: Readonly<Record<string, string>>;
+  }) => {
+    if (!canMutatePreferences) return null;
+    const values = Object.fromEntries(
+      Object.entries(preset.values).filter(([, value]) => value.trim().length > 0),
+    );
+    const presetId = preset.id ?? WorkflowPresetId.make(randomUUID());
+    void mutatePreferences({
+      type: "workflow.preset.upsert",
+      preset: {
+        id: presetId,
+        label: preset.label.trim(),
+        itemId: preset.item.id,
+        itemRevision: preset.item.revision,
+        values,
+      },
+    });
+    return presetId;
+  };
 
-  const removePreset = useCallback(
-    (presetId: WorkflowPresetIdType) => {
-      if (!canMutatePreferences) return;
-      void mutatePreferences({ type: "workflow.preset.remove", presetId });
-    },
-    [canMutatePreferences, mutatePreferences],
-  );
+  const removePreset = (presetId: WorkflowPresetIdType) => {
+    if (!canMutatePreferences) return;
+    void mutatePreferences({ type: "workflow.preset.remove", presetId });
+  };
 
-  const recordRecent = useCallback(
-    (itemId: WorkflowCatalogItemId) => {
-      if (input.projectRef === null) return;
-      useWorkflowRecentsStore.getState().record({
-        projectRef: input.projectRef,
-        threadRef: input.threadRef,
-        itemId,
-      });
-    },
-    [input.projectRef, input.threadRef],
-  );
+  const recordRecent = (itemId: WorkflowCatalogItemId) => {
+    if (input.projectRef === null) return;
+    useWorkflowRecentsStore.getState().record({
+      projectRef: input.projectRef,
+      threadRef: input.threadRef,
+      itemId,
+    });
+  };
 
-  const filterTrigger = useCallback((trigger: ComposerTrigger | null) => {
+  const filterTrigger = (trigger: ComposerTrigger | null) => {
     const filtered = filterDismissedWorkflowTrigger(trigger, dismissedTriggerStartRef.current);
     dismissedTriggerStartRef.current = filtered.dismissedRangeStart;
     return filtered.trigger;
-  }, []);
+  };
 
-  const close = useCallback(() => {
+  const close = () => {
     setOpenedFromAction(false);
     if (input.trigger?.kind === "workflow") {
       dismissedTriggerStartRef.current = input.trigger.rangeStart;
       input.setTrigger(null);
     }
     input.scheduleComposerFocus();
-  }, [input.scheduleComposerFocus, input.setTrigger, input.trigger]);
+  };
 
-  const toggleFromAction = useCallback(() => {
+  const toggleFromAction = () => {
     dismissedTriggerStartRef.current = null;
     input.setTrigger(null);
     setOpenedFromAction((open) => !open);
     input.scheduleComposerFocus();
-  }, [input.scheduleComposerFocus, input.setTrigger]);
+  };
 
-  const closeAfterInsert = useCallback(
-    (focusComposer = true) => {
-      dismissedTriggerStartRef.current = null;
-      setOpenedFromAction(false);
-      if (focusComposer) input.scheduleComposerFocus();
-    },
-    [input.scheduleComposerFocus],
-  );
+  const closeAfterInsert = (focusComposer = true) => {
+    dismissedTriggerStartRef.current = null;
+    setOpenedFromAction(false);
+    if (focusComposer) input.scheduleComposerFocus();
+  };
 
   return {
     catalog,

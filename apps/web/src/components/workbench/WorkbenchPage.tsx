@@ -1,5 +1,5 @@
 import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 
 import { isElectron } from "../../env";
 import { useProjects } from "../../state/entities";
@@ -40,18 +40,15 @@ export function WorkbenchPage(props: {
     environments,
   });
 
-  useEffect(() => {
-    if (selectedEnvironmentId !== effectiveEnvironmentId) {
-      setSelectedEnvironmentId(effectiveEnvironmentId);
-    }
-  }, [effectiveEnvironmentId, selectedEnvironmentId]);
+  if (selectedEnvironmentId !== effectiveEnvironmentId) {
+    setSelectedEnvironmentId(effectiveEnvironmentId);
+  }
 
   const selectedEnvironment =
     environments.find((environment) => environment.environmentId === effectiveEnvironmentId) ??
     null;
-  const environmentProjects = useMemo(
-    () => projects.filter((project) => project.environmentId === effectiveEnvironmentId),
-    [effectiveEnvironmentId, projects],
+  const environmentProjects = projects.filter(
+    (project) => project.environmentId === effectiveEnvironmentId,
   );
   const { selectedProjectId, pinnedProjectIds, selectProject, togglePin } = useWorkbenchProjectLens(
     {
@@ -69,7 +66,7 @@ export function WorkbenchPage(props: {
   });
 
   return (
-    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground isolate">
+    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none isolate">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         <WorkspacePageHeader electron={isElectron}>
           <div className="flex w-full min-w-0 items-center gap-3">

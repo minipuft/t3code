@@ -7,6 +7,7 @@ import type {
 } from "@t3tools/contracts";
 import { RefreshCwIcon } from "lucide-react";
 import { useState } from "react";
+import { randomUUID } from "../../lib/utils";
 
 import { useWorkbenchAuditActions, useWorkbenchReviewInbox } from "../../state/workbenchResources";
 import { Badge } from "../ui/badge";
@@ -54,7 +55,7 @@ export function WorkbenchProjectionHealthPanel(props: {
       return;
     }
     const result = await actions.review({
-      requestId: `t3-audit-${identity}-${Date.now()}`,
+      requestId: `t3-audit-${identity}-${randomUUID()}`,
     });
     if (result._tag === "Failure") {
       setMessage(commandFailureMessage(result, "The audit operation failed."));
@@ -107,7 +108,7 @@ export function WorkbenchProjectionHealthPanel(props: {
             Per-environment source and target health. Repairs require review.
           </p>
           {!props.directLocal ? (
-            <p className="text-amber-600 text-sm">
+            <p className="text-warning text-sm">
               Remote read-only: mutations require a direct local administrative connection.
             </p>
           ) : null}

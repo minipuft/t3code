@@ -6,7 +6,7 @@ import {
   type WorkflowCatalogItemId,
 } from "@t3tools/contracts";
 import { CheckIcon, CopyIcon, HistoryIcon, PencilIcon, RotateCcwIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import {
   useWorkflowPromptActions,
@@ -39,10 +39,8 @@ export function WorkbenchPromptGovernance(props: WorkbenchPromptGovernanceProps)
   const [busy, setBusy] = useState(false);
   const canWrite = session.data?.scopes?.includes(AuthAccessWriteScope) === true;
   const versions = history.data?.versions ?? [];
-  const priorVersion = useMemo(
-    () => versions.find((version) => version.version !== props.currentVersion)?.version ?? null,
-    [props.currentVersion, versions],
-  );
+  const priorVersion =
+    versions.find((version) => version.version !== props.currentVersion)?.version ?? null;
 
   const reviewInput = {
     expected_version: props.currentVersion,
@@ -131,7 +129,7 @@ export function WorkbenchPromptGovernance(props: WorkbenchPromptGovernanceProps)
             </ModeButton>
           ) : null}
         </div>
-        <span className="font-mono text-[10px] text-muted-foreground">
+        <span className="font-mono text-3xs text-muted-foreground">
           version {props.currentVersion}
         </span>
       </div>
@@ -165,7 +163,7 @@ export function WorkbenchPromptGovernance(props: WorkbenchPromptGovernanceProps)
                 setUserMessageTemplate(event.currentTarget.value);
                 setReview(null);
               }}
-              className="font-mono"
+              variant="mono"
             />
           </label>
           <label className="grid gap-2 text-xs">
@@ -176,7 +174,7 @@ export function WorkbenchPromptGovernance(props: WorkbenchPromptGovernanceProps)
                 setSystemMessage(event.currentTarget.value);
                 setReview(null);
               }}
-              className="font-mono"
+              variant="mono"
             />
           </label>
           <div className="flex flex-wrap justify-end gap-2">
@@ -218,7 +216,7 @@ export function WorkbenchPromptGovernance(props: WorkbenchPromptGovernanceProps)
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-baseline gap-2">
                     <span className="font-medium text-xs">Version {version.version}</span>
-                    <span className="text-[10px] text-muted-foreground">{version.date}</span>
+                    <span className="text-3xs text-muted-foreground">{version.date}</span>
                   </div>
                   <p className="mt-1 text-muted-foreground text-xs">
                     {version.diff_summary || version.description}

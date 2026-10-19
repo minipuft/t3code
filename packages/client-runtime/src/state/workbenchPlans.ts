@@ -17,7 +17,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type { WorkbenchRelationshipReviewInput } from "@t3tools/contracts";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { Atom } from "effect/unstable/reactivity";
+import { Atom } from "effect/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import type { PreparedConnection } from "../connection/model.ts";
@@ -31,7 +31,7 @@ import { WorkbenchPlansLoader } from "./workbenchPlansHttp.ts";
 
 export { WorkbenchPlansLoader, workbenchPlansLoaderLayer } from "./workbenchPlansHttp.ts";
 
-class WorkbenchPlansConnectionNotReadyError extends Data.TaggedError(
+export class WorkbenchPlansConnectionNotReadyError extends Data.TaggedError(
   "WorkbenchPlansConnectionNotReadyError",
 )<{ readonly message: string }> {}
 

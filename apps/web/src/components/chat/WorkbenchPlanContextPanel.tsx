@@ -19,7 +19,7 @@ import {
   UnlinkIcon,
   WrenchIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 
 import { cn } from "../../lib/utils";
 import {
@@ -84,37 +84,29 @@ export function WorkbenchPlanContextPanel(props: {
   readonly cwd?: string;
   readonly firstUserMessage?: string;
 }) {
-  const conversation = useMemo(
-    () => ({
-      threadId: props.threadRef.threadId,
-      ...(props.project.trim() ? { project: props.project.trim() } : {}),
-    }),
-    [props.project, props.threadRef.threadId],
-  );
+  const conversation = {
+    threadId: props.threadRef.threadId,
+    ...(props.project.trim() ? { project: props.project.trim() } : {}),
+  };
   const plans = useWorkbenchPlans(props.environmentId);
   const associations = useWorkbenchPlanAssociations(props.environmentId, conversation);
   const actions = useWorkbenchPlanActions(props.environmentId);
   const [lens, setLens] = useState<PlanLens>("chat");
-  const visiblePlans = useMemo(
-    () =>
-      projectContextPlans({
-        items: plans.data?.items ?? [],
-        project: props.project,
-        lens,
-        associations: associations.data,
-      }),
-    [associations.data, lens, plans.data?.items, props.project],
-  );
+  const visiblePlans = projectContextPlans({
+    items: plans.data?.items ?? [],
+    project: props.project,
+    lens,
+    associations: associations.data,
+  });
   const [selectedPath, setSelectedPath] = useState<WorkbenchPlanPath | null>(null);
 
-  useEffect(() => {
-    if (selectedPath && visiblePlans.some((plan) => plan.path === selectedPath)) return;
-    const next =
-      (lens === "chat" ? associations.data?.primary?.planPath : null) ??
-      visiblePlans[0]?.path ??
-      null;
-    setSelectedPath(next);
-  }, [associations.data?.primary?.planPath, lens, selectedPath, visiblePlans]);
+  const nextSelectedPath =
+    selectedPath && visiblePlans.some((plan) => plan.path === selectedPath)
+      ? selectedPath
+      : ((lens === "chat" ? associations.data?.primary?.planPath : null) ??
+        visiblePlans[0]?.path ??
+        null);
+  if (nextSelectedPath !== selectedPath) setSelectedPath(nextSelectedPath);
 
   const mutate = async (
     input: Pick<WorkbenchPlanAssociationMutationInput, "op"> &
@@ -246,7 +238,7 @@ export function WorkbenchPlanContextPanel(props: {
                     type="button"
                     aria-pressed={selectedPath === plan.path}
                     className={cn(
-                      "grid gap-0.5 rounded-lg border px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      "grid gap-0.5 rounded-lg border px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                       selectedPath === plan.path
                         ? "border-primary/35 bg-primary/8"
                         : "border-transparent hover:border-border/60 hover:bg-muted/36",
@@ -359,16 +351,14 @@ function AssociationRow(props: {
       >
         <span className="flex items-center gap-2">
           <span className="truncate font-medium text-xs">{association.planPath}</span>
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+          <span className="rounded bg-muted px-1.5 py-0.5 text-3xs uppercase tracking-wide text-muted-foreground">
             {association.role}
           </span>
         </span>
         <span
           className={cn(
-            "mt-1 block text-[11px]",
-            association.state === "current"
-              ? "text-emerald-600 dark:text-emerald-400"
-              : "text-amber-600 dark:text-amber-400",
+            "mt-1 block text-2xs",
+            association.state === "current" ? "text-success" : "text-warning",
           )}
         >
           {association.state} · {association.source}
@@ -401,10 +391,7 @@ function PlanSuggestions(props: {
   readonly onSelect: (path: WorkbenchPlanPath) => void;
   readonly onUse: (path: WorkbenchPlanPath) => void;
 }) {
-  const input = useMemo(
-    () => ({ ...props.conversation, message: props.message }),
-    [props.conversation, props.message],
-  );
+  const input = { ...props.conversation, message: props.message };
   const suggestions = useWorkbenchPlanSuggestions(props.environmentId, input);
   if (suggestions.isPending && suggestions.data === null) {
     return <p className="text-muted-foreground text-xs">Looking for related plans…</p>;
@@ -426,7 +413,7 @@ function PlanSuggestions(props: {
             onClick={() => props.onSelect(item.path)}
           >
             <span className="block truncate font-medium text-xs">{item.title}</span>
-            <span className="mt-0.5 block truncate text-muted-foreground text-[11px]">
+            <span className="mt-0.5 block truncate text-muted-foreground text-2xs">
               {item.project}
             </span>
           </button>

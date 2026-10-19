@@ -12,7 +12,7 @@ import {
   RotateCcwIcon,
   UnlockIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { randomUUID } from "../../lib/utils";
 
 import {
@@ -89,15 +89,13 @@ export function WorkbenchSystemPanel(props: {
   const editable = selected?.kind === "rule" || selected?.kind === "hook";
   const target = editable && selected.relativePath ? resourceTarget(selected) : null;
 
-  useEffect(() => {
-    const firstProject = library.data?.projects[0];
-    if (project === undefined && firstProject !== undefined) setProject(firstProject);
-  }, [library.data?.projects, project]);
+  const firstProject = library.data?.projects[0];
+  if (project === undefined && firstProject !== undefined) setProject(firstProject);
 
-  const groups = useMemo(
-    () =>
-      groupWorkbenchItems(library.data?.entries ?? [], (entry) => entry.kind, RESOURCE_KIND_ORDER),
-    [library.data?.entries],
+  const groups = groupWorkbenchItems(
+    library.data?.entries ?? [],
+    (entry) => entry.kind,
+    RESOURCE_KIND_ORDER,
   );
   const refreshAll = () => {
     library.refresh();
@@ -257,7 +255,7 @@ export function WorkbenchSystemPanel(props: {
                     <button
                       key={entry.id}
                       type="button"
-                      className={`grid gap-1 rounded-lg border px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected?.id === entry.id ? "border-primary/35 bg-primary/8" : "border-transparent hover:border-border/60 hover:bg-muted/32"}`}
+                      className={`grid gap-1 rounded-lg border px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${selected?.id === entry.id ? "border-primary/35 bg-primary/8" : "border-transparent hover:border-border/60 hover:bg-muted/32"}`}
                       onClick={() => setSelected(entry)}
                     >
                       <span className="flex items-center gap-2">
@@ -270,7 +268,7 @@ export function WorkbenchSystemPanel(props: {
                       <span className="line-clamp-2 text-muted-foreground text-xs">
                         {entry.description || entry.relativePath || "No description"}
                       </span>
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-3xs text-muted-foreground">
                         {entry.scope} · {entry.effective} · {entry.provenance.sourceType}
                       </span>
                     </button>
@@ -403,7 +401,7 @@ export function WorkbenchSystemPanel(props: {
                 key={receipt.id}
                 className="flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-card p-4"
               >
-                <CheckCircle2Icon className="size-4 text-emerald-500" />
+                <CheckCircle2Icon className="size-4 text-success" />
                 <div className="min-w-0 flex-1">
                   <strong className="text-sm">{receipt.target.relativePath}</strong>
                   <p className="text-muted-foreground text-xs">
@@ -465,9 +463,11 @@ function ResourceEditor(props: {
   const [checkpoint, setCheckpoint] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  useEffect(() => {
+  const [previousSource, setPreviousSource] = useState<typeof source.data>(null);
+  if (source.data !== previousSource) {
+    setPreviousSource(source.data);
     if (source.data) setDraft(source.data.content);
-  }, [source.data]);
+  }
   if (source.error)
     return <WorkbenchEmptyState title="Source unavailable" description={source.error} />;
   if (!source.data)
@@ -511,7 +511,7 @@ function ResourceEditor(props: {
       </div>
       <Textarea
         aria-label={`Edit ${props.entry.name}`}
-        className="font-mono"
+        variant="mono"
         rows={18}
         value={draft}
         disabled={props.authorityState !== "unlocked" || busy}

@@ -1,3 +1,4 @@
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- synchronous catalog identity mapping must retain SHA-256 without adding an Effect context.
 import * as NodeCrypto from "node:crypto";
 
 import {

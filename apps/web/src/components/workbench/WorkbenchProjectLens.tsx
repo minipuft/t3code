@@ -1,5 +1,5 @@
 import { ProjectId, type EnvironmentId } from "@t3tools/contracts";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useProjects } from "../../state/entities";
 import {
@@ -30,41 +30,48 @@ export function useWorkbenchProjectLens(input: {
   readonly highlightedProjectId: ProjectId | undefined;
 }) {
   const preferenceKey = input.environmentId === null ? null : projectLensKey(input.environmentId);
-  const [selectedProjectId, setSelectedProjectId] = useState<ProjectId | null | undefined>(
-    input.highlightedProjectId,
-  );
-  const [pinnedProjectIds, setPinnedProjectIds] = useState<readonly ProjectId[]>([]);
-  const highlightedProjectId = input.highlightedProjectId;
-
-  useEffect(() => {
-    if (preferenceKey === null || highlightedProjectId !== undefined) return;
-    try {
-      const saved = window.localStorage.getItem(preferenceKey);
-      setSelectedProjectId(
-        saved === null || saved === "all"
-          ? undefined
-          : saved === "unattributed"
-            ? null
-            : ProjectId.make(saved),
-      );
-      const pins = JSON.parse(
-        window.localStorage.getItem(projectLensPinsKey(preferenceKey)) ?? "[]",
-      );
-      setPinnedProjectIds(
-        Array.isArray(pins)
+  const readPreferences = () => {
+    let selectedProjectId: ProjectId | null | undefined = input.highlightedProjectId;
+    let pinnedProjectIds: readonly ProjectId[] = [];
+    if (preferenceKey !== null && input.highlightedProjectId === undefined) {
+      try {
+        const saved = window.localStorage.getItem(preferenceKey);
+        selectedProjectId =
+          saved === null || saved === "all"
+            ? undefined
+            : saved === "unattributed"
+              ? null
+              : ProjectId.make(saved);
+        const pins: unknown = JSON.parse(
+          window.localStorage.getItem(projectLensPinsKey(preferenceKey)) ?? "[]",
+        );
+        pinnedProjectIds = Array.isArray(pins)
           ? pins
-              .filter((value): value is ProjectId => typeof value === "string")
+              .filter((value): value is string => typeof value === "string")
               .map((value) => ProjectId.make(value))
-          : [],
-      );
-    } catch {
-      setSelectedProjectId(undefined);
-      setPinnedProjectIds([]);
+          : [];
+      } catch {
+        selectedProjectId = undefined;
+      }
     }
-  }, [preferenceKey, highlightedProjectId]);
+    return {
+      preferenceKey,
+      highlightedProjectId: input.highlightedProjectId,
+      selectedProjectId,
+      pinnedProjectIds,
+    };
+  };
+  const [preferences, setPreferences] = useState(readPreferences);
+  if (
+    preferences.preferenceKey !== preferenceKey ||
+    preferences.highlightedProjectId !== input.highlightedProjectId
+  ) {
+    setPreferences(readPreferences());
+  }
+  const { selectedProjectId, pinnedProjectIds } = preferences;
 
   const selectProject = (projectId: ProjectId | null | undefined) => {
-    setSelectedProjectId(projectId);
+    setPreferences((current) => ({ ...current, selectedProjectId: projectId }));
     if (preferenceKey === null) return;
     try {
       window.localStorage.setItem(
@@ -80,7 +87,7 @@ export function useWorkbenchProjectLens(input: {
     const next = pinnedProjectIds.includes(projectId)
       ? pinnedProjectIds.filter((id) => id !== projectId)
       : [...pinnedProjectIds, projectId];
-    setPinnedProjectIds(next);
+    setPreferences((current) => ({ ...current, pinnedProjectIds: next }));
     if (preferenceKey !== null) {
       try {
         window.localStorage.setItem(projectLensPinsKey(preferenceKey), JSON.stringify(next));

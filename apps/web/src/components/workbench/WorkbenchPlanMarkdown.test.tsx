@@ -28,7 +28,7 @@ describe("WorkbenchPlanMarkdown", () => {
       />,
     );
 
-    expect(html).toContain("<h1>Plan</h1>");
+    expect(html).toMatch(/<h1(?:\s[^>]*)?>Plan<\/h1>/);
     expect(html).toContain("Mermaid diagram");
     expect(html).toContain("Show source");
     expect(html).toContain("Rendering diagram");

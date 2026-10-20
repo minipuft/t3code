@@ -21,6 +21,12 @@ Contract-managed files:
 - `.vite-hooks/commit-msg` (fork-owned; installer wrote `.husky/commit-msg`, deleted here)
 - `.github/workflows/pr-conventions.yml`
 - `scripts/pr-check.mjs`, `scripts/pr-body.mjs`, `scripts/validate-pr-body.mjs`, `scripts/adr.mjs`
+- `scripts/validate-squash-message.mjs` and its vendored parser
+  `scripts/vendor/conventional-commits-parser.cjs`: the squash commit GitHub writes from the PR
+  title and body must parse as a conventional commit. This fork runs no release-please, so the
+  check guards commit-log readers rather than a changelog here; it is a gating PR Conventions step
+- `scripts/warn-contract-lag.mjs`: an advisory PR Conventions step that warns, never fails, when
+  `.delivery-contract.json` is behind the latest `repository-standards` release
 - `.delivery-contract.json`
 
 `.github/pull_request_template.md` and `CONTRIBUTING.md` are upstream-owned and untouched.
@@ -37,4 +43,4 @@ deleted.
 
 ADRs live in `docs/adr`; manage them with `node scripts/adr.mjs`.
 
-`knip.jsonc`'s `scripts` workspace `entry` list is the fork's second upstream-owned config edit — additive, covering the four managed scripts knip cannot otherwise see as entry points.
+`knip.jsonc`'s `scripts` workspace `entry` list is the fork's second upstream-owned config edit — additive, covering the four managed scripts knip cannot otherwise see as entry points. The three files added at template 1.11.0 need no entry: knip reaches them through `pr-conventions.yml` and their imports.

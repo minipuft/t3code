@@ -58,23 +58,25 @@ function makeWorkflowCatalog(workbench: AgentWorkbenchShape): WorkflowCatalogSha
 
   return WorkflowCatalog.of({
     list,
-    findDetail: (itemId) =>
-      Effect.gen(function* () {
-        const catalog = yield* list;
-        const item = catalog.items.find((candidate) => candidate.id === itemId);
-        if (item === undefined) return Option.none();
-        if (item.kind === "skill") return Option.some(item);
-        const detail = yield* workbench.promptDetail(itemId).pipe(Effect.mapError(mapAdapterError));
-        if (detail.state !== "available" || detail.id !== itemId) return Option.none();
-        return Option.some({
-          summary: item,
-          currentVersion: detail.currentVersion ?? 0,
-          userMessageTemplate: detail.userMessageTemplate ?? "",
-          systemMessage: detail.systemMessage ?? null,
-        } satisfies WorkflowPromptDetail);
-      }),
+    findDetail: Effect.fn("WorkflowCatalog.findDetail")(function* (itemId) {
+      const catalog = yield* list;
+      const item = catalog.items.find((candidate) => candidate.id === itemId);
+      if (item === undefined) return Option.none();
+      if (item.kind === "skill") return Option.some(item);
+      const detail = yield* workbench.promptDetail(itemId).pipe(Effect.mapError(mapAdapterError));
+      if (detail.state !== "available" || detail.id !== itemId) return Option.none();
+      return Option.some({
+        summary: item,
+        currentVersion: detail.currentVersion ?? 0,
+        userMessageTemplate: detail.userMessageTemplate ?? "",
+        systemMessage: detail.systemMessage ?? null,
+      } satisfies WorkflowPromptDetail);
+    }),
   });
 }
+
+const decodeProviderDriverKind = Schema.decodeOption(ProviderDriverKind);
+const decodeWorkflowArgument = Schema.decodeUnknownOption(WorkflowArgument);
 
 export function projectCatalog(value: AgentWorkbenchCatalog): WorkflowCatalogList {
   const items = value.entries.flatMap(
@@ -82,12 +84,12 @@ export function projectCatalog(value: AgentWorkbenchCatalog): WorkflowCatalogLis
       try {
         const id = WorkflowCatalogItemId.make(entry.id);
         const providers = (entry.providers ?? []).flatMap((provider) => {
-          const decoded = Schema.decodeUnknownOption(ProviderDriverKind)(provider);
+          const decoded = decodeProviderDriverKind(provider);
           return Option.isSome(decoded) ? [decoded.value] : [];
         });
         if (entry.kind === "prompt") {
           const arguments_ = (entry.arguments ?? []).flatMap((argument) => {
-            const decoded = Schema.decodeUnknownOption(WorkflowArgument)(argument);
+            const decoded = decodeWorkflowArgument(argument);
             return Option.isSome(decoded) ? [decoded.value] : [];
           });
           return [

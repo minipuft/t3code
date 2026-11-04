@@ -54,6 +54,7 @@ export function PlanEditor(props: {
   const dirty = draft !== baseText;
 
   const reportDirtyChange = useStableCallback(props.onDirtyChange);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- registers this editor's dirty path with the parent list while mounted and clears it on unmount
   useEffect(() => {
     reportDirtyChange(dirty ? props.summary.path : null);
     return () => reportDirtyChange(null);
@@ -78,6 +79,7 @@ export function PlanEditor(props: {
     (props.summary.mtimeMs !== baseMtimeMs ||
       (source.data !== null && source.data.mtimeMs !== baseMtimeMs));
   const refreshSource = useStableCallback(source.refresh);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- starts an imperative source refetch when the listed mtime moves past the loaded copy; it sets no state
   useEffect(() => {
     if (props.summary.mtimeMs !== baseMtimeMs && !dirty) refreshSource();
   }, [baseMtimeMs, dirty, props.summary.mtimeMs, refreshSource]);

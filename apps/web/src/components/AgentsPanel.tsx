@@ -1,14 +1,8 @@
 /**
  * Agents right-panel surface: the fleet view over the native subagent fold.
- * The chat carries one expandable row per spawn batch and links here.
- *
- * Visualization rules (from live-test feedback):
- * - Spawn order is stable. Activity and completion update rows in place.
- * - Agent rows reserve three fixed lines for identity, activity, and metrics;
- *   changing data must never change their height.
- * - Workflow expansion is presentation state. A live run stays expanded when
- *   it settles; older collapsed runs can still be opened at run granularity.
- * - Static status dots, DOM-write elapsed timers, plain token counters.
+ * Spawn order is stable; agent rows reserve three fixed lines (identity,
+ * activity, metrics) so changing data never changes their height. A live
+ * workflow run stays expanded when it settles.
  */
 import { useAtomValue } from "@effect/atom-react";
 import type {
@@ -88,6 +82,7 @@ function AgentElapsed({ agent }: { agent: RuntimeSubagent }) {
   const live = agent.status === "running" || agent.status === "waiting";
   const startedAt = agent.startedAt;
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- ticks a 1s interval that writes the elapsed text straight to the DOM node, cleared on unmount
   useEffect(() => {
     if (!live || !startedAt) {
       return;
@@ -149,7 +144,7 @@ function AgentRow({ agent }: { agent: RuntimeSubagent }) {
       : agent.role;
   const metadata = [
     modelLabel,
-    agent.usage ? `${formatSubagentTokenCount(agent.usage.totalTokens)} tok` : "— tok",
+    agent.usage ? `${formatSubagentTokenCount(agent.usage.totalTokens)} tok` : "- tok",
     agent.usage?.toolUses !== undefined ? `${agent.usage.toolUses} tools` : null,
     agent.activationCount > 1 ? `run ${agent.activationCount}` : null,
   ].filter((value): value is string => value !== null);
@@ -323,14 +318,11 @@ function PhaseSection({
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen || phase.state === "running");
-  const previousState = useRef(phase.state);
-
-  useEffect(() => {
-    if (previousState.current !== "running" && phase.state === "running") {
-      setOpen(true);
-    }
-    previousState.current = phase.state;
-  }, [phase.state]);
+  const [previousState, setPreviousState] = useState(phase.state);
+  if (previousState !== phase.state) {
+    setPreviousState(phase.state);
+    if (previousState !== "running" && phase.state === "running") setOpen(true);
+  }
 
   return (
     <div>

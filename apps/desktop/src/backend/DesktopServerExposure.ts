@@ -26,6 +26,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as HttpClient from "effect/http/HttpClient";
 
+import * as DesktopManagedPolicy from "../app/DesktopManagedPolicy.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopConfig from "../app/DesktopConfig.ts";
 import * as DesktopNetworkInterfaces from "./DesktopNetworkInterfaces.ts";
@@ -77,15 +78,7 @@ const isUsableLanIpv4Address = (address: string): boolean =>
   !address.startsWith("169.254.") &&
   !isTailscaleIpv4Address(address);
 
-/**
- * Bridges, tunnels and VM adapters whose private address other devices on the
- * LAN usually cannot reach: macOS's Thunderbolt Bridge (`bridge0`, which can
- * keep a manual address while nothing is plugged in) and Internet Sharing
- * bridges, VPN tunnels, and container or VM networks. Their addresses are only
- * advertised when no other interface has one. Host bridges such as `br0`,
- * Proxmox's `vmbr0` and Hyper-V's `vEthernet` external switches often carry
- * the LAN address, so they are not listed.
- */
+// Private bridges and VM adapters are fallbacks; host bridges can carry the real LAN address.
 const HOST_ONLY_INTERFACE =
   /^(bridge\d|utun|ipsec|ppp|tun|tap|wg|docker|br-|veth|virbr|vmnet|vboxnet|VirtualBox|VMware)/;
 
@@ -435,6 +428,30 @@ function resolveRuntimeState(input: {
   };
 }
 
+// A network-accessible backend binds every interface, so a new Wi-Fi network
+// or DHCP lease changes only the address worth advertising, not the binding.
+const withCurrentAdvertisedHost = (
+  state: RuntimeState,
+  networkInterfaces: DesktopNetworkInterfaces.NetworkInterfaces,
+  advertisedHostOverride: Option.Option<string>,
+): RuntimeState => {
+  if (state.mode !== "network-accessible") {
+    return state;
+  }
+  const override = Option.getOrUndefined(advertisedHostOverride);
+  const exposure = resolveDesktopServerExposure({
+    mode: state.mode,
+    port: state.port,
+    networkInterfaces,
+    ...(override ? { advertisedHostOverride: override } : {}),
+  });
+  return {
+    ...state,
+    endpointUrl: Option.fromNullishOr(exposure.endpointUrl),
+    advertisedHost: Option.fromNullishOr(exposure.advertisedHost),
+  };
+};
+
 const requiresBackendRelaunch = (previous: RuntimeState, next: RuntimeState): boolean =>
   previous.port !== next.port ||
   previous.bindHost !== next.bindHost ||
@@ -454,8 +471,7 @@ const collectTailnetIpv4AddressesFromInterfaces = (
   const addresses: string[] = [];
   for (const [interfaceName, interfaceAddresses] of Object.entries(networkInterfaces)) {
     if (!interfaceAddresses) continue;
-    // CGNAT space is shared with other VPNs. Native adapter identity also
-    // works when the CLI is missing or its cached status predates a connection.
+    // CGNAT is shared with other VPNs; adapter identity works without current CLI status.
     const isTailscaleInterface =
       /^tailscale(?:\d+|ipv[46])?$/iu.test(interfaceName) ||
       interfaceAddresses.some(
@@ -551,7 +567,7 @@ const resolveEnabledMagicDnsEntries = Effect.fn(
   return entries;
 });
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const config = yield* DesktopConfig.DesktopConfig;
   const networkInterfaces = yield* DesktopNetworkInterfaces.DesktopNetworkInterfaces;
@@ -560,9 +576,7 @@ export const make = Effect.gen(function* () {
   const tailscaleServe = yield* DesktopTailscaleServe.DesktopTailscaleServe;
   const platform = yield* HostProcess.Platform;
   const stateRef = yield* Ref.make(initialRuntimeState());
-  // Each change reads the runtime state, persists settings, then writes the
-  // state back. Run them one at a time so a change never writes over another
-  // with values it read before that change persisted.
+  // Serialize read-persist-write changes so stale runtime state cannot overwrite another update.
   const changePermit = yield* Semaphore.make(1);
 
   const readNetworkInterfaces = networkInterfaces.read;
@@ -597,8 +611,24 @@ export const make = Effect.gen(function* () {
     },
   );
 
+  // The server refuses to bind wider than the policy's clients allow, so network access or Serve
+  // saved before the policy would keep the backend from starting. The backend runs without them;
+  // the saved choice stays for when the policy allows it.
+  const remoteAllowed = yield* DesktopManagedPolicy.readRemoteAllowed;
+  const withinPolicy = (settings: DesktopAppSettings.DesktopSettings) =>
+    remoteAllowed
+      ? settings
+      : { ...settings, serverExposureMode: "local-only" as const, tailscaleServeEnabled: false };
+
+  const readCurrentState = (currentNetworkInterfaces: DesktopNetworkInterfaces.NetworkInterfaces) =>
+    Ref.get(stateRef).pipe(
+      Effect.map((state) =>
+        withCurrentAdvertisedHost(state, currentNetworkInterfaces, config.desktopLanHostOverride),
+      ),
+    );
+
   const getState = Effect.gen(function* () {
-    const state = yield* Ref.get(stateRef);
+    const state = yield* readNetworkInterfaces.pipe(Effect.flatMap(readCurrentState));
     const extras = yield* readTailscaleServeContractExtras;
     return toContractState(state, extras);
   });
@@ -610,8 +640,8 @@ export const make = Effect.gen(function* () {
       const settings = yield* desktopSettings.get;
       const currentNetworkInterfaces = yield* readNetworkInterfaces;
       const resolved = resolveRuntimeState({
-        requestedMode: settings.serverExposureMode,
-        settings,
+        requestedMode: withinPolicy(settings).serverExposureMode,
+        settings: withinPolicy(settings),
         port,
         networkInterfaces: currentNetworkInterfaces,
         advertisedHostOverride: config.desktopLanHostOverride,
@@ -634,8 +664,8 @@ export const make = Effect.gen(function* () {
     };
     const currentNetworkInterfaces = yield* readNetworkInterfaces;
     const resolved = resolveRuntimeState({
-      requestedMode: mode,
-      settings: nextSettings,
+      requestedMode: withinPolicy(nextSettings).serverExposureMode,
+      settings: withinPolicy(nextSettings),
       port: previous.port,
       networkInterfaces: currentNetworkInterfaces,
       advertisedHostOverride: config.desktopLanHostOverride,
@@ -693,7 +723,7 @@ export const make = Effect.gen(function* () {
 
       const nextState = yield* Ref.updateAndGet(stateRef, (current) => ({
         ...current,
-        tailscaleServeEnabled: result.settings.tailscaleServeEnabled,
+        tailscaleServeEnabled: withinPolicy(result.settings).tailscaleServeEnabled,
         tailscaleServePort: result.settings.tailscaleServePort,
         tailscaleServeDevice: result.settings.tailscaleServeDevice,
       }));
@@ -705,17 +735,15 @@ export const make = Effect.gen(function* () {
   );
 
   const getAdvertisedEndpoints = Effect.gen(function* () {
-    const state = yield* Ref.get(stateRef);
     const currentNetworkInterfaces = yield* readNetworkInterfaces;
+    const state = yield* readCurrentState(currentNetworkInterfaces);
     const coreEndpoints = resolveDesktopCoreAdvertisedEndpoints({
       port: state.port,
       exposure: toResolvedExposure(state),
       customHttpsEndpointUrls: config.desktopHttpsEndpointUrls,
     });
 
-    // Don't spawn the Tailscale CLI when the user hasn't opted into any
-    // network exposure. The spawn itself triggers a macOS "Other apps"
-    // TCC prompt on Mac App Store Tailscale builds.
+    // Spawning Mac App Store Tailscale can prompt for TCC access even when exposure is disabled.
     if (state.mode !== "network-accessible" && !state.tailscaleServeEnabled) {
       return coreEndpoints;
     }

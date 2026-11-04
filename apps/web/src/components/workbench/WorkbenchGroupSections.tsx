@@ -14,11 +14,8 @@ const groupOpenStateKey = (tabKey: string, environmentId: EnvironmentId) =>
   `${GROUP_OPEN_STATE_KEY_PREFIX}${tabKey}:${environmentId}`;
 
 /**
- * Buckets `items` by `keyOf`, preserving first-seen order. When `order` is given,
- * groups it names come first in that sequence (skipping names with no items);
- * any remaining groups keep their first-seen order after it. Nesting is
- * compositional: call this again on a group's items for a second level rather
- * than adding a nesting mode.
+ * Buckets `items` by `keyOf` in first-seen order; groups named by `order` come first.
+ * For a second level, call this again on a group's items rather than adding a nesting mode.
  */
 export function groupWorkbenchItems<T>(
   items: readonly T[],

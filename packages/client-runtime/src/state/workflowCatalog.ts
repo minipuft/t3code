@@ -26,23 +26,22 @@ class WorkflowCatalogConnectionNotReadyError extends Data.TaggedError(
   "WorkflowCatalogConnectionNotReadyError",
 )<{ readonly message: string }> {}
 
-const withPreparedConnection = <A, E>(
+const withPreparedConnection = Effect.fn("withPreparedConnection")(function* <A, E>(
   execute: (
     loader: WorkflowCatalogLoader["Service"],
     prepared: PreparedConnection,
   ) => Effect.Effect<A, E>,
-) =>
-  Effect.gen(function* () {
-    const supervisor = yield* EnvironmentSupervisor;
-    const loader = yield* WorkflowCatalogLoader;
-    const prepared = yield* SubscriptionRef.get(supervisor.prepared);
-    if (Option.isNone(prepared)) {
-      return yield* new WorkflowCatalogConnectionNotReadyError({
-        message: "The environment HTTP connection is not ready.",
-      });
-    }
-    return yield* execute(loader, prepared.value);
-  });
+) {
+  const supervisor = yield* EnvironmentSupervisor;
+  const loader = yield* WorkflowCatalogLoader;
+  const prepared = yield* SubscriptionRef.get(supervisor.prepared);
+  if (Option.isNone(prepared)) {
+    return yield* new WorkflowCatalogConnectionNotReadyError({
+      message: "The environment HTTP connection is not ready.",
+    });
+  }
+  return yield* execute(loader, prepared.value);
+});
 
 export function createWorkflowCatalogEnvironmentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | WorkflowCatalogLoader | R, E>,

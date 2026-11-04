@@ -6,16 +6,31 @@ import type {
 } from "@t3tools/provider-core/server/usage";
 import * as Schema from "effect/Schema";
 
+import { CLAUDE_SYNTHETIC_MODEL } from "../provider/Drivers/claudeUsage.ts";
 import { GUARD_LENGTH, type TranscriptParsePosition } from "./usageTranscriptReader.ts";
 
-// v6 combines provider speed/rate keys and workspace provenance. Both v5
-// dialects are preserved as history, while surviving transcripts are rescanned.
-const USAGE_SCAN_CACHE_VERSION = 6 as const;
+// v11 is the newest upstream dialect. v12 adds workspace provenance to it; the fork's earlier v6
+// files hold workspace provenance without upstream's service-tier repair, so older files are
+// history only and surviving transcripts are rescanned.
+const USAGE_SCAN_CACHE_VERSION = 12 as const;
 const SPEED_COMPATIBLE_SINCE_VERSION = 4;
 
-export const SCAN_CACHE_FILE_NAME = "usage-scan-cache-v6.json";
-export const PREVIOUS_SCAN_CACHE_FILE_NAME = "usage-scan-cache-v5.json";
-export const LEGACY_SCAN_CACHE_FILE_NAME = "usage-scan-cache.json";
+/**
+ * An older server sharing that directory cannot read a newer cache and would
+ * replace it, dropping saved usage for deleted transcripts. Separate files keep
+ * both.
+ */
+export const SCAN_CACHE_FILE_NAME = "usage-scan-cache-v12.json";
+export const LEGACY_SCAN_CACHE_FILE_NAMES = [
+  "usage-scan-cache-v11.json",
+  "usage-scan-cache-v10.json",
+  "usage-scan-cache-v9.json",
+  "usage-scan-cache-v8.json",
+  "usage-scan-cache-v7.json",
+  "usage-scan-cache-v6.json",
+  "usage-scan-cache-v5.json",
+  "usage-scan-cache.json",
+] as const;
 
 const SPEEDS: readonly UsageSpeed[] = ["standard", "fast", "ultrafast"];
 
@@ -24,12 +39,10 @@ export interface CachedFile {
   readonly mtimeMs: number;
   readonly provider: UsageProviderKind;
   readonly records: readonly UsageRecord[];
-  /**
-   * Records from a trailing segment the writer had not newline-terminated at
-   * parse time. Kept apart from `records` because an incremental parse
-   * re-reads that segment and would otherwise double count it.
-   */
+  /** Unterminated tail records stay separate because incremental parsing rereads them. */
   readonly tailRecords: readonly UsageRecord[];
+  /** Whole-file count, including diagnostics from the tentative tail. */
+  readonly malformedRecords: number;
   readonly position: TranscriptParsePosition;
 }
 
@@ -50,6 +63,7 @@ type SerializedRecord = readonly [
   rateModelIndex: number | null,
   workspacePath: string | null,
   workspaceSource: NonNullable<UsageRecord["workspaceSource"]>,
+  unresolvedServiceTierTurnId?: string,
 ];
 
 interface SerializedFile {
@@ -58,6 +72,7 @@ interface SerializedFile {
   readonly p: UsageProviderKind;
   readonly r: readonly SerializedRecord[];
   readonly t: readonly SerializedRecord[];
+  readonly mr: number;
   readonly o: number;
   readonly gl: number;
   readonly gh: number;
@@ -109,6 +124,9 @@ function serializeFile(entry: CachedFile, tables: InternTables): SerializedFile 
       : intern(tables.models, tables.modelIndex, record.rateModel),
     record.workspacePath ?? null,
     record.workspaceSource ?? "none",
+    ...(record.unresolvedServiceTierTurnId === undefined
+      ? ([] as const)
+      : ([record.unresolvedServiceTierTurnId] as const)),
   ];
   return {
     s: entry.size,
@@ -116,6 +134,7 @@ function serializeFile(entry: CachedFile, tables: InternTables): SerializedFile 
     p: entry.provider,
     r: entry.records.map(serializeRecord),
     t: entry.tailRecords.map(serializeRecord),
+    mr: entry.malformedRecords,
     o: entry.position.resumeOffset,
     gl: entry.position.guardLength,
     gh: entry.position.guardHash,
@@ -123,23 +142,7 @@ function serializeFile(entry: CachedFile, tables: InternTables): SerializedFile 
   };
 }
 
-export function encodeScanCache(cache: ScanCache): SerializedCache {
-  const tables = makeInternTables();
-  const files: Record<string, SerializedFile> = {};
-  for (const [path, entry] of cache) files[path] = serializeFile(entry, tables);
-  return {
-    version: USAGE_SCAN_CACHE_VERSION,
-    models: tables.models,
-    sessions: tables.sessions,
-    files,
-  };
-}
-
-/**
- * Entries are replaced, never mutated, when their file changes, so an entry's JSON is memoised by
- * identity. The intern tables only grow, so a memoised entry's indexes stay valid; a pruned entry
- * can leave an unused string behind until the next process start.
- */
+/** Memoizes immutable entries by identity; growing intern tables preserve indexes, retaining unused strings until restart. */
 export function makeScanCacheWriter(): (
   cache: ScanCache,
   extra: Readonly<Record<string, unknown>>,
@@ -171,6 +174,58 @@ function isRecordArray(value: unknown): value is readonly unknown[] {
   return Array.isArray(value);
 }
 
+interface SerializedRecordTail {
+  readonly speedIndex: unknown;
+  readonly rateModelIndex: unknown;
+  readonly workspacePath: unknown;
+  readonly workspaceSource: unknown;
+  readonly unresolvedServiceTierTurnId: unknown;
+}
+
+/**
+ * Rows share their first ten fields across every dialect; the tail depends on who wrote it:
+ * the fork's first v5 (workspace, then speed), the fork's v6 (upstream's rate model, then
+ * workspace), upstream v4-v11 (rate model, optional service-tier turn), and the current v12.
+ */
+function readRowTail(row: readonly unknown[], version: number): SerializedRecordTail | null {
+  if (version === USAGE_SCAN_CACHE_VERSION) {
+    if (row.length !== 14 && row.length !== 15) return null;
+    return {
+      speedIndex: row[10],
+      rateModelIndex: row[11],
+      workspacePath: row[12],
+      workspaceSource: row[13],
+      unresolvedServiceTierTurnId: row[14],
+    };
+  }
+  if (row.length === 13 && (row[10] === null || typeof row[10] === "string")) {
+    return {
+      speedIndex: row[12],
+      rateModelIndex: null,
+      workspacePath: row[10],
+      workspaceSource: row[11],
+      unresolvedServiceTierTurnId: undefined,
+    };
+  }
+  if (version === 6 && row.length === 14) {
+    return {
+      speedIndex: row[10],
+      rateModelIndex: row[11],
+      workspacePath: row[12],
+      workspaceSource: row[13],
+      unresolvedServiceTierTurnId: undefined,
+    };
+  }
+  if (![11, 12, 13].includes(row.length)) return null;
+  return {
+    speedIndex: row[10],
+    rateModelIndex: row[11],
+    workspacePath: null,
+    workspaceSource: "none",
+    unresolvedServiceTierTurnId: row[12],
+  };
+}
+
 export function decodeScanCache(
   document: unknown,
   formats: ReadonlyMap<UsageProviderKind, TranscriptUsageFormat<unknown>>,
@@ -196,22 +251,16 @@ export function decodeScanCache(
   const models = root.models as readonly string[];
   const sessions = root.sessions as readonly string[];
 
-  // Any corrupt row disqualifies the whole entry. Keeping the survivors
-  // under the original (size, mtime) would read as a valid warm hit and the
-  // file would never be re-parsed, silently losing the dropped rows' usage.
+  // Reject entire corrupt entries; partial survivors would appear warm and hide usage until the file changes.
   const decodeRecords = (
     rows: readonly unknown[],
     provider: UsageProviderKind,
   ): UsageRecord[] | null => {
     const records: UsageRecord[] = [];
     for (const row of rows) {
-      if (
-        !isRecordArray(row) ||
-        (version === USAGE_SCAN_CACHE_VERSION
-          ? row.length !== 14
-          : ![11, 12, 13].includes(row.length))
-      )
-        return null;
+      if (!isRecordArray(row)) return null;
+      const tail = readRowTail(row, version);
+      if (tail === null) return null;
       const [
         timestampMs,
         modelIndex,
@@ -223,28 +272,10 @@ export function decodeScanCache(
         reasoning,
         dedupeKey,
         reportedCostUsd,
-        speedIndex,
-        storedRateModelIndex,
-        storedWorkspacePath,
-        storedWorkspaceSource,
       ] = row as SerializedRecord;
-      const forkLegacy =
-        version < USAGE_SCAN_CACHE_VERSION &&
-        row.length === 13 &&
-        (row[10] === null || typeof row[10] === "string");
-      const rateModelIndex = forkLegacy ? null : storedRateModelIndex;
-      const workspacePath = forkLegacy
-        ? row[10]
-        : version < USAGE_SCAN_CACHE_VERSION
-          ? null
-          : storedWorkspacePath;
-      const workspaceSource = forkLegacy
-        ? row[11]
-        : version < USAGE_SCAN_CACHE_VERSION
-          ? "none"
-          : storedWorkspaceSource;
-      const encodedSpeed = forkLegacy ? row[12] : speedIndex;
-      const speed = typeof encodedSpeed === "number" ? SPEEDS[encodedSpeed] : undefined;
+      const { speedIndex, rateModelIndex, workspacePath, workspaceSource } = tail;
+      const unresolvedServiceTierTurnId = tail.unresolvedServiceTierTurnId;
+      const speed = typeof speedIndex === "number" ? SPEEDS[speedIndex] : undefined;
 
       const model = typeof modelIndex === "number" ? models[modelIndex] : undefined;
       const rateModel = typeof rateModelIndex === "number" ? models[rateModelIndex] : undefined;
@@ -252,6 +283,8 @@ export function decodeScanCache(
         typeof timestampMs !== "number" ||
         !Number.isFinite(timestampMs) ||
         model === undefined ||
+        (unresolvedServiceTierTurnId !== undefined &&
+          typeof unresolvedServiceTierTurnId !== "string") ||
         (rateModelIndex != null && rateModel === undefined) ||
         !Number.isFinite(uncached) ||
         !Number.isFinite(cached) ||
@@ -266,6 +299,10 @@ export function decodeScanCache(
       ) {
         return null;
       }
+
+      // Unchanged and deleted transcripts may only exist in the cache, so the
+      // parser cannot remove their previously saved local placeholders.
+      if (provider === "claude" && model === CLAUDE_SYNTHETIC_MODEL) continue;
 
       records.push({
         provider,
@@ -284,6 +321,9 @@ export function decodeScanCache(
         speed,
         workspacePath,
         workspaceSource,
+        ...(version >= 7 && unresolvedServiceTierTurnId !== undefined
+          ? { unresolvedServiceTierTurnId }
+          : {}),
         dedupeKey: typeof dedupeKey === "string" ? dedupeKey : null,
       });
     }
@@ -298,6 +338,8 @@ export function decodeScanCache(
     const format = formats.get(entry.p);
     if (format === undefined) continue;
     if (!isRecordArray(entry.r) || !isRecordArray(entry.t)) continue;
+    const malformedRecords = entry.mr === undefined ? 0 : entry.mr;
+    if (!Number.isSafeInteger(malformedRecords) || malformedRecords < 0) continue;
     // Position fields feed byte offsets and a Buffer allocation in the reader,
     // so anything outside their real ranges must reject the entry: a bogus
     // guard length would otherwise fail every parse of the file, silently
@@ -316,8 +358,8 @@ export function decodeScanCache(
     ) {
       continue;
     }
-    // Older records may lack service tiers or workspace evidence. Keep retained
-    // history, but reparse surviving files to recover the current metadata.
+    // Older records lack workspace evidence, and older Codex and Claude entries lack upstream's
+    // later repairs. Keep retained history, but reparse surviving files to recover current metadata.
     const legacy = version < USAGE_SCAN_CACHE_VERSION;
     // A corrupt state disqualifies the entry: resuming with it would attach
     // appended usage to the wrong model or replay fork-copied history.
@@ -334,14 +376,15 @@ export function decodeScanCache(
       provider,
       records,
       tailRecords,
-      position: legacy
-        ? { resumeOffset: 0, guardLength: 0, guardHash: 0, state: null }
-        : {
+      malformedRecords,
+      position: !legacy
+        ? {
             resumeOffset: entry.o,
             guardLength: entry.gl,
             guardHash: entry.gh,
             state: entry.cs,
-          },
+          }
+        : { resumeOffset: 0, guardLength: 0, guardHash: 0, state: null },
     });
   }
 
@@ -373,10 +416,7 @@ export function pruneScanCache(cache: ScanCache, retentionCutoffMs: number): num
   return removed;
 }
 
-/**
- * Callers stitching an incremental parse together pass one `seen` set across the line and tail
- * record batches so the whole file stays deduplicated as a unit; the set is mutated in place.
- */
+/** Mutates seen; share it across incremental line/tail batches to deduplicate the whole file. */
 export function dedupeWithinFile(
   records: readonly UsageRecord[],
   seen: Set<string> = new Set(),

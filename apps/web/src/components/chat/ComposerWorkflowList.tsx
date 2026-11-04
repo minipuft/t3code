@@ -110,6 +110,7 @@ export function ComposerWorkflowList(props: {
     setHighlightedItemId(usableHighlightedItemId);
   }
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- scrolls the highlighted option into view in the DOM
   useEffect(() => {
     if (highlightedItemId === null) return;
     document.getElementById(`workflow-action-${highlightedItemId}`)?.scrollIntoView?.({
@@ -117,6 +118,7 @@ export function ComposerWorkflowList(props: {
     });
   }, [highlightedItemId]);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- holds a capture-phase document keydown listener while the list is mounted
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;

@@ -83,6 +83,7 @@ export function isAllowedEndpointOrigin(input: {
   readonly origin: RelayManagedEndpointOrigin;
   readonly requestUrl: string;
   readonly allowedRendererHost?: string | undefined;
+  readonly allowNonLoopbackRequestHost?: boolean;
 }): boolean {
   if (!isLoopbackHostname(input.origin.localHttpHost)) {
     return false;
@@ -90,6 +91,7 @@ export function isAllowedEndpointOrigin(input: {
 
   const url = new URL(input.requestUrl);
   if (
+    !input.allowNonLoopbackRequestHost &&
     !isLoopbackHostname(url.hostname) &&
     !(
       input.allowedRendererHost !== undefined &&

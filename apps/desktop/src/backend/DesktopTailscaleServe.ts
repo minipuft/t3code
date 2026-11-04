@@ -21,13 +21,12 @@ import * as Semaphore from "effect/Semaphore";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
+import * as DesktopManagedPolicy from "../app/DesktopManagedPolicy.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 
-// Owns Tailscale Serve for the primary backend. A WSL primary can be served by
-// the tailscaled inside the distro (its own tailnet node and MagicDNS name),
-// by the Windows daemon, or both. Both daemons always target 127.0.0.1: WSL
-// forwards Windows localhost into the distro, while the distro IP times out
-// from the Windows tailscaled service.
+// Both daemons (WSL and native) always target 127.0.0.1: WSL forwards Windows
+// localhost into the distro, while the distro IP times out from the Windows
+// tailscaled service.
 
 export type TailscaleServeDaemon = "wsl" | "native";
 
@@ -211,9 +210,19 @@ const upsertResult = (
     ? results.map((result) => (result.daemon === next.daemon ? next : result))
     : [...results, next];
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
-  const desktopSettings = yield* DesktopAppSettings.DesktopAppSettings;
+  const rawDesktopSettings = yield* DesktopAppSettings.DesktopAppSettings;
+  // Serve is remote access: a managed policy that keeps clients local keeps Serve off, whatever
+  // the saved choice says (the choice itself stays for when the policy allows it).
+  const remoteAllowed = yield* DesktopManagedPolicy.readRemoteAllowed;
+  const desktopSettings = {
+    get: rawDesktopSettings.get.pipe(
+      Effect.map((settings) =>
+        remoteAllowed ? settings : { ...settings, tailscaleServeEnabled: false },
+      ),
+    ),
+  };
   const baseSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const platform = yield* HostProcess.Platform;
   const scope = yield* Effect.scope;
@@ -472,41 +481,42 @@ export const make = Effect.gen(function* () {
     Effect.withSpan("desktop.tailscaleServe.primaryStopped"),
   );
 
-  const disableWork = (target: TailscaleServePrimaryTarget, servePort: number) =>
-    Effect.gen(function* () {
-      const previous = yield* appliedPlacements;
-      const current = reachableDaemons(target).map((daemon): ServePlacement => ({
-        daemon,
-        servePort,
-      }));
-      yield* removePlacements([...current, ...previous], target);
-      yield* Ref.set(resultsRef, []);
-      return [] as ReadonlyArray<TailscaleServeDaemon>;
-    });
+  const disableWork = Effect.fn("desktop.tailscaleServe.disableWork")(function* (
+    target: TailscaleServePrimaryTarget,
+    servePort: number,
+  ) {
+    const previous = yield* appliedPlacements;
+    const current = reachableDaemons(target).map((daemon): ServePlacement => ({
+      daemon,
+      servePort,
+    }));
+    yield* removePlacements([...current, ...previous], target);
+    yield* Ref.set(resultsRef, []);
+    return [] as ReadonlyArray<TailscaleServeDaemon>;
+  });
 
-  const enableWork = (
+  const enableWork = Effect.fn("desktop.tailscaleServe.enableWork")(function* (
     target: TailscaleServePrimaryTarget,
     device: DesktopTailscaleServeDevice,
     servePort: number,
-  ) =>
-    Effect.gen(function* () {
-      const desired = yield* resolveDesiredDaemons(device, target);
-      const previous = yield* appliedPlacements;
-      yield* removePlacements(
-        previous.filter(
-          (placement) => !desired.includes(placement.daemon) || placement.servePort !== servePort,
-        ),
-        target,
-      );
-      yield* Ref.update(resultsRef, (results) =>
-        results.filter((result) => desired.includes(result.daemon)),
-      );
-      const failed: Array<TailscaleServeDaemon> = [];
-      for (const daemon of desired) {
-        if (!(yield* applyOnce(daemon, target, servePort))) failed.push(daemon);
-      }
-      return failed as ReadonlyArray<TailscaleServeDaemon>;
-    });
+  ) {
+    const desired = yield* resolveDesiredDaemons(device, target);
+    const previous = yield* appliedPlacements;
+    yield* removePlacements(
+      previous.filter(
+        (placement) => !desired.includes(placement.daemon) || placement.servePort !== servePort,
+      ),
+      target,
+    );
+    yield* Ref.update(resultsRef, (results) =>
+      results.filter((result) => desired.includes(result.daemon)),
+    );
+    const failed: Array<TailscaleServeDaemon> = [];
+    for (const daemon of desired) {
+      if (!(yield* applyOnce(daemon, target, servePort))) failed.push(daemon);
+    }
+    return failed as ReadonlyArray<TailscaleServeDaemon>;
+  });
 
   const reconcile = Effect.gen(function* () {
     const started = yield* Effect.gen(function* () {

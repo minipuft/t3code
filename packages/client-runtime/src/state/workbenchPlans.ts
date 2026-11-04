@@ -31,27 +31,26 @@ import { WorkbenchPlansLoader } from "./workbenchPlansHttp.ts";
 
 export { WorkbenchPlansLoader, workbenchPlansLoaderLayer } from "./workbenchPlansHttp.ts";
 
-export class WorkbenchPlansConnectionNotReadyError extends Data.TaggedError(
+class WorkbenchPlansConnectionNotReadyError extends Data.TaggedError(
   "WorkbenchPlansConnectionNotReadyError",
 )<{ readonly message: string }> {}
 
-const withPreparedConnection = <A, E>(
+const withPreparedConnection = Effect.fn("withPreparedConnection")(function* <A, E>(
   execute: (
     loader: WorkbenchPlansLoader["Service"],
     prepared: PreparedConnection,
   ) => Effect.Effect<A, E>,
-) =>
-  Effect.gen(function* () {
-    const supervisor = yield* EnvironmentSupervisor;
-    const loader = yield* WorkbenchPlansLoader;
-    const prepared = yield* SubscriptionRef.get(supervisor.prepared);
-    if (Option.isNone(prepared)) {
-      return yield* new WorkbenchPlansConnectionNotReadyError({
-        message: "The environment HTTP connection is not ready.",
-      });
-    }
-    return yield* execute(loader, prepared.value);
-  });
+) {
+  const supervisor = yield* EnvironmentSupervisor;
+  const loader = yield* WorkbenchPlansLoader;
+  const prepared = yield* SubscriptionRef.get(supervisor.prepared);
+  if (Option.isNone(prepared)) {
+    return yield* new WorkbenchPlansConnectionNotReadyError({
+      message: "The environment HTTP connection is not ready.",
+    });
+  }
+  return yield* execute(loader, prepared.value);
+});
 
 export function createWorkbenchPlansEnvironmentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | WorkbenchPlansLoader | R, E>,

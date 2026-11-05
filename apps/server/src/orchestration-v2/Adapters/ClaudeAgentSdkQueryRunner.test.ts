@@ -9,7 +9,7 @@ import * as NodeStream from "node:stream";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import { ProviderSessionId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ProviderSessionId, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Deferred from "effect/Deferred";
@@ -27,6 +27,7 @@ import { ProviderEventLoggers } from "@t3tools/provider-core/server/ProviderEven
 import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
 import { signalProcessGroup } from "@t3tools/provider-core/server/processGroup";
 import * as PortScanner from "../../preview/PortScanner.ts";
+import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import {
   ClaudeAgentSdkQueryRunner,
   type ClaudeAgentSdkQueryOpenInput,
@@ -70,8 +71,13 @@ const writeClaudeSession = Effect.fnUntraced(function* (
   return projectDir;
 });
 
+const testEnvironmentIdentity = Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+  getEnvironmentId: Effect.succeed(EnvironmentId.make("environment-fake-cli")),
+});
+
 const forkRunnerLayer = layerQueryRunner.pipe(
   Layer.provide(PortScanner.layerTest),
+  Layer.provide(testEnvironmentIdentity),
   Layer.provide(Layer.succeed(ProviderEventLoggers, { native: undefined, canonical: undefined })),
 );
 
@@ -204,6 +210,7 @@ it.effect("forked Claude sessions keep their compaction chain", () =>
 
 const realQueryRunner = layerQueryRunner.pipe(
   Layer.provide(PortScanner.layerTest),
+  Layer.provide(testEnvironmentIdentity),
   Layer.provide(
     Layer.succeed(ProviderEventLoggers, {
       native: undefined,
@@ -623,11 +630,12 @@ describe.skipIf(HostProcess.Platform.defaultValue() === "win32")("Claude CLI pro
     }),
   );
 
-  it.effect("marks the CLI's jobs with its thread and counts it as an agent until it exits", () => {
+  it.effect("marks the CLI's jobs with thread and environment, an agent until it exits", () => {
     let runningAgents = 0;
     let releaseAgent!: () => void;
     const agentReleased = new Promise<void>((resolve) => (releaseAgent = resolve));
     const runner = layerQueryRunner.pipe(
+      Layer.provide(testEnvironmentIdentity),
       Layer.provide(
         Layer.mock(PortScanner.PortDiscovery)({
           trackAgent: () => {
@@ -648,7 +656,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() === "win32")("Claude CLI pro
       const cli = fakeClaudeCli(
         [
           'dir=$(dirname "$0")',
-          `printf '%s' "$${PortScanner.AGENT_THREAD_ENV}" > "$dir/thread"`,
+          `printf '%s %s' "$${PortScanner.AGENT_THREAD_ENV}" "$${PortScanner.AGENT_ENVIRONMENT_ENV}" > "$dir/thread"`,
           "cat > /dev/null",
         ].join("\n"),
       );
@@ -665,7 +673,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() === "win32")("Claude CLI pro
       });
 
       const session = yield* openFakeCli(cli);
-      assert.equal(yield* Effect.promise(() => threadRead), "thread-fake-cli");
+      assert.equal(yield* Effect.promise(() => threadRead), "thread-fake-cli environment-fake-cli");
       assert.equal(runningAgents, 1);
       yield* session.close;
       yield* Effect.promise(() => agentReleased);

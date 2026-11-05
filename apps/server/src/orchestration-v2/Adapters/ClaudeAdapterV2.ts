@@ -158,6 +158,7 @@ import {
 } from "../../claudeModelOptions.ts";
 import * as ServerConfig from "../../config.ts";
 import * as PortScanner from "../../preview/PortScanner.ts";
+import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import * as ServerSettings from "../../serverSettings.ts";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import { spawnAndCollect } from "@t3tools/provider-core/server/snapshotProbe";
@@ -961,6 +962,7 @@ export const layerQueryRunner: Layer.Layer<
   | Path.Path
   | PortScanner.PortDiscovery
   | ProviderEventLoggers.ProviderEventLoggers
+  | ServerEnvironment.ServerEnvironmentIdentity
 > = Layer.effect(
   ClaudeAgentSdkQueryRunner,
   Effect.gen(function* () {
@@ -973,6 +975,8 @@ export const layerQueryRunner: Layer.Layer<
     const runFork = Effect.runForkWith(yield* Effect.context<never>());
     const hostEnvironment = yield* HostProcess.Environment;
     const portDiscovery = yield* PortScanner.PortDiscovery;
+    const environmentId = yield* (yield* ServerEnvironment.ServerEnvironmentIdentity)
+      .getEnvironmentId;
 
     return ClaudeAgentSdkQueryRunner.of({
       allocateSessionId: random.uuidV4(),
@@ -1001,6 +1005,7 @@ export const layerQueryRunner: Layer.Layer<
             env: {
               ...(sdkOptions.env ?? hostEnvironment),
               [PortScanner.AGENT_THREAD_ENV]: input.threadId,
+              [PortScanner.AGENT_ENVIRONMENT_ENV]: environmentId,
             },
           };
           // The SDK can prepend a scope wrapper to native binaries; script entries run through node.

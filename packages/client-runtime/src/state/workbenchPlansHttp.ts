@@ -50,7 +50,7 @@ import {
 import {
   buildEnvironmentAuthHeaders,
   type EnvironmentHttpAuthHeaders,
-  withEnvironmentCredentials,
+  withEnvironmentRequestInit,
 } from "./environmentHttpAuth.ts";
 
 const DEFAULT_WORKBENCH_PLANS_TIMEOUT_MS = 8_000;
@@ -92,7 +92,7 @@ const executeRequest = Effect.fn("clientRuntime.state.executeWorkbenchPlansReque
   return yield* executeEnvironmentHttpRequest(
     input.requestUrl,
     input.timeoutMs ?? DEFAULT_WORKBENCH_PLANS_TIMEOUT_MS,
-    withEnvironmentCredentials(input.prepared.httpAuthorization, input.request(headers)),
+    withEnvironmentRequestInit(input.prepared.httpAuthorization, undefined, input.request(headers)),
   );
 });
 

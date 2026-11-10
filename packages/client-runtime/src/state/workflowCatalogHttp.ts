@@ -27,7 +27,7 @@ import {
 import {
   buildEnvironmentAuthHeaders,
   type EnvironmentHttpAuthHeaders,
-  withEnvironmentCredentials,
+  withEnvironmentRequestInit,
 } from "./environmentHttpAuth.ts";
 
 const DEFAULT_WORKFLOW_CATALOG_TIMEOUT_MS = 6_000;
@@ -69,7 +69,7 @@ const executeRequest = Effect.fn("clientRuntime.state.executeWorkflowCatalogRequ
   return yield* executeEnvironmentHttpRequest(
     input.requestUrl,
     input.timeoutMs ?? DEFAULT_WORKFLOW_CATALOG_TIMEOUT_MS,
-    withEnvironmentCredentials(input.prepared.httpAuthorization, input.request(headers)),
+    withEnvironmentRequestInit(input.prepared.httpAuthorization, undefined, input.request(headers)),
   );
 });
 

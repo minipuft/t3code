@@ -44,8 +44,8 @@ import {
   type WorkbenchRelationshipReviewInput,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as Layer from "effect/Layer";
 
 import {
@@ -54,15 +54,19 @@ import {
   type AgentWorkbenchShape,
 } from "../agentWorkbenchAdapter/AgentWorkbench.ts";
 
-export class WorkbenchPlansAdapterError extends Data.TaggedError("WorkbenchPlansAdapterError")<{
-  readonly reason:
-    | "request_failed"
-    | "invalid_response"
-    | "unsupported_version"
-    | "invalid_request"
-    | "not_found"
-    | "conflict";
-}> {}
+export class WorkbenchPlansAdapterError extends Schema.TaggedError<WorkbenchPlansAdapterError>()(
+  "WorkbenchPlansAdapterError",
+  {
+    reason: Schema.Literals([
+      "request_failed",
+      "invalid_response",
+      "unsupported_version",
+      "invalid_request",
+      "not_found",
+      "conflict",
+    ]),
+  },
+) {}
 
 export interface WorkbenchPlansShape {
   readonly list: Effect.Effect<WorkbenchPlanList>;

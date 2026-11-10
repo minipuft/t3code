@@ -4,9 +4,9 @@ import type {
   AgentWorkbenchPromptRollbackInput,
   WorkflowCatalogItemId,
 } from "@t3tools/contracts";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { Atom } from "effect/reactivity";
 
@@ -22,9 +22,12 @@ import { WorkflowCatalogLoader } from "./workflowCatalogHttp.ts";
 
 export { WorkflowCatalogLoader, workflowCatalogLoaderLayer } from "./workflowCatalogHttp.ts";
 
-class WorkflowCatalogConnectionNotReadyError extends Data.TaggedError(
+class WorkflowCatalogConnectionNotReadyError extends Schema.TaggedError<WorkflowCatalogConnectionNotReadyError>()(
   "WorkflowCatalogConnectionNotReadyError",
-)<{ readonly message: string }> {}
+  {
+    message: Schema.String,
+  },
+) {}
 
 const withPreparedConnection = Effect.fn("withPreparedConnection")(function* <A, E>(
   execute: (

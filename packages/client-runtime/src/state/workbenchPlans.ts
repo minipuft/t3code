@@ -12,9 +12,9 @@ import type {
   WorkbenchResourceRollbackInput,
   WorkbenchResourceTarget,
 } from "@t3tools/contracts";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import type { WorkbenchRelationshipReviewInput } from "@t3tools/contracts";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { Atom } from "effect/reactivity";
@@ -31,9 +31,12 @@ import { WorkbenchPlansLoader } from "./workbenchPlansHttp.ts";
 
 export { WorkbenchPlansLoader, workbenchPlansLoaderLayer } from "./workbenchPlansHttp.ts";
 
-class WorkbenchPlansConnectionNotReadyError extends Data.TaggedError(
+class WorkbenchPlansConnectionNotReadyError extends Schema.TaggedError<WorkbenchPlansConnectionNotReadyError>()(
   "WorkbenchPlansConnectionNotReadyError",
-)<{ readonly message: string }> {}
+  {
+    message: Schema.String,
+  },
+) {}
 
 const withPreparedConnection = Effect.fn("withPreparedConnection")(function* <A, E>(
   execute: (

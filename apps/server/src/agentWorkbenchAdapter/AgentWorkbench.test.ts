@@ -235,7 +235,7 @@ describe("Agent Workbench adapter", () => {
         {
           leaseId: async () => "lease-1",
           request: async () => {
-            throw new AgentWorkbenchConnectionError("request_failed");
+            throw new AgentWorkbenchConnectionError({ reason: "request_failed" });
           },
         },
         {

@@ -41,25 +41,15 @@ import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import {
   AgentWorkbenchConnection,
-  AgentWorkbenchConnectionError,
+  AgentWorkbenchFailureReason,
+  isAgentWorkbenchConnectionError,
   makeAgentWorkbenchConnectionDependencies,
 } from "./AgentWorkbenchConnection.ts";
 
 export class AgentWorkbenchAdapterError extends Schema.TaggedError<AgentWorkbenchAdapterError>()(
   "AgentWorkbenchAdapterError",
   {
-    reason: Schema.Literals([
-      "not_installed",
-      "configuration_invalid",
-      "start_failed",
-      "request_failed",
-      "unsupported_version",
-      "unauthorized",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "invalid_response",
-    ]),
+    reason: AgentWorkbenchFailureReason,
   },
 ) {}
 
@@ -591,7 +581,7 @@ function providerSkills(providers: ReadonlyArray<ServerProvider>) {
 
 function mapConnectionError(cause: unknown) {
   return new AgentWorkbenchAdapterError({
-    reason: cause instanceof AgentWorkbenchConnectionError ? cause.reason : "request_failed",
+    reason: isAgentWorkbenchConnectionError(cause) ? cause.reason : "request_failed",
   });
 }
 

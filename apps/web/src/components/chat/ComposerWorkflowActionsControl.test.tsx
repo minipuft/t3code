@@ -25,7 +25,7 @@ describe("ComposerWorkflowActionsControl", () => {
     const markup = renderToStaticMarkup(
       <ComposerWorkflowActionsControl compact open={false} onToggle={() => {}} size="xs" />,
     );
-    expect(markup).toContain("text-muted-foreground/70");
+    expect(markup).toContain("text-foreground/70");
     expect(markup).toContain('shrink-0 size-3" aria-hidden="true" data-composer-control-icon');
     expect(markup).not.toContain("h-7 min-h-7");
   });

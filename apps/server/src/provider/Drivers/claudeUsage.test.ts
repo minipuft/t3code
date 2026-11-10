@@ -143,6 +143,8 @@ describe("Claude advisor iterations", () => {
       timestampMs: Date.parse("2026-10-22T01:31:11.984Z"),
       model: "claude-opus-5-5",
       sessionId: "5a128faa-8253-489e-b935-6c08e8e670c0",
+      workspacePath: null,
+      workspaceSource: "claudeCwd",
       totals: {
         uncachedInputTokens: 4,
         cachedInputTokens: 118320,

@@ -97,6 +97,8 @@ function parseClaudeRecord(parsed: unknown): readonly UsageRecord[] {
       timestampMs,
       model: advisorModel,
       sessionId: executor.sessionId,
+      workspacePath: executor.workspacePath,
+      workspaceSource: executor.workspaceSource,
       totals: {
         uncachedInputTokens: tokenCount(advisor["input_tokens"]),
         cachedInputTokens: tokenCount(advisor["cache_read_input_tokens"]),

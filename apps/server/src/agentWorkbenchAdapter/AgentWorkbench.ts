@@ -41,25 +41,15 @@ import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import {
   AgentWorkbenchConnection,
-  AgentWorkbenchConnectionError,
+  AgentWorkbenchFailureReason,
+  isAgentWorkbenchConnectionError,
   makeAgentWorkbenchConnectionDependencies,
 } from "./AgentWorkbenchConnection.ts";
 
 export class AgentWorkbenchAdapterError extends Schema.TaggedError<AgentWorkbenchAdapterError>()(
   "AgentWorkbenchAdapterError",
   {
-    reason: Schema.Literals([
-      "not_installed",
-      "configuration_invalid",
-      "start_failed",
-      "request_failed",
-      "unsupported_version",
-      "unauthorized",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "invalid_response",
-    ]),
+    reason: AgentWorkbenchFailureReason,
   },
 ) {}
 
@@ -141,7 +131,7 @@ export interface AgentWorkbenchShape {
     readonly requestId: string;
     readonly receiptId: string;
   }) => Effect.Effect<AgentWorkbenchProjectionReceipt, AgentWorkbenchAdapterError>;
-  readonly topology: Effect.Effect<typeof AgentWorkbenchTopology.Type, AgentWorkbenchAdapterError>;
+  readonly topology: Effect.Effect<AgentWorkbenchTopology, AgentWorkbenchAdapterError>;
   readonly audit: Effect.Effect<AgentWorkbenchReviewInbox, AgentWorkbenchAdapterError>;
   readonly reviewRelationship: (
     input: unknown,
@@ -291,7 +281,7 @@ export function makeAgentWorkbench(
 
   return AgentWorkbench.of({
     listPlans: request(AgentWorkbenchPlanList, "/v1/plans"),
-    planAssociations: (input) =>
+    planAssociations: Effect.fn("AgentWorkbench.planAssociations")((input) =>
       conversation(input).pipe(
         Effect.flatMap((value) =>
           request(
@@ -300,7 +290,8 @@ export function makeAgentWorkbench(
           ),
         ),
       ),
-    mutatePlanAssociation: (input) =>
+    ),
+    mutatePlanAssociation: Effect.fn("AgentWorkbench.mutatePlanAssociation")((input) =>
       Effect.all([conversation(input), aliases(input.threadId)]).pipe(
         Effect.flatMap(([value, harnessAliases]) =>
           request(AgentWorkbenchPlanAssociations, "/v1/plan-associations/commands", {
@@ -319,7 +310,8 @@ export function makeAgentWorkbench(
           }),
         ),
       ),
-    suggestPlans: (input) =>
+    ),
+    suggestPlans: Effect.fn("AgentWorkbench.suggestPlans")((input) =>
       conversation(input).pipe(
         Effect.flatMap((value) =>
           request(AgentWorkbenchPlanSuggestions, "/v1/plan-suggestions", {
@@ -328,60 +320,73 @@ export function makeAgentWorkbench(
           }),
         ),
       ),
-    readPlan: (path) => request(AgentWorkbenchPlanSource, `/v1/plans/${encodeURIComponent(path)}`),
-    savePlan: (path, input) =>
+    ),
+    readPlan: Effect.fn("AgentWorkbench.readPlan")((path) =>
+      request(AgentWorkbenchPlanSource, `/v1/plans/${encodeURIComponent(path)}`),
+    ),
+    savePlan: Effect.fn("AgentWorkbench.savePlan")((path, input) =>
       request(AgentWorkbenchPlanMutationResult, `/v1/plans/${encodeURIComponent(path)}`, {
         method: "PUT",
         admin: true,
         body: input,
       }),
-    mutatePlan: (input) =>
+    ),
+    mutatePlan: Effect.fn("AgentWorkbench.mutatePlan")((input) =>
       request(AgentWorkbenchPlanMutationResult, "/v1/plans/commands", {
         method: "POST",
         admin: true,
         body: input,
       }),
-    readAnnotations: (path) =>
+    ),
+    readAnnotations: Effect.fn("AgentWorkbench.readAnnotations")((path) =>
       request(AgentWorkbenchPlanAnnotations, `/v1/plans/${encodeURIComponent(path)}/annotations`),
-    mutateAnnotations: (path, input) =>
+    ),
+    mutateAnnotations: Effect.fn("AgentWorkbench.mutateAnnotations")((path, input) =>
       request(AgentWorkbenchPlanAnnotations, `/v1/plans/${encodeURIComponent(path)}/annotations`, {
         method: "POST",
         admin: true,
         body: input,
       }),
+    ),
     catalog,
-    promptDetail: (id) =>
+    promptDetail: Effect.fn("AgentWorkbench.promptDetail")((id) =>
       request(AgentWorkbenchPromptDetail, `/v1/prompts/${encodeURIComponent(id)}`),
-    promptHistory: (id, limit = 20) =>
+    ),
+    promptHistory: Effect.fn("AgentWorkbench.promptHistory")((id, limit = 20) =>
       request(
         AgentWorkbenchPromptHistory,
         `/v1/prompts/${encodeURIComponent(id)}/history?limit=${encodeURIComponent(limit)}`,
       ),
-    comparePrompt: (id, from, to) =>
+    ),
+    comparePrompt: Effect.fn("AgentWorkbench.comparePrompt")((id, from, to) =>
       request(
         AgentWorkbenchPromptReview,
         `/v1/prompts/${encodeURIComponent(id)}/compare?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
       ),
-    reviewPrompt: (id, input) =>
+    ),
+    reviewPrompt: Effect.fn("AgentWorkbench.reviewPrompt")((id, input) =>
       request(AgentWorkbenchPromptReview, `/v1/prompts/${encodeURIComponent(id)}/review`, {
         method: "POST",
         admin: true,
         body: input,
       }),
-    applyPrompt: (id, requestId, input) =>
+    ),
+    applyPrompt: Effect.fn("AgentWorkbench.applyPrompt")((id, requestId, input) =>
       request(AgentWorkbenchPromptMutationResult, `/v1/prompts/${encodeURIComponent(id)}/apply`, {
         method: "POST",
         admin: true,
         body: input,
         requestId,
       }),
-    rollbackPrompt: (id, requestId, input) =>
+    ),
+    rollbackPrompt: Effect.fn("AgentWorkbench.rollbackPrompt")((id, requestId, input) =>
       request(
         AgentWorkbenchPromptMutationResult,
         `/v1/prompts/${encodeURIComponent(id)}/rollback`,
         { method: "POST", admin: true, body: input, requestId },
       ),
-    resourceLibrary: (input) =>
+    ),
+    resourceLibrary: Effect.fn("AgentWorkbench.resourceLibrary")((input) =>
       Effect.tryPromise({ try: () => connection.leaseId(), catch: mapConnectionError }).pipe(
         Effect.flatMap((leaseId) => {
           const query = new URLSearchParams({ lens: input.lens, leaseId });
@@ -389,45 +394,51 @@ export function makeAgentWorkbench(
           return request(AgentWorkbenchResourceLibrary, `/v1/library?${query}`);
         }),
       ),
+    ),
     reviewInbox: request(AgentWorkbenchReviewInbox, "/v1/review-inbox"),
-    reviewInboxCommand: (input) =>
+    reviewInboxCommand: Effect.fn("AgentWorkbench.reviewInboxCommand")((input) =>
       request(AgentWorkbenchReviewInbox, "/v1/review-inbox/commands", {
         method: "POST",
         admin: true,
         body: input,
       }),
+    ),
     projectionHealth: request(AgentWorkbenchProjectionHealth, "/v1/projections"),
-    reviewProjection: (input) =>
+    reviewProjection: Effect.fn("AgentWorkbench.reviewProjection")((input) =>
       request(AgentWorkbenchProjectionReview, "/v1/projections/review", {
         method: "POST",
         admin: true,
         body: input,
       }),
-    applyProjection: (input) =>
+    ),
+    applyProjection: Effect.fn("AgentWorkbench.applyProjection")((input) =>
       request(AgentWorkbenchProjectionReceipt, "/v1/projections/apply", {
         method: "POST",
         admin: true,
         body: input,
       }),
-    rollbackProjection: (input) =>
+    ),
+    rollbackProjection: Effect.fn("AgentWorkbench.rollbackProjection")((input) =>
       request(AgentWorkbenchProjectionReceipt, "/v1/projections/rollback", {
         method: "POST",
         admin: true,
         body: input,
       }),
+    ),
     topology: request(AgentWorkbenchTopology, "/v1/topology"),
     audit: request(AgentWorkbenchReviewInbox, "/v1/audit", {
       method: "POST",
       admin: true,
       body: { targetId: "t3code" },
     }),
-    reviewRelationship: (input) =>
+    reviewRelationship: Effect.fn("AgentWorkbench.reviewRelationship")((input) =>
       request(AgentWorkbenchResourceMutationReview, "/v1/relationships/review", {
         method: "POST",
         admin: true,
         body: input,
       }),
-    resourceAuthority: (sessionId) =>
+    ),
+    resourceAuthority: Effect.fn("AgentWorkbench.resourceAuthority")((sessionId) =>
       authorityContext(sessionId).pipe(
         Effect.flatMap((authority) =>
           request(
@@ -436,7 +447,8 @@ export function makeAgentWorkbench(
           ),
         ),
       ),
-    unlockResources: (sessionId, directLocal) =>
+    ),
+    unlockResources: Effect.fn("AgentWorkbench.unlockResources")((sessionId, directLocal) =>
       authorityContext(sessionId).pipe(
         Effect.flatMap((authority) =>
           request(AgentWorkbenchResourceAuthority, "/v1/resource-mutations/authority/unlock", {
@@ -446,7 +458,8 @@ export function makeAgentWorkbench(
           }),
         ),
       ),
-    relockResources: (sessionId) =>
+    ),
+    relockResources: Effect.fn("AgentWorkbench.relockResources")((sessionId) =>
       authorityContext(sessionId).pipe(
         Effect.flatMap((authority) =>
           request(AgentWorkbenchResourceAuthority, "/v1/resource-mutations/authority/relock", {
@@ -456,7 +469,8 @@ export function makeAgentWorkbench(
           }),
         ),
       ),
-    resourcePolicy: (sessionId) =>
+    ),
+    resourcePolicy: Effect.fn("AgentWorkbench.resourcePolicy")((sessionId) =>
       authorityContext(sessionId).pipe(
         Effect.flatMap((authority) =>
           request(
@@ -465,10 +479,12 @@ export function makeAgentWorkbench(
           ),
         ),
       ),
+    ),
     resourceMutations: request(AgentWorkbenchResourceMutationLedger, "/v1/resource-mutations"),
-    resourceSource: (target) =>
+    resourceSource: Effect.fn("AgentWorkbench.resourceSource")((target) =>
       request(AgentWorkbenchResourceSource, `/v1/resources/source?${resourceTargetQuery(target)}`),
-    reviewResource: (sessionId, input) =>
+    ),
+    reviewResource: Effect.fn("AgentWorkbench.reviewResource")((sessionId, input) =>
       authorityContext(sessionId).pipe(
         Effect.flatMap((authority) =>
           request(AgentWorkbenchResourceMutationReview, "/v1/resource-mutations/review", {
@@ -478,7 +494,8 @@ export function makeAgentWorkbench(
           }),
         ),
       ),
-    applyResource: (sessionId, input) =>
+    ),
+    applyResource: Effect.fn("AgentWorkbench.applyResource")((sessionId, input) =>
       authorityContext(sessionId).pipe(
         Effect.flatMap((authority) =>
           request(AgentWorkbenchResourceMutationReceipt, "/v1/resource-mutations/apply", {
@@ -488,7 +505,8 @@ export function makeAgentWorkbench(
           }),
         ),
       ),
-    rollbackResource: (sessionId, input) =>
+    ),
+    rollbackResource: Effect.fn("AgentWorkbench.rollbackResource")((sessionId, input) =>
       authorityContext(sessionId).pipe(
         Effect.flatMap((authority) =>
           request(AgentWorkbenchResourceMutationReceipt, "/v1/resource-mutations/rollback", {
@@ -498,6 +516,7 @@ export function makeAgentWorkbench(
           }),
         ),
       ),
+    ),
   });
 }
 
@@ -562,7 +581,7 @@ function providerSkills(providers: ReadonlyArray<ServerProvider>) {
 
 function mapConnectionError(cause: unknown) {
   return new AgentWorkbenchAdapterError({
-    reason: cause instanceof AgentWorkbenchConnectionError ? cause.reason : "request_failed",
+    reason: isAgentWorkbenchConnectionError(cause) ? cause.reason : "request_failed",
   });
 }
 

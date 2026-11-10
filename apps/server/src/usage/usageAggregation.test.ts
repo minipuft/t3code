@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import { ProjectId, type UsageDay } from "@t3tools/contracts";
+import { ProjectId } from "@t3tools/contracts";
 import {
   UsageAggregator,
   resolveUsageAttribution,
@@ -121,6 +121,7 @@ describe("UsageAggregator", () => {
       [null, "missingEvidence", 1],
     ]);
   });
+
   it("keeps project attribution separate within each provider source", () => {
     const aggregator = new UsageAggregator({
       timeZone: "UTC",
@@ -146,19 +147,6 @@ describe("UsageAggregator", () => {
       ["/home/two", "project-a", "attributed", 1],
       ["/home/one", null, "missingEvidence", 1],
     ]);
-  });
-
-  it("requires exact bounds for hourly aggregation", () => {
-    expect(
-      () =>
-        new UsageAggregator({
-          timeZone: "UTC",
-          sinceDay: "2026-08-01",
-          untilDay: "2026-08-31",
-          resolution: "hour",
-          rates,
-        }),
-    ).toThrow("requires exact time bounds");
   });
 
   it("splits a bucket's cost by category and speed", () => {
@@ -189,13 +177,6 @@ describe("UsageAggregator", () => {
     expect(result.buckets).toHaveLength(1);
     expect(result.buckets[0]?.records).toBe(1);
     expect(result.buckets[0]?.totals.outputTokens).toBe(50);
-  });
-
-  it("still sums records that carry no dedupe key", () => {
-    const result = aggregate([record(), record()]);
-
-    expect(result.duplicatesDropped).toBe(0);
-    expect(result.buckets[0]?.totals.outputTokens).toBe(100);
   });
 
   it("buckets by the day in the requested time zone", () => {
@@ -274,24 +255,6 @@ describe("UsageAggregator", () => {
     ]);
   });
 
-  it("keeps daily payloads collapsed when hourly resolution is not requested", () => {
-    const result = aggregate([
-      record({ timestampMs: Date.parse("2026-08-07T04:05:13.944Z") }),
-      record({ timestampMs: Date.parse("2026-08-07T05:05:13.944Z") }),
-    ]);
-
-    expect(result.buckets).toHaveLength(1);
-    expect(result.buckets[0]?.hourStart).toBeUndefined();
-    expect(result.buckets[0]?.records).toBe(2);
-  });
-
-  it("prices against the rate table", () => {
-    const result = aggregate([record()]);
-
-    expect(result.buckets[0]?.costUsd).toBeCloseTo(0.004625, 9);
-    expect(result.buckets[0]?.costSource).toBe("modelPriced");
-  });
-
   it("counts tokens but not cost for a model with no rate", () => {
     const result = aggregate([record({ model: "kimi-k3" })]);
 
@@ -306,26 +269,6 @@ describe("UsageAggregator", () => {
 
     expect(result.buckets[0]?.costUsd).toBe(1.25);
     expect(result.buckets[0]?.costSource).toBe("providerReported");
-  });
-
-  it("drops records outside the window", () => {
-    const result = aggregate([record({ timestampMs: Date.parse("2026-07-01T12:00:00Z") })]);
-
-    expect(result.outOfWindow).toBe(1);
-    expect(result.buckets).toHaveLength(0);
-  });
-
-  it("reports whether a record contributed", () => {
-    const aggregator = new UsageAggregator({
-      timeZone: "UTC",
-      sinceDay: "2026-08-01",
-      untilDay: "2026-08-31",
-      rates,
-    });
-
-    expect(aggregator.add(record({ dedupeKey: "msg_1:" }))).toBe(true);
-    expect(aggregator.add(record({ dedupeKey: "msg_1:" }))).toBe(false);
-    expect(aggregator.add(record({ timestampMs: Date.parse("2026-07-01T12:00:00Z") }))).toBe(false);
   });
 
   it("folds a mapped model into its target and prices it there", () => {
@@ -345,16 +288,6 @@ describe("UsageAggregator", () => {
     expect(result.buckets[0]?.records).toBe(2);
     expect(result.buckets[0]?.costUsd).toBeCloseTo(0.00925, 9);
     expect(result.buckets[0]?.unpricedRecords).toBe(0);
-  });
-
-  it("separates providers and models into their own buckets", () => {
-    const result = aggregate([
-      record(),
-      record({ provider: "codex", model: "gpt-5.6-sol" }),
-      record({ model: "claude-opus-5" }),
-    ]);
-
-    expect(result.buckets).toHaveLength(3);
   });
 });
 

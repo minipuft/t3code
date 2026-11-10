@@ -44,8 +44,8 @@ import {
   type WorkbenchRelationshipReviewInput,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as Layer from "effect/Layer";
 
 import {
@@ -54,15 +54,19 @@ import {
   type AgentWorkbenchShape,
 } from "../agentWorkbenchAdapter/AgentWorkbench.ts";
 
-export class WorkbenchPlansAdapterError extends Data.TaggedError("WorkbenchPlansAdapterError")<{
-  readonly reason:
-    | "request_failed"
-    | "invalid_response"
-    | "unsupported_version"
-    | "invalid_request"
-    | "not_found"
-    | "conflict";
-}> {}
+export class WorkbenchPlansAdapterError extends Schema.TaggedError<WorkbenchPlansAdapterError>()(
+  "WorkbenchPlansAdapterError",
+  {
+    reason: Schema.Literals([
+      "request_failed",
+      "invalid_response",
+      "unsupported_version",
+      "invalid_request",
+      "not_found",
+      "conflict",
+    ]),
+  },
+) {}
 
 export interface WorkbenchPlansShape {
   readonly list: Effect.Effect<WorkbenchPlanList>;
@@ -158,19 +162,22 @@ function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPlansShape
       Effect.map(projectPlanList),
       Effect.orElseSucceed(() => unavailable("Agent Workbench plans are unavailable.")),
     ),
-    associations: (input) =>
+    associations: Effect.fn("WorkbenchPlans.associations")((input) =>
       workbench
         .planAssociations(input)
         .pipe(Effect.map(projectAssociations), Effect.mapError(mapAdapterError)),
-    associate: (input) =>
+    ),
+    associate: Effect.fn("WorkbenchPlans.associate")((input) =>
       workbench
         .mutatePlanAssociation(input)
         .pipe(Effect.map(projectAssociations), Effect.mapError(mapAdapterError)),
-    suggest: (input) =>
+    ),
+    suggest: Effect.fn("WorkbenchPlans.suggest")((input) =>
       workbench
         .suggestPlans(input)
         .pipe(Effect.map(projectSuggestions), Effect.mapError(mapAdapterError)),
-    read: (path) =>
+    ),
+    read: Effect.fn("WorkbenchPlans.read")((path) =>
       workbench.readPlan(path).pipe(
         Effect.map((value) => ({
           path,
@@ -180,7 +187,8 @@ function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPlansShape
         })),
         Effect.mapError(mapAdapterError),
       ),
-    save: (input) =>
+    ),
+    save: Effect.fn("WorkbenchPlans.save")((input) =>
       workbench.savePlan(input.path, { text: input.text, baseMtimeMs: input.baseMtimeMs }).pipe(
         Effect.mapError(mapAdapterError),
         Effect.flatMap((value) =>
@@ -189,30 +197,35 @@ function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPlansShape
             : Effect.succeed({ path: input.path, mtimeMs: value.mtimeMs, size: value.size }),
         ),
       ),
-    mutate: (input) =>
+    ),
+    mutate: Effect.fn("WorkbenchPlans.mutate")((input) =>
       workbench.mutatePlan(input).pipe(
         Effect.map((value) => ({ path: WorkbenchPlanPath.make(value.path) })),
         Effect.mapError(mapAdapterError),
       ),
-    readAnnotations: (path) =>
+    ),
+    readAnnotations: Effect.fn("WorkbenchPlans.readAnnotations")((path) =>
       workbench.readAnnotations(path).pipe(
         Effect.map((value) => ({ path, items: value.items, markdown: value.markdown })),
         Effect.mapError(mapAdapterError),
       ),
-    mutateAnnotations: (input) =>
+    ),
+    mutateAnnotations: Effect.fn("WorkbenchPlans.mutateAnnotations")((input) =>
       workbench.mutateAnnotations(input.path, input).pipe(
         Effect.map((value) => ({ path: input.path, items: value.items, markdown: value.markdown })),
         Effect.mapError(mapAdapterError),
       ),
-    resourceLibrary: (input) =>
+    ),
+    resourceLibrary: Effect.fn("WorkbenchPlans.resourceLibrary")((input) =>
       workbench
         .resourceLibrary(input)
         .pipe(Effect.map(projectResourceLibrary), Effect.mapError(mapAdapterError)),
+    ),
     topology: workbench.topology.pipe(
       Effect.map(projectTopology),
       Effect.mapError(mapAdapterError),
     ),
-    reviewRelationship: (input) =>
+    reviewRelationship: Effect.fn("WorkbenchPlans.reviewRelationship")((input) =>
       workbench.reviewRelationship(input).pipe(
         Effect.map((value) => ({
           revision: value.revision,
@@ -220,36 +233,45 @@ function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPlansShape
         })),
         Effect.mapError(mapAdapterError),
       ),
+    ),
     reviewInbox: workbench.audit.pipe(
       Effect.map(projectReviewInbox),
       Effect.mapError(mapAdapterError),
     ),
-    reviewInboxCommand: (input) =>
+    reviewInboxCommand: Effect.fn("WorkbenchPlans.reviewInboxCommand")((input) =>
       workbench
         .reviewInboxCommand(input)
         .pipe(Effect.map(projectReviewInbox), Effect.mapError(mapAdapterError)),
+    ),
     projectionHealth: workbench.projectionHealth.pipe(Effect.mapError(mapAdapterError)),
-    reviewProjection: (input) =>
+    reviewProjection: Effect.fn("WorkbenchPlans.reviewProjection")((input) =>
       workbench.reviewProjection(input).pipe(Effect.mapError(mapAdapterError)),
-    applyProjection: (input) =>
+    ),
+    applyProjection: Effect.fn("WorkbenchPlans.applyProjection")((input) =>
       workbench.applyProjection(input).pipe(Effect.mapError(mapAdapterError)),
-    rollbackProjection: (input) =>
+    ),
+    rollbackProjection: Effect.fn("WorkbenchPlans.rollbackProjection")((input) =>
       workbench.rollbackProjection(input).pipe(Effect.mapError(mapAdapterError)),
-    resourceAuthority: (sessionId) =>
+    ),
+    resourceAuthority: Effect.fn("WorkbenchPlans.resourceAuthority")((sessionId) =>
       workbench.resourceAuthority(sessionId).pipe(Effect.mapError(mapAdapterError)),
-    unlockResources: (sessionId, directLocal) =>
+    ),
+    unlockResources: Effect.fn("WorkbenchPlans.unlockResources")((sessionId, directLocal) =>
       workbench.unlockResources(sessionId, directLocal).pipe(Effect.mapError(mapAdapterError)),
-    relockResources: (sessionId) =>
+    ),
+    relockResources: Effect.fn("WorkbenchPlans.relockResources")((sessionId) =>
       workbench.relockResources(sessionId).pipe(Effect.mapError(mapAdapterError)),
-    resourcePolicy: (sessionId) =>
+    ),
+    resourcePolicy: Effect.fn("WorkbenchPlans.resourcePolicy")((sessionId) =>
       workbench
         .resourcePolicy(sessionId)
         .pipe(Effect.map(projectResourcePolicy), Effect.mapError(mapAdapterError)),
+    ),
     resourceMutations: workbench.resourceMutations.pipe(
       Effect.map(projectResourceLedger),
       Effect.mapError(mapAdapterError),
     ),
-    resourceSource: (target) =>
+    resourceSource: Effect.fn("WorkbenchPlans.resourceSource")((target) =>
       workbench.resourceSource(target).pipe(
         Effect.map((value) => ({
           target: value.target,
@@ -259,7 +281,8 @@ function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPlansShape
         })),
         Effect.mapError(mapAdapterError),
       ),
-    reviewResource: (sessionId, input) =>
+    ),
+    reviewResource: Effect.fn("WorkbenchPlans.reviewResource")((sessionId, input) =>
       workbench.reviewResource(sessionId, input).pipe(
         Effect.map((value) => ({
           revision: value.revision,
@@ -267,7 +290,8 @@ function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPlansShape
         })),
         Effect.mapError(mapAdapterError),
       ),
-    applyResource: (sessionId, input) =>
+    ),
+    applyResource: Effect.fn("WorkbenchPlans.applyResource")((sessionId, input) =>
       workbench.applyResource(sessionId, input).pipe(
         Effect.map((value) => ({
           revision: value.revision,
@@ -275,7 +299,8 @@ function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPlansShape
         })),
         Effect.mapError(mapAdapterError),
       ),
-    rollbackResource: (sessionId, input) =>
+    ),
+    rollbackResource: Effect.fn("WorkbenchPlans.rollbackResource")((sessionId, input) =>
       workbench.rollbackResource(sessionId, input).pipe(
         Effect.map((value) => ({
           revision: value.revision,
@@ -283,6 +308,7 @@ function makeWorkbenchPlans(workbench: AgentWorkbenchShape): WorkbenchPlansShape
         })),
         Effect.mapError(mapAdapterError),
       ),
+    ),
   });
 }
 

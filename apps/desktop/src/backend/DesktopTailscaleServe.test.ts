@@ -1,4 +1,4 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, expect, it } from "@effect/vitest";
 import type { DesktopTailscaleServeDevice } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import {
@@ -17,6 +17,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
+import * as DesktopManagedPolicy from "../app/DesktopManagedPolicy.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopTailscaleServe from "./DesktopTailscaleServe.ts";
 
@@ -77,16 +78,18 @@ const NATIVE_TARGET: DesktopTailscaleServe.TailscaleServePrimaryTarget = {
 const wslServe = (servePort: number) =>
   `wsl.exe -d Ubuntu --exec tailscale serve --bg --https=${servePort} http://127.0.0.1:13773`;
 const wslOff = (servePort: number) =>
-  `wsl.exe -d Ubuntu --exec tailscale serve --https=${servePort} off`;
+  `wsl.exe -d Ubuntu --exec tailscale serve --https=${servePort} --set-path=/ off`;
 const nativeServe = (servePort: number) =>
   `tailscale serve --bg --https=${servePort} http://127.0.0.1:13773`;
-const nativeOff = (servePort: number) => `tailscale serve --https=${servePort} off`;
+const nativeOff = (servePort: number) => `tailscale serve --https=${servePort} --set-path=/ off`;
 
 const makeServeLayer = (
   spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
   settings: { readonly enabled?: boolean; readonly device: DesktopTailscaleServeDevice },
+  managedPolicyLayer: Layer.Layer<DesktopManagedPolicy.DesktopManagedPolicy> = DesktopManagedPolicy.layerTest(),
 ) =>
   DesktopTailscaleServe.layer.pipe(
+    Layer.provideMerge(managedPolicyLayer),
     Layer.provideMerge(
       DesktopAppSettings.layerTest({
         ...DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS,
@@ -101,17 +104,14 @@ const makeServeLayer = (
     Layer.provideMerge(Layer.succeed(HostProcess.Platform, "linux")),
   );
 
-// Background applies run on a forked fiber with no receipt of their own, so
-// yield to the scheduler until the in-memory condition holds. No clock time
-// passes; the bound only turns a missed condition into a failure.
+// Background applies run on a forked fiber and the service exposes no completion
+// signal, so the milestone is an in-memory condition read with `expect.poll` on the
+// real event loop, which the TestClock does not control.
 const waitUntil = (label: string, condition: Effect.Effect<boolean>) =>
-  Effect.gen(function* () {
-    for (let i = 0; i < 500; i++) {
-      if (yield* condition) return;
-      yield* Effect.yieldNow;
-    }
-    return yield* Effect.die(new Error(`condition never held: ${label}`));
-  });
+  Effect.promise(() =>
+    // oxlint-disable-next-line t3code/no-manual-effect-runtime-in-tests -- expect.poll needs a promise-returning probe of a Ref read; the service has no Deferred or event for background applies.
+    expect.poll(() => Effect.runPromise(condition), { message: label }).toBe(true),
+  );
 
 const outcomes = (results: ReadonlyArray<DesktopTailscaleServe.TailscaleServeDaemonResult>) =>
   Object.fromEntries(
@@ -283,6 +283,33 @@ describe("DesktopTailscaleServe", () => {
       assert.deepStrictEqual(argv, [nativeServe(443), nativeOff(443), nativeServe(8443)]);
       assert.deepStrictEqual(outcomes(yield* serve.results), { native: "active:8443" });
     }).pipe(Effect.provide(makeServeLayer(spawner, { device: "native" })));
+  });
+
+  it.effect("keeps Serve off when a managed policy keeps clients local", () => {
+    const { spawner, calls } = makeFakeSpawner();
+    return Effect.gen(function* () {
+      const serve = yield* DesktopTailscaleServe.DesktopTailscaleServe;
+      yield* serve.primaryReady(NATIVE_TARGET);
+      yield* serve.reconcile;
+
+      assert.deepStrictEqual(
+        calls.map((call) => call.argv).filter((argv) => argv.includes(" --bg ")),
+        [],
+      );
+      assert.deepStrictEqual(yield* serve.results, []);
+    }).pipe(
+      Effect.provide(
+        makeServeLayer(
+          spawner,
+          { device: "native" },
+          DesktopManagedPolicy.layerTest({
+            schemaVersion: 1,
+            organization: "Example Corp",
+            limits: { clients: ["desktop"] },
+          }),
+        ),
+      ),
+    );
   });
 
   it.effect("disabling removes from every daemon, treating a missing handler as done", () => {

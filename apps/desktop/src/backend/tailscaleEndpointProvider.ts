@@ -5,8 +5,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as HttpClient from "effect/http/HttpClient";
 
-export { parseTailscaleMagicDnsName } from "@t3tools/tailscale";
-
 const TAILSCALE_ENDPOINT_PROVIDER: AdvertisedEndpointProvider = {
   id: "tailscale",
   label: "Tailscale",
@@ -109,7 +107,7 @@ const resolveTailscaleMagicDnsAdvertisedEndpoint = Effect.fn(
           status: isReachable ? "available" : "unavailable",
           description: isReachable
             ? "HTTPS endpoint served by Tailscale Serve."
-            : "Tailscale Serve is configured. Waiting for Tailscale to issue the HTTPS certificate — this can take up to a minute.",
+            : "Tailscale Serve is configured. Waiting for Tailscale to issue the HTTPS certificate. This can take up to a minute.",
         }),
       );
     }

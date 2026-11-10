@@ -12,9 +12,9 @@ import type {
   WorkbenchResourceRollbackInput,
   WorkbenchResourceTarget,
 } from "@t3tools/contracts";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import type { WorkbenchRelationshipReviewInput } from "@t3tools/contracts";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { Atom } from "effect/reactivity";
@@ -31,27 +31,29 @@ import { WorkbenchPlansLoader } from "./workbenchPlansHttp.ts";
 
 export { WorkbenchPlansLoader, workbenchPlansLoaderLayer } from "./workbenchPlansHttp.ts";
 
-export class WorkbenchPlansConnectionNotReadyError extends Data.TaggedError(
+class WorkbenchPlansConnectionNotReadyError extends Schema.TaggedError<WorkbenchPlansConnectionNotReadyError>()(
   "WorkbenchPlansConnectionNotReadyError",
-)<{ readonly message: string }> {}
+  {
+    message: Schema.String,
+  },
+) {}
 
-const withPreparedConnection = <A, E>(
+const withPreparedConnection = Effect.fn("withPreparedConnection")(function* <A, E>(
   execute: (
     loader: WorkbenchPlansLoader["Service"],
     prepared: PreparedConnection,
   ) => Effect.Effect<A, E>,
-) =>
-  Effect.gen(function* () {
-    const supervisor = yield* EnvironmentSupervisor;
-    const loader = yield* WorkbenchPlansLoader;
-    const prepared = yield* SubscriptionRef.get(supervisor.prepared);
-    if (Option.isNone(prepared)) {
-      return yield* new WorkbenchPlansConnectionNotReadyError({
-        message: "The environment HTTP connection is not ready.",
-      });
-    }
-    return yield* execute(loader, prepared.value);
-  });
+) {
+  const supervisor = yield* EnvironmentSupervisor;
+  const loader = yield* WorkbenchPlansLoader;
+  const prepared = yield* SubscriptionRef.get(supervisor.prepared);
+  if (Option.isNone(prepared)) {
+    return yield* new WorkbenchPlansConnectionNotReadyError({
+      message: "The environment HTTP connection is not ready.",
+    });
+  }
+  return yield* execute(loader, prepared.value);
+});
 
 export function createWorkbenchPlansEnvironmentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | WorkbenchPlansLoader | R, E>,

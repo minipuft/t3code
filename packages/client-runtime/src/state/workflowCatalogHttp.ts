@@ -27,7 +27,7 @@ import {
 import {
   buildEnvironmentAuthHeaders,
   type EnvironmentHttpAuthHeaders,
-  withEnvironmentCredentials,
+  withEnvironmentRequestInit,
 } from "./environmentHttpAuth.ts";
 
 const DEFAULT_WORKFLOW_CATALOG_TIMEOUT_MS = 6_000;
@@ -69,7 +69,7 @@ const executeRequest = Effect.fn("clientRuntime.state.executeWorkflowCatalogRequ
   return yield* executeEnvironmentHttpRequest(
     input.requestUrl,
     input.timeoutMs ?? DEFAULT_WORKFLOW_CATALOG_TIMEOUT_MS,
-    withEnvironmentCredentials(input.prepared.httpAuthorization, input.request(headers)),
+    withEnvironmentRequestInit(input.prepared.httpAuthorization, undefined, input.request(headers)),
   );
 });
 
@@ -288,10 +288,13 @@ export const workflowCatalogLoaderLayer: Layer.Layer<
     const provideHttp = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient>) =>
       effect.pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
     return WorkflowCatalogLoader.of({
-      load: (prepared) => provideHttp(fetchEnvironmentWorkflowCatalog({ prepared, signer })),
-      detail: (prepared, itemId) =>
+      load: Effect.fn("WorkflowCatalogLoader.load")((prepared) =>
+        provideHttp(fetchEnvironmentWorkflowCatalog({ prepared, signer })),
+      ),
+      detail: Effect.fn("WorkflowCatalogLoader.detail")((prepared, itemId) =>
         provideHttp(fetchEnvironmentWorkflowCatalogDetail({ prepared, signer, itemId })),
-      history: (prepared, itemId, limit) =>
+      ),
+      history: Effect.fn("WorkflowCatalogLoader.history")((prepared, itemId, limit) =>
         provideHttp(
           fetchEnvironmentWorkflowPromptHistory({
             prepared,
@@ -300,14 +303,19 @@ export const workflowCatalogLoaderLayer: Layer.Layer<
             ...(limit === undefined ? {} : { limit }),
           }),
         ),
-      compare: (prepared, itemId, from, to) =>
+      ),
+      compare: Effect.fn("WorkflowCatalogLoader.compare")((prepared, itemId, from, to) =>
         provideHttp(compareEnvironmentWorkflowPrompt({ prepared, signer, itemId, from, to })),
-      review: (prepared, itemId, value) =>
+      ),
+      review: Effect.fn("WorkflowCatalogLoader.review")((prepared, itemId, value) =>
         provideHttp(reviewEnvironmentWorkflowPrompt({ prepared, signer, itemId, value })),
-      apply: (prepared, itemId, value) =>
+      ),
+      apply: Effect.fn("WorkflowCatalogLoader.apply")((prepared, itemId, value) =>
         provideHttp(applyEnvironmentWorkflowPrompt({ prepared, signer, itemId, value })),
-      rollback: (prepared, itemId, value) =>
+      ),
+      rollback: Effect.fn("WorkflowCatalogLoader.rollback")((prepared, itemId, value) =>
         provideHttp(rollbackEnvironmentWorkflowPrompt({ prepared, signer, itemId, value })),
+      ),
     });
   }),
 );

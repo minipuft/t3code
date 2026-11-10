@@ -50,7 +50,7 @@ import {
 import {
   buildEnvironmentAuthHeaders,
   type EnvironmentHttpAuthHeaders,
-  withEnvironmentCredentials,
+  withEnvironmentRequestInit,
 } from "./environmentHttpAuth.ts";
 
 const DEFAULT_WORKBENCH_PLANS_TIMEOUT_MS = 8_000;
@@ -92,7 +92,7 @@ const executeRequest = Effect.fn("clientRuntime.state.executeWorkbenchPlansReque
   return yield* executeEnvironmentHttpRequest(
     input.requestUrl,
     input.timeoutMs ?? DEFAULT_WORKBENCH_PLANS_TIMEOUT_MS,
-    withEnvironmentCredentials(input.prepared.httpAuthorization, input.request(headers)),
+    withEnvironmentRequestInit(input.prepared.httpAuthorization, undefined, input.request(headers)),
   );
 });
 
@@ -648,58 +648,87 @@ export const workbenchPlansLoaderLayer: Layer.Layer<
     const provideHttp = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient>) =>
       effect.pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
     return WorkbenchPlansLoader.of({
-      list: (prepared) => provideHttp(fetchEnvironmentWorkbenchPlans({ prepared, signer })),
-      topology: (prepared) => provideHttp(fetchEnvironmentWorkbenchTopology({ prepared, signer })),
-      reviewRelationship: (prepared, value) =>
+      list: Effect.fn("WorkbenchPlansLoader.list")((prepared) =>
+        provideHttp(fetchEnvironmentWorkbenchPlans({ prepared, signer })),
+      ),
+      topology: Effect.fn("WorkbenchPlansLoader.topology")((prepared) =>
+        provideHttp(fetchEnvironmentWorkbenchTopology({ prepared, signer })),
+      ),
+      reviewRelationship: Effect.fn("WorkbenchPlansLoader.reviewRelationship")((prepared, value) =>
         provideHttp(reviewEnvironmentWorkbenchRelationship({ prepared, value, signer })),
-      associations: (prepared, value) =>
+      ),
+      associations: Effect.fn("WorkbenchPlansLoader.associations")((prepared, value) =>
         provideHttp(fetchEnvironmentWorkbenchPlanAssociations({ prepared, value, signer })),
-      associate: (prepared, value) =>
+      ),
+      associate: Effect.fn("WorkbenchPlansLoader.associate")((prepared, value) =>
         provideHttp(associateEnvironmentWorkbenchPlan({ prepared, value, signer })),
-      suggest: (prepared, value) =>
+      ),
+      suggest: Effect.fn("WorkbenchPlansLoader.suggest")((prepared, value) =>
         provideHttp(suggestEnvironmentWorkbenchPlans({ prepared, value, signer })),
-      read: (prepared, path) =>
+      ),
+      read: Effect.fn("WorkbenchPlansLoader.read")((prepared, path) =>
         provideHttp(fetchEnvironmentWorkbenchPlanSource({ prepared, path, signer })),
-      save: (prepared, value) =>
+      ),
+      save: Effect.fn("WorkbenchPlansLoader.save")((prepared, value) =>
         provideHttp(saveEnvironmentWorkbenchPlan({ prepared, value, signer })),
-      mutate: (prepared, value) =>
+      ),
+      mutate: Effect.fn("WorkbenchPlansLoader.mutate")((prepared, value) =>
         provideHttp(mutateEnvironmentWorkbenchPlan({ prepared, value, signer })),
-      annotations: (prepared, path) =>
+      ),
+      annotations: Effect.fn("WorkbenchPlansLoader.annotations")((prepared, path) =>
         provideHttp(fetchEnvironmentWorkbenchPlanAnnotations({ prepared, path, signer })),
-      annotate: (prepared, value) =>
+      ),
+      annotate: Effect.fn("WorkbenchPlansLoader.annotate")((prepared, value) =>
         provideHttp(mutateEnvironmentWorkbenchPlanAnnotations({ prepared, value, signer })),
-      resourceLibrary: (prepared, input) =>
+      ),
+      resourceLibrary: Effect.fn("WorkbenchPlansLoader.resourceLibrary")((prepared, input) =>
         provideHttp(fetchEnvironmentWorkbenchResourceLibrary({ prepared, signer, ...input })),
-      reviewInbox: (prepared) =>
+      ),
+      reviewInbox: Effect.fn("WorkbenchPlansLoader.reviewInbox")((prepared) =>
         provideHttp(fetchEnvironmentWorkbenchReviewInbox({ prepared, signer })),
-      reviewInboxCommand: (prepared, value) =>
+      ),
+      reviewInboxCommand: Effect.fn("WorkbenchPlansLoader.reviewInboxCommand")((prepared, value) =>
         provideHttp(executeWorkbenchReviewInboxCommand({ prepared, signer, value })),
-      projectionHealth: (prepared) =>
+      ),
+      projectionHealth: Effect.fn("WorkbenchPlansLoader.projectionHealth")((prepared) =>
         provideHttp(fetchEnvironmentWorkbenchProjectionHealth({ prepared, signer })),
-      reviewProjection: (prepared, value) =>
+      ),
+      reviewProjection: Effect.fn("WorkbenchPlansLoader.reviewProjection")((prepared, value) =>
         provideHttp(reviewEnvironmentWorkbenchProjection({ prepared, signer, value })),
-      applyProjection: (prepared, value) =>
+      ),
+      applyProjection: Effect.fn("WorkbenchPlansLoader.applyProjection")((prepared, value) =>
         provideHttp(applyEnvironmentWorkbenchProjection({ prepared, signer, value })),
-      rollbackProjection: (prepared, value) =>
+      ),
+      rollbackProjection: Effect.fn("WorkbenchPlansLoader.rollbackProjection")((prepared, value) =>
         provideHttp(rollbackEnvironmentWorkbenchProjection({ prepared, signer, value })),
-      resourceAuthority: (prepared) =>
+      ),
+      resourceAuthority: Effect.fn("WorkbenchPlansLoader.resourceAuthority")((prepared) =>
         provideHttp(fetchEnvironmentWorkbenchResourceAuthority({ prepared, signer })),
-      unlockResources: (prepared) =>
+      ),
+      unlockResources: Effect.fn("WorkbenchPlansLoader.unlockResources")((prepared) =>
         provideHttp(authorityCommand({ prepared, signer, action: "unlock" })),
-      relockResources: (prepared) =>
+      ),
+      relockResources: Effect.fn("WorkbenchPlansLoader.relockResources")((prepared) =>
         provideHttp(authorityCommand({ prepared, signer, action: "relock" })),
-      resourcePolicy: (prepared) =>
+      ),
+      resourcePolicy: Effect.fn("WorkbenchPlansLoader.resourcePolicy")((prepared) =>
         provideHttp(fetchEnvironmentWorkbenchResourcePolicy({ prepared, signer })),
-      resourceMutations: (prepared) =>
+      ),
+      resourceMutations: Effect.fn("WorkbenchPlansLoader.resourceMutations")((prepared) =>
         provideHttp(fetchEnvironmentWorkbenchResourceMutations({ prepared, signer })),
-      resourceSource: (prepared, target) =>
+      ),
+      resourceSource: Effect.fn("WorkbenchPlansLoader.resourceSource")((prepared, target) =>
         provideHttp(fetchEnvironmentWorkbenchResourceSource({ prepared, signer, target })),
-      reviewResource: (prepared, value) =>
+      ),
+      reviewResource: Effect.fn("WorkbenchPlansLoader.reviewResource")((prepared, value) =>
         provideHttp(reviewEnvironmentWorkbenchResource({ prepared, signer, value })),
-      applyResource: (prepared, value) =>
+      ),
+      applyResource: Effect.fn("WorkbenchPlansLoader.applyResource")((prepared, value) =>
         provideHttp(applyEnvironmentWorkbenchResource({ prepared, signer, value })),
-      rollbackResource: (prepared, value) =>
+      ),
+      rollbackResource: Effect.fn("WorkbenchPlansLoader.rollbackResource")((prepared, value) =>
         provideHttp(rollbackEnvironmentWorkbenchResource({ prepared, signer, value })),
+      ),
     });
   }),
 );

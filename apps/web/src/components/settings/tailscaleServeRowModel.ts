@@ -1,5 +1,7 @@
 import type { AdvertisedEndpoint, DesktopTailscaleServeStatus } from "@t3tools/contracts";
 
+import { isTailscaleHttpsEndpoint } from "./ConnectionsSettings.logic";
+
 type TailscaleServeDaemon = DesktopTailscaleServeStatus["device"];
 
 export interface TailscaleServeRowLine {
@@ -18,10 +20,6 @@ const DAEMON_LABEL: Record<TailscaleServeDaemon, string> = {
   wsl: "WSL",
   native: "Windows",
 };
-
-export function isTailscaleHttpsEndpoint(endpoint: AdvertisedEndpoint): boolean {
-  return endpoint.id.startsWith("tailscale-magicdns:");
-}
 
 /**
  * Endpoints carry no daemon field, so the daemon is recovered by joining on

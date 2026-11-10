@@ -3,44 +3,32 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+import * as Schema from "effect/Schema";
 
 const PROTOCOL_VERSION = "1.0.0";
 const ATTACH_TIMEOUT_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 6_000;
 const HEARTBEAT_MS = 10_000;
 
-export class AgentWorkbenchConnectionError extends Error {
-  readonly reason:
-    | "not_installed"
-    | "configuration_invalid"
-    | "start_failed"
-    | "request_failed"
-    | "unsupported_version"
-    | "unauthorized"
-    | "forbidden"
-    | "not_found"
-    | "conflict"
-    | "invalid_response";
+export const AgentWorkbenchFailureReason = Schema.Literals([
+  "not_installed",
+  "configuration_invalid",
+  "start_failed",
+  "request_failed",
+  "unsupported_version",
+  "unauthorized",
+  "forbidden",
+  "not_found",
+  "conflict",
+  "invalid_response",
+]);
 
-  constructor(
-    reason:
-      | "not_installed"
-      | "configuration_invalid"
-      | "start_failed"
-      | "request_failed"
-      | "unsupported_version"
-      | "unauthorized"
-      | "forbidden"
-      | "not_found"
-      | "conflict"
-      | "invalid_response",
-    options?: ErrorOptions,
-  ) {
-    super(reason, options);
-    this.reason = reason;
-    this.name = "AgentWorkbenchConnectionError";
-  }
-}
+export class AgentWorkbenchConnectionError extends Schema.TaggedError<AgentWorkbenchConnectionError>()(
+  "AgentWorkbenchConnectionError",
+  { reason: AgentWorkbenchFailureReason, cause: Schema.optionalKey(Schema.Defect()) },
+) {}
+
+export const isAgentWorkbenchConnectionError = Schema.is(AgentWorkbenchConnectionError);
 
 interface WorkbenchConfig {
   readonly promptSourceId: string;
@@ -91,7 +79,7 @@ export class AgentWorkbenchConnection {
       return await requestJson(this.dependencies.fetch, runtime, pathname, options);
     } catch (cause) {
       if (
-        cause instanceof AgentWorkbenchConnectionError &&
+        isAgentWorkbenchConnectionError(cause) &&
         cause.reason !== "conflict" &&
         cause.reason !== "not_found"
       ) {
@@ -135,10 +123,7 @@ export class AgentWorkbenchConnection {
       try {
         compatible = await handshake(this.dependencies.fetch, descriptor, config);
       } catch (cause) {
-        if (
-          !(cause instanceof AgentWorkbenchConnectionError) ||
-          cause.reason !== "request_failed"
-        ) {
+        if (!isAgentWorkbenchConnectionError(cause) || cause.reason !== "request_failed") {
           throw cause;
         }
         await this.dependencies
@@ -146,18 +131,19 @@ export class AgentWorkbenchConnection {
           .catch(() => undefined);
         descriptor = null;
       }
-      if (compatible === false) throw new AgentWorkbenchConnectionError("unsupported_version");
+      if (compatible === false)
+        throw new AgentWorkbenchConnectionError({ reason: "unsupported_version" });
     }
     if (descriptor === null) {
       const launcher = NodePath.join(this.dependencies.homeDir, ".local", "bin", "agent-workbench");
       await this.dependencies.startRuntime(launcher);
       descriptor = await waitForDescriptor(this.dependencies);
       if (!(await handshake(this.dependencies.fetch, descriptor, config))) {
-        throw new AgentWorkbenchConnectionError("unsupported_version");
+        throw new AgentWorkbenchConnectionError({ reason: "unsupported_version" });
       }
     }
     if (descriptor.promptSourceId !== config.promptSourceId) {
-      throw new AgentWorkbenchConnectionError("configuration_invalid");
+      throw new AgentWorkbenchConnectionError({ reason: "configuration_invalid" });
     }
     const lease = await requestJson(
       this.dependencies.fetch,
@@ -166,7 +152,7 @@ export class AgentWorkbenchConnection {
       { method: "POST", body: { adapter: "t3code" } },
     );
     if (!isRecord(lease) || typeof lease["leaseId"] !== "string") {
-      throw new AgentWorkbenchConnectionError("invalid_response");
+      throw new AgentWorkbenchConnectionError({ reason: "invalid_response" });
     }
     const runtime = { ...descriptor, ...config, leaseId: lease["leaseId"] };
     this.startHeartbeat(runtime);
@@ -205,7 +191,7 @@ export function makeAgentWorkbenchConnectionDependencies(): AgentWorkbenchConnec
 
 async function startRuntimeProcess(launcher: string) {
   await NodeFSP.access(launcher).catch((cause) => {
-    throw new AgentWorkbenchConnectionError("not_installed", { cause });
+    throw new AgentWorkbenchConnectionError({ reason: "not_installed", cause });
   });
   const child = NodeChildProcess.spawn(launcher, ["serve"], {
     stdio: ["ignore", "pipe", "pipe"],
@@ -217,7 +203,7 @@ async function startRuntimeProcess(launcher: string) {
 function waitForListening(child: NodeChildProcess.ChildProcess) {
   return new Promise<void>((resolve, reject) => {
     const timer = setTimeout(
-      () => finish(new AgentWorkbenchConnectionError("start_failed")),
+      () => finish(new AgentWorkbenchConnectionError({ reason: "start_failed" })),
       ATTACH_TIMEOUT_MS,
     );
     let output = "";
@@ -234,8 +220,8 @@ function waitForListening(child: NodeChildProcess.ChildProcess) {
       if (output.includes("Agent Workbench listening on ")) finish();
     };
     const onError = (cause: Error) =>
-      finish(new AgentWorkbenchConnectionError("start_failed", { cause }));
-    const onExit = () => finish(new AgentWorkbenchConnectionError("start_failed"));
+      finish(new AgentWorkbenchConnectionError({ reason: "start_failed", cause }));
+    const onExit = () => finish(new AgentWorkbenchConnectionError({ reason: "start_failed" }));
     child.stdout?.on("data", onData);
     child.once("error", onError);
     child.once("exit", onExit);
@@ -262,7 +248,7 @@ async function handshake(
     },
   );
   if (!isRecord(value) || typeof value["compatible"] !== "boolean") {
-    throw new AgentWorkbenchConnectionError("invalid_response");
+    throw new AgentWorkbenchConnectionError({ reason: "invalid_response" });
   }
   return value["compatible"];
 }
@@ -291,15 +277,15 @@ async function requestJson(
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (cause) {
-    throw new AgentWorkbenchConnectionError("request_failed", { cause });
+    throw new AgentWorkbenchConnectionError({ reason: "request_failed", cause });
   }
   const payload: unknown = await response.json().catch(() => null);
   if (response.ok) return payload;
-  if (response.status === 401) throw new AgentWorkbenchConnectionError("unauthorized");
-  if (response.status === 403) throw new AgentWorkbenchConnectionError("forbidden");
-  if (response.status === 404) throw new AgentWorkbenchConnectionError("not_found");
-  if (response.status === 409) throw new AgentWorkbenchConnectionError("conflict");
-  throw new AgentWorkbenchConnectionError("request_failed");
+  if (response.status === 401) throw new AgentWorkbenchConnectionError({ reason: "unauthorized" });
+  if (response.status === 403) throw new AgentWorkbenchConnectionError({ reason: "forbidden" });
+  if (response.status === 404) throw new AgentWorkbenchConnectionError({ reason: "not_found" });
+  if (response.status === 409) throw new AgentWorkbenchConnectionError({ reason: "conflict" });
+  throw new AgentWorkbenchConnectionError({ reason: "request_failed" });
 }
 
 async function readConfig(
@@ -310,7 +296,7 @@ async function readConfig(
     dependencies.readFile(NodePath.join(root, "workspace.yaml")),
     dependencies.readFile(NodePath.join(root, "secrets.yaml")),
   ]).catch((cause) => {
-    throw new AgentWorkbenchConnectionError("configuration_invalid", { cause });
+    throw new AgentWorkbenchConnectionError({ reason: "configuration_invalid", cause });
   });
   const workspace = decodeConfig(workspaceText);
   const secrets = decodeConfig(secretsText);
@@ -323,7 +309,7 @@ async function readConfig(
     typeof adminToken !== "string" ||
     readToken === adminToken
   ) {
-    throw new AgentWorkbenchConnectionError("configuration_invalid");
+    throw new AgentWorkbenchConnectionError({ reason: "configuration_invalid" });
   }
   return { promptSourceId, readToken, adminToken };
 }
@@ -337,7 +323,7 @@ async function readDescriptor(
     typeof value["endpoint"] !== "string" ||
     typeof value["promptSourceId"] !== "string"
   ) {
-    throw new AgentWorkbenchConnectionError("invalid_response");
+    throw new AgentWorkbenchConnectionError({ reason: "invalid_response" });
   }
   return { endpoint: value["endpoint"], promptSourceId: value["promptSourceId"] };
 }
@@ -349,7 +335,7 @@ async function waitForDescriptor(dependencies: AgentWorkbenchConnectionDependenc
     if (descriptor !== null) return descriptor;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new AgentWorkbenchConnectionError("start_failed");
+  throw new AgentWorkbenchConnectionError({ reason: "start_failed" });
 }
 
 function runtimePath(homeDir: string) {
@@ -363,12 +349,12 @@ function decodeConfig(text: string): Record<string, unknown> {
     if (line === "" || line.startsWith("#")) continue;
     const match = /^([a-z][a-z0-9_]*):\s*(.+)$/.exec(line);
     if (match?.[1] === undefined || match[2] === undefined || /[&*!]|<<\s*:/.test(line)) {
-      throw new AgentWorkbenchConnectionError("configuration_invalid");
+      throw new AgentWorkbenchConnectionError({ reason: "configuration_invalid" });
     }
     try {
       output[match[1]] = JSON.parse(match[2]);
     } catch (cause) {
-      throw new AgentWorkbenchConnectionError("configuration_invalid", { cause });
+      throw new AgentWorkbenchConnectionError({ reason: "configuration_invalid", cause });
     }
   }
   return output;

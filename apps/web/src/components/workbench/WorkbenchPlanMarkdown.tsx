@@ -16,12 +16,9 @@ export type WorkbenchMarkdownSegment =
 const MERMAID_FENCE = /^```mermaid(?:[^\S\r\n]+[^\r\n]*)?\r?\n([\s\S]*?)^```[^\S\r\n]*$/gim;
 
 /**
- * Plans are frequently authored with a `---`-delimited YAML frontmatter block.
- * CommonMark has no concept of frontmatter, so without this remark reads the
- * closing `---` as a setext h2 underline and renders the block as body text.
- * remark-frontmatter (default `'yaml'` matter) parses the block into a `yaml`
- * node instead; react-markdown has no renderer for that node type and drops
- * it, so the frontmatter disappears from the rendered plan.
+ * CommonMark reads a closing `---` as a setext h2 underline, so YAML frontmatter would
+ * render as body text. remark-frontmatter parses it into a `yaml` node, which
+ * react-markdown has no renderer for and drops.
  */
 const WORKBENCH_PLAN_EXTRA_REMARK_PLUGINS: NonNullable<ReactMarkdownOptions["remarkPlugins"]> = [
   remarkFrontmatter,
@@ -74,6 +71,7 @@ function MermaidDiagram(props: { readonly source: string }) {
     setState({ tag: "loading" });
   }
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- drives the external mermaid library to render the diagram, discarding stale results on cleanup
   useEffect(() => {
     let active = true;
     const renderId = `workbench-mermaid-${reactId.replaceAll(":", "")}-${attempt}`;
@@ -171,11 +169,9 @@ export function WorkbenchPlanMarkdown(props: {
   const segments = splitWorkbenchMarkdown(props.text);
   const imageBaseDir = derivePlanImageBaseDir(props.planPath, props.cwd);
   return (
-    // Same containment as the chat timeline root (MessagesTimeline's data-timeline-root):
-    // w-full pins a definite width so an auto grid/flex track cannot grow to this box's
-    // min-content, min-w-0 drops the automatic minimum, and overflow-x-clip catches the rest.
-    // Wide blocks already scroll locally inside ChatMarkdown (tables in a ScrollArea, `pre`
-    // with overflow-x: auto), so this box never scrolls.
+    // Same containment as MessagesTimeline's data-timeline-root: w-full pins a definite
+    // width so an auto grid/flex track cannot grow to min-content. Wide blocks scroll
+    // locally inside ChatMarkdown, so this box never scrolls.
     <div
       className={cn("w-full min-w-0 overflow-x-clip", props.className)}
       data-workbench-plan-markdown

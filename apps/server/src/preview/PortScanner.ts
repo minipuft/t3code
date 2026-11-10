@@ -69,6 +69,12 @@ export class PortDiscovery extends Context.Service<
  */
 export const AGENT_THREAD_ENV = "T3CODE_THREAD_ID";
 
+/**
+ * Agents also launch with this server's environment id, so a tool keyed by
+ * (environment, thread), such as a plan link, can name the thread without asking T3.
+ */
+export const AGENT_ENVIRONMENT_ENV = "T3CODE_ENVIRONMENT_ID";
+
 /** `0` turns off listener discovery; configured preview URLs are still probed. */
 const PORT_DISCOVERY_ENV = "T3CODE_PORT_DISCOVERY";
 

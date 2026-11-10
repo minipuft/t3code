@@ -72,6 +72,7 @@ import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter"
 import type * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
 import * as ModelManifest from "../../provider/ModelManifest.ts";
 import * as PortScanner from "../../preview/PortScanner.ts";
+import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import { resolveProviderCompatibility } from "../../provider/providerCompatibility.ts";
 import * as CodexAdapterV2 from "./CodexAdapterV2.ts";
 import { withCodexReplayChildMetadata } from "./CodexAdapterV2.testkit.ts";
@@ -890,7 +891,13 @@ describe("CodexAdapterV2 process exit", () => {
 
   it.effect("counts the app-server as a running agent until its session closes", () => {
     let runningAgents = 0;
+    let spawnedEnvironmentId: unknown;
     const factoryLayer = CodexAdapterV2.layerAppServerClientFactory.pipe(
+      Layer.provide(
+        Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+          getEnvironmentId: Effect.succeed(EnvironmentId.make("environment-codex-agent")),
+        }),
+      ),
       Layer.provide(
         Layer.mock(PortScanner.PortDiscovery)({
           trackAgent: () => {
@@ -910,9 +917,13 @@ describe("CodexAdapterV2 process exit", () => {
       Layer.provide(
         Layer.succeed(
           ChildProcessSpawner.ChildProcessSpawner,
-          ChildProcessSpawner.make(() =>
-            Effect.succeed(
-              ChildProcessSpawner.makeHandle({
+          ChildProcessSpawner.make((command) =>
+            Effect.sync(() => {
+              // Codex shells inherit the app-server's environment, so the id must be in it.
+              if (ChildProcess.isStandardCommand(command)) {
+                spawnedEnvironmentId = command.options.env?.[PortScanner.AGENT_ENVIRONMENT_ENV];
+              }
+              return ChildProcessSpawner.makeHandle({
                 pid: ChildProcessSpawner.ProcessId(999_999_999),
                 exitCode: Effect.never,
                 isRunning: Effect.succeed(true),
@@ -924,8 +935,8 @@ describe("CodexAdapterV2 process exit", () => {
                 all: Stream.empty,
                 getInputFd: () => Sink.drain,
                 getOutputFd: () => Stream.empty,
-              }),
-            ),
+              });
+            }),
           ),
         ),
       ),
@@ -945,6 +956,7 @@ describe("CodexAdapterV2 process exit", () => {
           .pipe(Effect.tap(() => Effect.sync(() => assert.equal(runningAgents, 1)))),
       );
       assert.equal(runningAgents, 0);
+      assert.equal(spawnedEnvironmentId, "environment-codex-agent");
     }).pipe(Effect.provide(factoryLayer));
   });
 });

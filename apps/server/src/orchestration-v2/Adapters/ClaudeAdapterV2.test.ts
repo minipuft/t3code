@@ -78,6 +78,7 @@ import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 import { SpawnExecutableResolution } from "@t3tools/shared/shell";
 
 import * as PortScanner from "../../preview/PortScanner.ts";
+import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import { attachmentRelativePath } from "../../attachmentStore.ts";
 import { WorkflowAgentTranscriptReadObserver } from "../workflowAgentTranscript.ts";
 import * as ServerConfig from "../../config.ts";
@@ -2659,7 +2660,16 @@ describe("ClaudeAdapterV2 MCP credential channel", () => {
         },
       });
     }).pipe(
-      Effect.provide(ClaudeAdapterV2.layerQueryRunner.pipe(Layer.provide(PortScanner.layerTest))),
+      Effect.provide(
+        ClaudeAdapterV2.layerQueryRunner.pipe(
+          Layer.provide(PortScanner.layerTest),
+          Layer.provide(
+            Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+              getEnvironmentId: Effect.succeed(EnvironmentId.make("environment-claude")),
+            }),
+          ),
+        ),
+      ),
       Effect.provideService(ProviderEventLoggers.ProviderEventLoggers, {
         ...ProviderEventLoggers.NoOpProviderEventLoggers,
         native,

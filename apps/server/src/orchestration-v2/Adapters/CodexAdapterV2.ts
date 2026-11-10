@@ -103,6 +103,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import { resolveAttachmentPath, resolveAttachmentPathById } from "../../attachmentStore.ts";
 import * as PortScanner from "../../preview/PortScanner.ts";
+import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import { getCodexServiceTierOptionValue } from "../../codexModelOptions.ts";
 import { ServerConfig } from "../../config.ts";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
@@ -1559,6 +1560,7 @@ export const layerAppServerClientFactory: Layer.Layer<
   | ChildProcessSpawner.ChildProcessSpawner
   | PortScanner.PortDiscovery
   | ProviderEventLoggers.ProviderEventLoggers
+  | ServerEnvironment.ServerEnvironmentIdentity
 > = Layer.effect(
   CodexAppServerClientFactory,
   Effect.gen(function* () {
@@ -1566,6 +1568,8 @@ export const layerAppServerClientFactory: Layer.Layer<
     const { native: nativeEventLogger } = yield* ProviderEventLoggers.ProviderEventLoggers;
     const agentScope = yield* AgentScope;
     const portDiscovery = yield* PortScanner.PortDiscovery;
+    const environmentId = yield* (yield* ServerEnvironment.ServerEnvironmentIdentity)
+      .getEnvironmentId;
 
     return CodexAppServerClientFactory.of({
       open: Effect.fn("CodexAdapterV2.open")(function* (input) {
@@ -1573,6 +1577,8 @@ export const layerAppServerClientFactory: Layer.Layer<
         const environment = {
           ...codexAppServerEnvironment(input.environment),
           ...(input.settings.homePath ? { CODEX_HOME: input.settings.homePath } : {}),
+          // One app-server serves one environment, so its shells inherit the id from here.
+          [PortScanner.AGENT_ENVIRONMENT_ENV]: environmentId,
         };
         const command = yield* makeCodexAppServerSpawnCommand({
           command: input.settings.binaryPath || "codex",
